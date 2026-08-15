@@ -1,0 +1,150 @@
+services:
+
+  # ============================================================
+  # ClickHouse - Data Warehouse
+  # ============================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    restart: unless-stopped
+
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-warehouse}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8123/ping"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ============================================================
+  # MinIO - S3 Compatible Object Storage
+  # ============================================================
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+
+    command: server /data --console-address ":9001"
+
+    ports:
+      - "${MINIO_API_PORT:-9002}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+
+    volumes:
+      - minio_data:/data
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:9000/minio/health/live"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ============================================================
+  # DLT - Python Ingestion Application
+  # ============================================================
+  dlt:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    container_name: dlt
+
+    working_dir: /app
+
+    volumes:
+      - ./app:/app
+      - dlt_venv:/app/.venv
+
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:-warehouse}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+    command: >
+      sh -c "
+        uv sync &&
+        tail -f /dev/null
+      "
+
+
+  # ============================================================
+  # dbt - Transformation
+  # ============================================================
+  dbt:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    container_name: dbt
+
+    working_dir: /app
+
+    volumes:
+      - ./app:/app
+      - dbt_venv:/app/.venv
+
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:-warehouse}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+    command: >
+      sh -c "
+        uv sync &&
+        tail -f /dev/null
+      "
+
+
+# ==============================================================
+# Persistent Volumes
+# ==============================================================
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
+  minio_data:
+  dlt_venv:
+  dbt_venv:
