@@ -1,7 +1,7 @@
 [project]
-name = "app"
+name = "ai-nexusflow"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-branch ELT platform with a future LLM generator"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

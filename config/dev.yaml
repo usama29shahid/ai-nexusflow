@@ -1,0 +1,2 @@
+# Local / VPS development settings (non-secret). Secrets stay in .env.
+environment: dev

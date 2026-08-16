@@ -1,0 +1,14 @@
+# Execution switches. Disabled branches stay in the repo; they are not run.
+# The future LLM router must not select a disabled branch.
+
+branches:
+  branch_1_clickhouse:
+    enabled: true
+  branch_2_iceberg:
+    enabled: false
+  branch_3_databricks:
+    enabled: false
+  branch_4_emr:
+    enabled: false
+  branch_5_glue:
+    enabled: false
