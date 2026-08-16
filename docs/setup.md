@@ -147,9 +147,11 @@ When ingestion exists:
 
 ```bash
 uv run python ingestion/dlt/pipelines/<pipeline>.py
-uv run dbt run --project-dir branches/branch_1_clickhouse/dbt
-uv run dbt test --project-dir branches/branch_1_clickhouse/dbt
+uv run dbt run --project-dir branches/branch_1_clickhouse/dbt --profiles-dir branches/branch_1_clickhouse/dbt
+uv run dbt test --project-dir branches/branch_1_clickhouse/dbt --profiles-dir branches/branch_1_clickhouse/dbt
 ```
+
+dbt profile: copy `branches/branch_1_clickhouse/dbt/profiles.example.yml` to `profiles.yml` in the same folder (gitignored). Load `.env` in the shell first (`set -a && source .env && set +a`) so ClickHouse user/password/database are set. Do not commit `profiles.yml`.
 
 ---
 

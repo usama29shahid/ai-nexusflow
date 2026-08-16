@@ -3,8 +3,8 @@
 Warehouse transformations for **Branch 1** (ClickHouse). Run from the repository root with host uv:
 
 ```bash
-uv run dbt run --project-dir branches/branch_1_clickhouse/dbt
-uv run dbt test --project-dir branches/branch_1_clickhouse/dbt
+uv run dbt run --project-dir branches/branch_1_clickhouse/dbt --profiles-dir branches/branch_1_clickhouse/dbt
+uv run dbt test --project-dir branches/branch_1_clickhouse/dbt --profiles-dir branches/branch_1_clickhouse/dbt
 ```
 
-Profiles and ClickHouse connection are not wired yet (Phase 1 Milestone 1).
+Copy `profiles.example.yml` to `profiles.yml` in this folder before the first run. Do not commit `profiles.yml`.

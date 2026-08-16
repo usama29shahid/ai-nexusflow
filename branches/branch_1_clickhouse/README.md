@@ -4,6 +4,4 @@
 Source → DLT → ClickHouse (RAW) → dbt → ClickHouse (TRANS)
 ```
 
-dbt project: `dbt/` (name `nexus_dbt`). Run from that directory with `uv run dbt` at the repo root.
-
-Phase 1 Milestone 1. Pipeline code is not implemented yet.
+dbt project: `dbt/` (name `nexus_dbt`). Copy `dbt/profiles.example.yml` → `dbt/profiles.yml` before the first run. Pipeline code is not implemented yet.

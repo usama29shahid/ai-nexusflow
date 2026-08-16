@@ -1,0 +1,18 @@
+# Copy to profiles.yml in this directory (profiles.yml is gitignored).
+# dbt does not load the repo .env by itself — export vars or:
+#   set -a && source .env && set +a
+#
+#   uv run dbt debug --project-dir branches/branch_1_clickhouse/dbt \
+#     --profiles-dir branches/branch_1_clickhouse/dbt
+
+nexus_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
+      port: 8123
+      user: "{{ env_var('CLICKHOUSE_USER', 'default') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD', '') }}"
+      schema: "{{ env_var('CLICKHOUSE_DB', 'warehouse') }}"
+      secure: false

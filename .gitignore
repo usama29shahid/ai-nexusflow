@@ -230,6 +230,9 @@ target/
 dbt_packages/
 **/dbt_packages/
 
+# dbt local profile (copy from profiles.example.yml)
+**/profiles.yml
+!**/profiles.example.yml
 # DLT local pipeline state / secrets
 .dlt/
 **/.dlt/
