@@ -235,51 +235,263 @@ This second branch will be developed later.
 
 ---
 
-# 7. Future Architecture
+# 7. Target Multi-Branch Data Platform Architecture
 
-After the basic ELT pipeline works:
+The project will evolve into a **parallel multi-branch data engineering platform**.
 
-```text
-                         DLT
-                          │
-                  ┌───────┴────────┐
-                  │                │
-                  ▼                ▼
-             ClickHouse          MinIO
-                  │                │
-                  │             Parquet
-                  │                │
-                  │             Iceberg
-                  │                │
-                  │             PySpark
-                  │                │
-                  ▼                ▼
-                 dbt          transformed data
-                  │                │
-                  └───────┬────────┘
-                          ▼
-                     ClickHouse
-```
+The important architectural decision is:
 
-Then orchestration:
+> **All branches are independent implementations starting from the common ingestion layer. Branch 3, Branch 4, and Branch 5 are not children of Branch 1 or Branch 2.**
+
+The purpose is to demonstrate how the same data engineering problem can be implemented using different warehouse, open-source lakehouse, managed Spark, and serverless/cloud technologies.
 
 ```text
-                       Airflow
-                          │
-            ┌─────────────┼─────────────┐
-            ▼             ▼             ▼
-           DLT           dbt          Spark
+                              Common Source
+                                   │
+                                  DLT
+                                   │
+        ┌──────────────────────────┼──────────────────────────┐
+        │             │            │            │             │
+        ▼             ▼            ▼            ▼             ▼
+   BRANCH 1       BRANCH 2     BRANCH 3     BRANCH 4      BRANCH 5
+   Non-Big Data   Big Data     Databricks     AWS EMR      AWS Glue
+        │             │            │            │             │
+        ▼             ▼            ▼            ▼             ▼
+   ClickHouse      MinIO       Databricks      S3            S3
+        │          Parquet         │            │             │
+        ▼          Iceberg         ▼            ▼             ▼
+       dbt          Spark       Spark/Delta    EMR/Spark     Glue/Spark
+        │             │            │            │             │
+        ▼             ▼            ▼            ▼             ▼
+   ClickHouse      Iceberg    Unity Catalog   S3/Iceberg   S3/Iceberg
+   transformed     tables     / Delta tables     │             │
+                                                 ▼             ▼
+                                              Redshift       Redshift
+                                               serving        serving
 ```
 
-Streaming can eventually be added:
+### Branch 1 — Open-source / Non-Big-Data ELT
+
+```text
+DLT
+ ↓
+ClickHouse
+ ↓
+dbt
+ ↓
+ClickHouse
+```
+
+Primary purpose:
+
+* Python/DLT ingestion
+* Analytical warehouse
+* SQL-based ELT
+* dbt transformations
+* dbt testing/documentation later
+
+**Final transformed output:** ClickHouse.
+
+---
+
+### Branch 2 — Open-source Big-Data / Lakehouse
+
+```text
+DLT
+ ↓
+MinIO
+ ↓
+Parquet
+ ↓
+Iceberg
+ ↓
+Spark / PySpark
+ ↓
+Iceberg Gold Tables
+```
+
+Primary purpose:
+
+* Object storage
+* Parquet
+* Apache Iceberg
+* Open table formats
+* Spark/PySpark
+* Separation of storage and compute
+
+**Final transformed output:** Iceberg tables stored in MinIO.
+
+ClickHouse may later be used to query or consume the lake data, but it is **not the primary final destination of Branch 2**. This keeps the branch genuinely focused on an open-source lakehouse architecture.
+
+---
+
+### Branch 3 — Databricks Big-Data Branch
+
+```text
+DLT
+ ↓
+Databricks
+ ↓
+PySpark / Spark SQL
+ ↓
+Delta Lake
+ ↓
+Unity Catalog
+ ↓
+Gold Tables
+```
+
+Primary purpose:
+
+* Databricks platform
+* Distributed processing with Spark
+* PySpark
+* Spark SQL
+* Delta Lake
+* Unity Catalog
+* Managed lakehouse capabilities
+
+**Final transformed output:** Delta tables managed/cataloged through Unity Catalog.
+
+PostgreSQL and ClickHouse are **not** the primary destinations for this branch. The goal is to demonstrate the Databricks-native lakehouse pattern:
+
+```text
+Compute  → Databricks / Spark
+Storage  → Delta Lake
+Catalog  → Unity Catalog
+```
+
+---
+
+### Branch 4 — AWS EMR Big-Data Branch
+
+```text
+DLT
+ ↓
+S3
+ ↓
+EMR
+ ↓
+PySpark
+ ↓
+Iceberg / Parquet
+ ↓
+S3
+ ↓
+Optional Redshift serving layer
+```
+
+Primary purpose:
+
+* AWS-managed Spark
+* EMR
+* PySpark
+* S3
+* Open data formats/table formats
+* Lake + warehouse serving pattern
+
+The primary lake output remains in S3. Redshift can be used as an analytical serving layer when appropriate.
+
+---
+
+### Branch 5 — AWS Glue / Serverless ETL Branch
+
+```text
+DLT
+ ↓
+S3
+ ↓
+AWS Glue
+ ↓
+Spark
+ ↓
+Iceberg / Parquet
+ ↓
+S3
+ ↓
+Optional Redshift serving layer
+```
+
+Primary purpose:
+
+* AWS Glue
+* Serverless ETL
+* Managed Spark
+* S3
+* Iceberg/Parquet
+* AWS-native data integration
+
+The primary lake output remains in S3, while Redshift can optionally provide a warehouse/serving layer.
+
+---
+
+## Final Branch Comparison
+
+| Branch | Focus | Compute | Primary Storage / Table Format | Final / Serving Output |
+| --- | --- | --- | --- | --- |
+| **1** | Non-Big-Data ELT | DLT + dbt | ClickHouse | **ClickHouse** |
+| **2** | Open-source Big Data | Spark/PySpark | MinIO + Parquet/Iceberg | **Iceberg / MinIO** |
+| **3** | Databricks Big Data | Databricks + Spark | Delta Lake + Unity Catalog | **Delta / Databricks** |
+| **4** | AWS Managed Spark | EMR + PySpark | S3 + Iceberg/Parquet | **S3 + optional Redshift** |
+| **5** | AWS Serverless ETL | Glue + Spark | S3 + Iceberg/Parquet | **S3 + optional Redshift** |
+
+### Architecture principle
+
+The project is intentionally **not** trying to force every branch into the same destination.
+
+Instead, each branch demonstrates a different architectural pattern:
+
+```text
+Branch 1 → Warehouse-centric ELT
+Branch 2 → Open-source lakehouse
+Branch 3 → Databricks lakehouse
+Branch 4 → AWS managed Spark
+Branch 5 → AWS serverless Spark ETL
+```
+
+This makes the project useful not only as an implementation but also as a technology-comparison and architecture-learning platform.
+
+---
+
+# 8. Cross-Cutting Orchestration and Future Capabilities
+
+The five branches remain parallel. Orchestration and other capabilities sit across them.
+
+## Airflow
+
+Later:
+
+```text
+                         Airflow
+                            │
+          ┌─────────────────┼─────────────────┐
+          ▼                 ▼                 ▼
+       Branch 1          Branch 2         Branch 3/4/5
+        DLT/dbt          Spark/Iceberg     Cloud jobs
+```
+
+Airflow is therefore an orchestration layer, not another data-processing branch.
+
+## Streaming
+
+Eventually:
 
 ```text
 Kafka
   ↓
 Spark Streaming
   ↓
-Iceberg / ClickHouse
+Iceberg / Delta / ClickHouse
 ```
+
+Streaming will be added only when the batch architecture is stable.
+
+## Serverless
+
+Serverless is primarily demonstrated through **AWS Glue**, while Databricks can later be evaluated for its own serverless compute capabilities.
+
+It should be treated as a **compute/deployment characteristic**, not as a sixth data branch.
+
 
 ---
 
@@ -876,9 +1088,11 @@ The immediate priority is to make the underlying ELT platform reliable first.
 
 ---
 
-# 22. Agreed Development Roadmap
+# 24. Agreed Development Roadmap
 
-## Phase 1 — Current
+The roadmap follows the principle of **one stable foundation first, then parallel technology branches**.
+
+## Phase 1 — Core Open-source ELT
 
 ```text
 Python
@@ -894,19 +1108,22 @@ GitHub
 Goal:
 
 ```text
-DLT
- ├──→ ClickHouse
- │       ↓
- │      dbt
- │       ↓
- │   ClickHouse
- │
- └──→ MinIO
-        ↓
-      Parquet
+                    DLT
+                     │
+              ┌──────┴──────┐
+              ▼             ▼
+         ClickHouse       MinIO
+              │          Parquet
+              ▼
+             dbt
+              │
+              ▼
+         ClickHouse
 ```
 
-## Phase 2
+The immediate objective is to make this simple ELT foundation reliable.
+
+## Phase 2 — Open-source Big Data Branch
 
 Add:
 
@@ -918,6 +1135,8 @@ Apache Iceberg
 Goal:
 
 ```text
+DLT
+ ↓
 MinIO
  ↓
 Parquet
@@ -925,9 +1144,100 @@ Parquet
 Iceberg
  ↓
 PySpark
+ ↓
+Iceberg Gold Tables
 ```
 
-## Phase 3
+This branch demonstrates an open-source lakehouse without requiring Databricks.
+
+## Phase 3 — Databricks Branch
+
+Add:
+
+```text
+Databricks
+PySpark
+Delta Lake
+Unity Catalog
+```
+
+Goal:
+
+```text
+DLT
+ ↓
+Databricks
+ ↓
+Spark / PySpark
+ ↓
+Delta Lake
+ ↓
+Unity Catalog
+ ↓
+Gold Tables
+```
+
+This branch is independent of Branch 1 and Branch 2.
+
+## Phase 4 — AWS EMR Branch
+
+Add:
+
+```text
+AWS S3
+AWS EMR
+PySpark
+Iceberg
+```
+
+Goal:
+
+```text
+DLT
+ ↓
+S3
+ ↓
+EMR
+ ↓
+PySpark
+ ↓
+Iceberg / Parquet
+ ↓
+S3
+```
+
+Optional Redshift serving can be added later.
+
+## Phase 5 — AWS Glue Branch
+
+Add:
+
+```text
+AWS Glue
+S3
+Spark
+Iceberg
+```
+
+Goal:
+
+```text
+DLT
+ ↓
+S3
+ ↓
+AWS Glue
+ ↓
+Spark
+ ↓
+Iceberg / Parquet
+ ↓
+S3
+```
+
+Optional Redshift serving can be added later.
+
+## Phase 6 — Orchestration
 
 Add:
 
@@ -935,9 +1245,9 @@ Add:
 Airflow
 ```
 
-for orchestration.
+to orchestrate the independent branches.
 
-## Phase 4
+## Phase 7 — Streaming
 
 Add:
 
@@ -946,9 +1256,9 @@ Kafka
 Spark Streaming
 ```
 
-if streaming is required.
+when the batch architecture is stable.
 
-## Phase 5
+## Phase 8 — AI / LLM Layer
 
 Add:
 
@@ -959,11 +1269,12 @@ LangGraph
 LLM agents
 ```
 
-for intelligent ELT generation/automation.
+for intelligent ELT generation, automation, validation, and operational assistance.
+
 
 ---
 
-# 23. Current Status
+# 25. Current Status
 
 ### Completed
 
@@ -1002,15 +1313,17 @@ dbt-clickhouse  1.10.2
 * [ ] Parquet generation
 * [ ] dbt models
 * [ ] dbt tests
-* [ ] PySpark
-* [ ] Iceberg
+* [ ] PySpark / Apache Iceberg — Branch 2
+* [ ] Databricks / Delta / Unity Catalog — Branch 3
+* [ ] AWS EMR / PySpark — Branch 4
+* [ ] AWS Glue / Spark — Branch 5
 * [ ] Airflow
 * [ ] Kafka
 * [ ] LLM ELT generator
 
 ---
 
-# 24. Immediate Next Step
+# 26. Immediate Next Step
 
 Do **not** add Spark, Iceberg, Airflow, RAG, or agents yet.
 
