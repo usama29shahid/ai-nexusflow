@@ -217,5 +217,23 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# -----------------------------------------------------------------------------
+# AI-NexusFlow — generated artifacts (do not commit)
+# -----------------------------------------------------------------------------
+*.log
+logs/
+**/logs/
 
+# dbt
+target/
+**/target/
+dbt_packages/
 **/dbt_packages/
+
+# DLT local pipeline state / secrets
+.dlt/
+**/.dlt/
+
+# Python / uv
+.venv/
+__pycache__/
