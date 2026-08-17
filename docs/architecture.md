@@ -206,7 +206,7 @@ All backends start from a **common ingestion layer** (DLT / shared source). Bran
 | **4** | AWS managed Spark | EMR + PySpark | S3 + Iceberg / Parquet | **S3 + optional Redshift** |
 | **5** | AWS serverless ETL | Glue + Spark | S3 + Iceberg / Parquet | **S3 + optional Redshift** |
 
-**dlt_dbt_clickhouse** — warehouse ELT: dlt → MinIO **raw archive** (JSONL, bucket `nexus-dlt-dbt-clickhouse-{env}`, default `-dev`) **and** ClickHouse `raw_{env}` (append-only Bronze) → dbt target `{env}` → `stg_*` / `int_*` → **Conformed Gold** → domain marts (dbt-only). ClickHouse is the analytical destination. MinIO is not this capability’s Gold. Env: [environments.md](environments.md). Details: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Path: `branches/dlt_dbt_clickhouse/`.
+**dlt_dbt_clickhouse** — warehouse ELT: dlt → MinIO **raw archive** **and** ClickHouse `raw_{source}_{env}` → dbt `stg_{source}_{env}` → shared `int_{env}` / `gold_{env}` / marts. ClickHouse is the analytical destination. MinIO is not this capability’s Gold. Env: [environments.md](environments.md). Details: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Path: `branches/dlt_dbt_clickhouse/`.
 
 **Branch 2** — open lakehouse: DLT → MinIO Parquet → Iceberg → PySpark → Iceberg gold. ClickHouse may query later; it is **not** the primary destination.
 

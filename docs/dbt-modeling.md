@@ -2,7 +2,9 @@
 
 dbt is the **transformation** layer on ClickHouse. It reads Bronze via `source()`. It does not call REST APIs and does not write the MinIO archive.
 
-Project: `branches/dlt_dbt_clickhouse` (`nexus_dbt`). Profile **target** = env (`dev` until Terraform, later `prd`). One project; do not fork the repo per env. `+database` (ClickHouse database) = `{layer}_{target}` — `stg_dev`, `int_dev`, `gold_dev`, `marts_dev`. Sources read `raw_{env}`. See [environments.md](environments.md).
+Project: `branches/dlt_dbt_clickhouse` (`nexus_dbt`). Profile **target** = env (`dev` until Terraform, later `prd`). One project; do not fork the repo per env.
+
+`+database` by folder: `stg_{source}_{target}` for staging, `int_{target}` / `gold_{target}` / `marts_{target}` for shared layers. dbt `source()` reads `raw_{source}_{env}`. See [environments.md](environments.md) and [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
 
 Pass `var('run_id')` on every run (same value as dlt). Until Airflow, that is the generated local `run_id`.
 
@@ -15,8 +17,8 @@ Medallion is **quality/ownership** of tables. Dimensional modeling is **grain** 
 Typical path when the requirement needs it:
 
 ```text
-raw_{env} (Bronze, dlt)
-  → stg_{env}.stg_*
+raw_{source}_{env} (Bronze, dlt)
+  → stg_{source}_{env}.stg_*
   → int_{env}.int_*
   → gold_{env}  dim_* / fct_* / evt_*
   → int_{env} domain int_*
@@ -54,13 +56,13 @@ A domain mart may depend on a conformed dim, a fact, an event, or another `int_*
 
 ## Layers
 
-### Bronze (`raw_{env}`, not dbt models)
+### Bronze (`raw_{source}_{env}`, not dbt models)
 
-dlt output in `raw_dev` (until Terraform). Append-only **history of loads**. Shared `run_id` on every row. dbt `source()` these tables.
+dlt output e.g. `raw_github_dev` (until Terraform). Append-only **history of loads**. Shared `run_id` on every row. dbt `source()` these tables.
 
 ### Silver staging — `stg_*`
 
-One staging model per Bronze resource where practical.
+One staging model per Bronze resource where practical. Live in `models/staging/{source}/` → database `stg_{source}_{env}`.
 
 - Rename, type, flatten JSON.
 - Light dedupe / null handling.
@@ -134,20 +136,15 @@ One dbt invocation per **source** DAG, with selectors for models downstream of t
 
 ---
 
-## Folder sketch (when models exist)
-
-Replace `models/example/` stubs at implementation time:
+## Folder layout
 
 ```text
 models/
-  staging/          stg_*
-  intermediate/     shared int_*
-  gold/
-    dims/
-    facts/
-    events/
-  domain/
-    <domain>/int_/
-    <domain>/marts/
-  published/        optional
+  staging/{source}/          stg_{source}_{env}
+  intermediate/shared/       int_{env}
+  gold/dims|facts|events     gold_{env}
+  marts/{domain}/            marts_{env}
+  published/                 pub_{env}  optional
 ```
+
+Staging subfolders are REST **sources**. Gold subfolders are **grain** (not github/pokeapi). Leave `models/example/` until the first real source.

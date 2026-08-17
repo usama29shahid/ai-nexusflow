@@ -12,7 +12,7 @@ This capability is **ClickHouse-primary**. MinIO here is a **raw API archive**, 
 REST API
   → dlt (extract once)
        ├─ MinIO `nexus-dlt-dbt-clickhouse-{env}` (immutable JSONL archive)
-       └─ ClickHouse `raw_{env}` (append-only Bronze, run_id on every row)
+       └─ ClickHouse `raw_{source}_{env}` (append-only Bronze, run_id on every row)
             → dbt target `{env}` (DAG, not a ladder)
                  stg_* → int_* → Conformed Gold (dim / fct / evt)
                       → domain int_* → domain marts
@@ -71,34 +71,47 @@ Archive objects are **immutable**. Format: **JSONL** (compressed). Do not put Ic
 
 ## ClickHouse databases
 
-ClickHouse has **no schemas** (only `database.table`). Do **not** create one database per source (`github_dev`). Shared Conformed Gold cannot live inside a source database.
+ClickHouse has **no schemas** (only `database.table`). **Hybrid:** per-source databases for landing (raw/stg); **shared** databases for int, gold, marts, pub.
 
-**One database per layer**, all sources together. Env is a **suffix**. Until Terraform, `env=dev`.
+Do **not** create `gold_github_dev`. Shared Conformed Gold cannot live inside a source database.
+
+Until Terraform, `env=dev`.
 
 ```text
-{layer}_{env}.{table}
-
-raw_dev.github__repos
-raw_dev.pokeapi__pokemon
-stg_dev.stg_github_repos
-int_dev.int_repo_keys
-gold_dev.dim_repo
-marts_dev.mart_engineering
-pub_dev.pub_...                 -- optional
+raw_{source}_{env}     raw_github_dev.repos
+stg_{source}_{env}     stg_github_dev.stg_github_repos
+int_{env}              int_dev.int_repo_keys
+gold_{env}             gold_dev.dim_repo
+marts_{env}            marts_dev.mart_engineering
+pub_{env}              pub_dev.pub_...              -- optional
 ```
 
-| Database | Maps to (logical layer) | Who writes |
+| Database | Maps to | Who writes |
 | --- | --- | --- |
-| `raw_{env}` | bronze / raw | dlt |
-| `stg_{env}` | silver staging | dbt `stg_*` |
-| `int_{env}` | shared int + domain int | dbt `int_*` (shared vs domain in the **name**, not a source DB) |
+| `raw_{source}_{env}` | bronze / raw | dlt |
+| `stg_{source}_{env}` | silver staging | dbt `stg_*` for that source |
+| `int_{env}` | shared int + domain int | dbt `int_*` |
 | `gold_{env}` | conformed gold | dbt `dim_*` / `fct_*` / `evt_*` — **all sources** |
 | `marts_{env}` | domain marts | dbt |
 | `pub_{env}` | published | dbt, optional |
 
-Table names in `raw` / `stg` include the **source**. Gold names are **conformed** (`dim_repo`, not `github_dim_repo`) unless the requirement explicitly names a separate dim.
+Gold table names are **conformed** (`dim_repo`, not `github_dim_repo`) unless the requirement explicitly names a separate dim.
 
 Gold in ClickHouse is already queryable. Do not add `pub` on the first pipeline unless a BI/app contract exists.
+
+### Repo folders (match databases)
+
+```text
+branches/dlt_dbt_clickhouse/
+  dlt/{source}/                 → raw_{source}_{env}
+  models/staging/{source}/      → stg_{source}_{env}
+  models/intermediate/shared/   → int_{env}
+  models/gold/dims|facts|events → gold_{env}
+  models/marts/{domain}/        → marts_{env}
+  models/published/             → pub_{env}
+```
+
+Staging splits by **API**. Gold splits by **grain** (dims/facts/events), not by github/pokeapi. See [dbt-modeling.md](dbt-modeling.md).
 
 ---
 
@@ -150,4 +163,4 @@ Which models exist depends on the **requirement**. There is no mandatory full st
 
 ## First pipeline (implementation later)
 
-Working path: one REST source → dlt → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_dev` → dbt target `dev` (`stg_*` and at least one Gold model with tests). Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark, Databricks, Airflow, or LLM in that slice.
+Working path: one REST source → dlt → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_{source}_dev` → dbt target `dev` (`stg_{source}_dev` and at least one model in `gold_dev`). Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark, Databricks, Airflow, or LLM in that slice.

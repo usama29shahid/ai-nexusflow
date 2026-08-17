@@ -1,6 +1,8 @@
 # dlt extraction (dlt_dbt_clickhouse)
 
-dlt is the **REST extraction and load** layer. It is not the dimensional model. Shared source definitions live under `ingestion/sources/`. Pipeline scripts live under `ingestion/dlt/pipelines/`. They run on the **host** with `uv run`, not inside Docker.
+dlt is the **REST extraction and load** layer. It is not the dimensional model.
+
+For **dlt_dbt_clickhouse**, runnable pipelines live under `branches/dlt_dbt_clickhouse/dlt/{source}/`. Repo `ingestion/sources/` stays a stub until another backend needs the same REST client. They run on the **host** with `uv run`, not inside Docker.
 
 This document is the org standard for RAG and for future generated pipelines. Pipelines are **not implemented yet**.
 
@@ -13,7 +15,7 @@ This document is the org standard for RAG and for future generated pipelines. Pi
 3. Stamp rows with a shared **`run_id`** (see [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md): local generator until Airflow, then DAG run_id).
 4. Write **once** to two destinations:
    - MinIO: immutable JSONL archive (replay) in `nexus-dlt-dbt-clickhouse-{env}`.
-   - ClickHouse `raw_{env}`: append-only Bronze (queryable load history).
+   - ClickHouse `raw_{source}_{env}` (e.g. `raw_github_dev`): append-only Bronze.
 5. Keep **pipeline state** (incremental cursors, schema) in dlt — not a custom watermark table.
 
 dlt may create nested/child tables from JSON. Leave them in Bronze. Flatten in dbt `stg_*`.
@@ -31,8 +33,8 @@ dlt may create nested/child tables from JSON. Leave them in Bronze. Flatten in d
 Code layout (when implemented):
 
 ```text
-ingestion/sources/          # base URL, auth, pagination, resources
-ingestion/dlt/pipelines/    # runnable pipelines: archive + ClickHouse
+branches/dlt_dbt_clickhouse/dlt/{source}/   # endpoint pipelines → raw_{source}_{env}
+ingestion/sources/                          # stub until a second backend shares REST defs
 ```
 
 ---
@@ -99,7 +101,7 @@ When the API is full-refresh only: extract the snapshot, archive it, append Bron
 Extract once in memory (or one normalize pass), then:
 
 1. **Filesystem / S3 destination** → MinIO bucket `nexus-dlt-dbt-clickhouse-{env}` (default `nexus-dlt-dbt-clickhouse-dev`; see [environments.md](environments.md)).
-2. **ClickHouse destination** → database `raw_{env}` (default `raw_dev`), MergeTree-style append.
+2. **ClickHouse destination** → database `raw_{source}_{env}` (e.g. `raw_github_dev`), MergeTree-style append.
 
 Replay mode (later): **do not call the API**. Read JSONL from the prefix, load Bronze with a **new** `run_id`, run dbt.
 

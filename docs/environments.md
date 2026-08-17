@@ -6,10 +6,10 @@
 
 | Surface | `dev` (now) | `prd` (after Terraform) |
 | --- | --- | --- |
-| ClickHouse databases | `{layer}_dev` | `{layer}_prd` |
+| ClickHouse databases | `raw_{source}_dev`, `stg_{source}_dev`; shared `int_dev`, `gold_dev`, `marts_dev` | same with `_prd` |
 | MinIO buckets | `{purpose}-dev` | `{purpose}-prd` |
 | dbt | profile target `dev` | target `prd` |
-| dlt | `raw_dev` + `nexus-dlt-dbt-clickhouse-dev` | `raw_prd` + `nexus-dlt-dbt-clickhouse-prd` |
+| dlt | `raw_{source}_dev` + `nexus-dlt-dbt-clickhouse-dev` | `raw_{source}_prd` + `nexus-dlt-dbt-clickhouse-prd` |
 
 One dbt project and one dlt codebase. Env is **target / config**, not a forked repo.
 

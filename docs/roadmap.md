@@ -35,7 +35,7 @@ Source → DLT → MinIO archive (JSONL) + ClickHouse raw (Bronze, append)
 ```
 
 - One stable REST (or similar) source
-- DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_dev`
+- DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_{source}_dev`
 - dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
 - Shared local `run_id` into dlt and dbt (Airflow later)
 - Verify row counts and tests
@@ -158,7 +158,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**Phase 1 Milestone 1:** implement and verify **dlt_dbt_clickhouse** (DLT → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_dev` → dbt target `dev`). No Spark, Databricks, Airflow, or LLM in that slice.
+**Phase 1 Milestone 1:** implement and verify **dlt_dbt_clickhouse** (DLT → MinIO archive + ClickHouse `raw_{source}_dev` → dbt `stg_{source}_dev` / `gold_dev`). No Spark, Databricks, Airflow, or LLM in that slice.
 
 Guiding principle:
 
