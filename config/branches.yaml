@@ -2,7 +2,7 @@
 # The future LLM router must not select a disabled branch.
 
 branches:
-  branch_1_clickhouse:
+  dlt_dbt_clickhouse:
     enabled: true
   branch_2_iceberg:
     enabled: false

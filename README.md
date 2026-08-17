@@ -8,15 +8,15 @@ The same ingestion requirement can be routed to different backends. It is not fi
 User request → LLM + RAG (org rules) → select enabled branch → Airflow → ELT → validate
 ```
 
-| Branch | Pattern | Primary output |
+| Capability | Pattern | Primary output |
 | --- | --- | --- |
-| 1 | DLT → ClickHouse → dbt | ClickHouse |
+| **dlt_dbt_clickhouse** | dlt → ClickHouse → dbt | ClickHouse |
 | 2 | DLT → MinIO → Iceberg → Spark | Iceberg on MinIO |
 | 3 | DLT → Databricks → Delta → Unity Catalog | Delta |
 | 4 | DLT → S3 → EMR → Iceberg | S3 (+ optional Redshift) |
 | 5 | DLT → S3 → Glue → Iceberg | S3 (+ optional Redshift) |
 
-Full design: [docs/architecture.md](docs/architecture.md).
+Platform design: [docs/architecture.md](docs/architecture.md). Warehouse capability: [docs/dlt-dbt-clickhouse.md](docs/dlt-dbt-clickhouse.md).
 
 ---
 
@@ -41,10 +41,10 @@ Details and checklists: [docs/roadmap.md](docs/roadmap.md).
 
 - Host uv (Python 3.12, DLT, dbt-clickhouse) — not inside Docker
 - Docker Compose: ClickHouse + MinIO
-- dbt project: `branches/branch_1_clickhouse/dbt`
+- dbt project: `branches/dlt_dbt_clickhouse`
 - Branch switches: `config/branches.yaml`
 
-**Next:** Phase 1 Milestone 1 — first DLT → ClickHouse → dbt pipeline.
+**Next:** Phase 1 Milestone 1 — first **dlt_dbt_clickhouse** pipeline.
 
 ---
 
@@ -82,7 +82,7 @@ ai-nexusflow/
 ├── common/
 ├── ingestion/                  # shared DLT
 ├── branches/
-│   ├── branch_1_clickhouse/dbt/
+│   ├── dlt_dbt_clickhouse/
 │   ├── branch_2_iceberg/
 │   ├── branch_3_databricks/
 │   ├── branch_4_emr/
@@ -103,5 +103,10 @@ Empty capability folders have short READMEs. Fill them when that phase has real 
 ## Docs
 
 - [Architecture](docs/architecture.md) — branches, RAG, agents, on/off router
+- [Environments](docs/environments.md) — `dev` until Terraform; `prd` later; all branches
+- [dlt_dbt_clickhouse](docs/dlt-dbt-clickhouse.md) — archive, Bronze, Gold, run ids
+- [dlt extraction](docs/dlt-extraction.md) — REST auth, pagination, retries, dual load
+- [dbt modeling](docs/dbt-modeling.md) — medallion + dimensional DAG
+- [Observability](docs/observability.md) — Airflow logs, dlt/dbt, no custom log stack
 - [Roadmap](docs/roadmap.md) — phases, status, next milestone
 - [Setup](docs/setup.md) — WSL / VPS / EC2, Docker, uv, troubleshooting

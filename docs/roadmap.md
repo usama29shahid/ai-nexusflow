@@ -5,7 +5,7 @@ Build a **working ELT foundation first**. Add Spark, cloud, orchestration, and L
 Each phase must be **runnable**, not a folder of stubs. Later agents generate and **select** these branches; they should not invent a platform that was never built.
 
 ```text
-Phase 1  Branch 1 → Branch 2 → Branch 3   (each must run end-to-end)
+Phase 1  dlt_dbt_clickhouse → Branch 2 → Branch 3   (each must run end-to-end)
 Phase 2  Airflow
 Phase 3  LLM: multi-agent + RAG + Streamlit (live app)
 Phase 4  Terraform (dev / prod) + infra
@@ -23,22 +23,24 @@ The LLM layer is Phase 3 — after Branches 1–3 and Airflow exist — not afte
 
 Same source problem, three independent backends.
 
-**Do not start Branch 2 until Branch 1 is verified. Do not start Branch 3 until Branch 2 is verified.**
+**Do not start Branch 2 until dlt_dbt_clickhouse is verified. Do not start Branch 3 until Branch 2 is verified.**
 
 Python, uv, DLT, and dbt stay on the **host**. ClickHouse and MinIO are already in Docker Compose. Spark for Branch 2 is added as Docker infra when Milestone 2 starts.
 
-### Milestone 1 — Branch 1 (first pipeline)
+### Milestone 1 — dlt_dbt_clickhouse (first pipeline)
 
 ```text
-Source → DLT → ClickHouse (RAW / bronze) → dbt → ClickHouse (TRANS / silver)
+Source → DLT → MinIO archive (JSONL) + ClickHouse raw (Bronze, append)
+      → dbt stg_* / Gold (ClickHouse)
 ```
 
 - One stable REST (or similar) source
-- DLT ClickHouse destination
-- dbt models and tests in `branches/branch_1_clickhouse/dbt`
+- DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_dev`
+- dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
+- Shared local `run_id` into dlt and dbt (Airflow later)
 - Verify row counts and tests
 
-MinIO is **not** the Branch 1 destination (that is Branch 2).
+MinIO for this capability is the **raw API archive** (replay), **one bucket per capability per env**. It is **not** the analytical lakehouse. Iceberg-on-MinIO is Branch 2. `dev` until Terraform. See [environments.md](environments.md) and [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
 
 ### Milestone 2 — Branch 2
 
@@ -54,7 +56,7 @@ Open-source lakehouse without Databricks. Gold lives in Iceberg on MinIO.
 Source → DLT → Databricks Spark → Delta Lake → Unity Catalog gold
 ```
 
-Independent of Branch 1 and 2. Aligns with Databricks coursework.
+Independent of dlt_dbt_clickhouse and Branch 2. Aligns with Databricks coursework.
 
 **Phase 1 done when:** all three pipelines run and you can show data in ClickHouse, Iceberg/MinIO, and Databricks Delta.
 
@@ -62,7 +64,9 @@ Independent of Branch 1 and 2. Aligns with Databricks coursework.
 
 ## Phase 2 — Airflow
 
-- DAGs that trigger enabled Branch 1 / 2 / 3
+- DAGs that trigger enabled dlt_dbt_clickhouse / Branch 2 / 3
+- **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors
+- Remote task logs to MinIO (`nexus-airflow-logs-dev` until Terraform)
 - Schedule, retries, clear task boundaries
 - On/off in config: Airflow only runs **enabled** branches
 - Add Airflow in Docker here (not in Phase 1)
@@ -92,7 +96,7 @@ Details: [architecture.md](architecture.md).
 
 Compose already exists for local services. This phase is **env promotion**.
 
-- Terraform **dev** and **prod**
+- Terraform **dev** and **prd** (prd is when `-prd` buckets and `*_prd` databases are created)
 - Repeatable ClickHouse / MinIO / Airflow (and later AWS) wiring
 - Secrets and networking; no keys in git
 
@@ -122,11 +126,12 @@ Kafka + Spark Structured Streaming, after batch (and AWS batch paths) are stable
 - [x] Docker Compose: ClickHouse + MinIO
 - [x] Python project with uv (`pyproject.toml`, `uv.lock`)
 - [x] DLT, dbt-core, dbt-clickhouse
-- [x] dbt project `nexus_dbt` initialized (`branches/branch_1_clickhouse/dbt`)
+- [x] dbt project `nexus_dbt` initialized (`branches/dlt_dbt_clickhouse`)
 - [x] End-goal folder skeleton and `scripts/setup.sh`
 - [x] Python / DLT / dbt versions verified
 - [x] `.venv` permission issue identified and resolved
 - [x] Development architecture documented (`docs/`)
+- [x] dlt_dbt_clickhouse warehouse, dlt, dbt, and observability standards documented
 
 ### Current versions
 
@@ -139,7 +144,7 @@ dbt-clickhouse  1.10.2
 
 ### Not implemented yet
 
-- [ ] DLT ingestion pipeline (Branch 1)
+- [ ] DLT ingestion pipeline (dlt_dbt_clickhouse)
 - [ ] ClickHouse bronze / dbt silver + tests
 - [ ] MinIO / Parquet / Iceberg / PySpark (Branch 2)
 - [ ] Databricks / Delta / Unity Catalog (Branch 3)
@@ -153,7 +158,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**Phase 1 Milestone 1:** implement and verify Branch 1 (DLT → ClickHouse → dbt). No Spark, Databricks, Airflow, or LLM in that slice.
+**Phase 1 Milestone 1:** implement and verify **dlt_dbt_clickhouse** (DLT → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_dev` → dbt target `dev`). No Spark, Databricks, Airflow, or LLM in that slice.
 
 Guiding principle:
 

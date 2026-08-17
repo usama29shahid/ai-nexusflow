@@ -147,11 +147,11 @@ When ingestion exists:
 
 ```bash
 uv run python ingestion/dlt/pipelines/<pipeline>.py
-uv run dbt run --project-dir branches/branch_1_clickhouse/dbt --profiles-dir branches/branch_1_clickhouse/dbt
-uv run dbt test --project-dir branches/branch_1_clickhouse/dbt --profiles-dir branches/branch_1_clickhouse/dbt
+uv run dbt run --project-dir branches/dlt_dbt_clickhouse
+uv run dbt test --project-dir branches/dlt_dbt_clickhouse
 ```
 
-dbt profile: copy `branches/branch_1_clickhouse/dbt/profiles.example.yml` to `profiles.yml` in the same folder (gitignored). Load `.env` in the shell first (`set -a && source .env && set +a`) so ClickHouse user/password/database are set. Do not commit `profiles.yml`.
+dbt uses `~/.dbt/profiles.yml` unless you pass `--profiles-dir`. Optional project copy: `profiles.example.yml` → `profiles.yml` in this folder (gitignored). Do not commit `profiles.yml`.
 
 ---
 
@@ -184,4 +184,4 @@ Enable Docker Desktop WSL integration for Ubuntu.
 
 ### Old `app/` path
 
-`pyproject.toml` and dbt used to live under `app/`. They are now at the repo root and `branches/branch_1_clickhouse/dbt`. Delete any leftover `app/.venv` if you still have one.
+`pyproject.toml` and dbt used to live under `app/`. They are now at the repo root and `branches/dlt_dbt_clickhouse`. Delete any leftover `app/.venv` if you still have one.

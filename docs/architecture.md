@@ -31,9 +31,9 @@ Examples:
 ```text
 "Ingest this REST API into ClickHouse"
         ↓
-LLM selects Branch 1
+LLM selects dlt_dbt_clickhouse
         ↓
-DLT → ClickHouse → dbt
+dlt → MinIO archive + ClickHouse Bronze → dbt (Silver / Gold / marts)
 ```
 
 ```text
@@ -88,7 +88,9 @@ Execution
 Data Quality / Result
 ```
 
-The generator must **not invent organization conventions**. The user may give `RAW`, `TRANS`, and `daily at 6 AM`; RAG supplies naming, bronze prep, flattening, deduplication, incremental loading, tool selection, serverless rules, and Airflow standards.
+The generator must **not invent organization conventions**. The user may give `RAW`, `TRANS`, and `daily at 6 AM`; RAG supplies naming, bronze/silver/gold, flattening, deduplication, incremental loading, shared vs domain models, tool selection, serverless rules, and Airflow standards.
+
+Warehouse capability rules (DAG vs ladder, archive, dlt vs dbt, run ids): [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-extraction.md](dlt-extraction.md), [dbt-modeling.md](dbt-modeling.md), [observability.md](observability.md).
 
 > **The LLM provides reasoning; RAG provides organization-specific rules and standards.**
 
@@ -109,7 +111,10 @@ Naming conventions
 └── Column names
 
 Data-layer rules
-├── Bronze / Silver / Gold
+├── Bronze / Silver / Gold (DAG, not a ladder)
+├── Staging stg_* / intermediate int_*
+├── Conformed dims, facts, events
+├── Domain marts (dbt-only)
 ├── Flattening
 ├── Deduplication
 └── Incremental processing
@@ -144,7 +149,7 @@ USER → PLANNER AGENT → RAG / Rules → ELT PLAN / SPECIFICATION
          │
          ├── Ingestion Agent      → DLT code
          ├── Transformation Agent → dbt / Spark artifacts
-         ├── Branch/Platform Agent → Branch 1–5 selection
+         ├── Branch/Platform Agent → capability selection
          └── Workflow Agent       → Airflow DAG
          │
          └── Validation Agent → PASS → Execute → Validate result
@@ -154,11 +159,11 @@ USER → PLANNER AGENT → RAG / Rules → ELT PLAN / SPECIFICATION
 | Agent | Role |
 | --- | --- |
 | **Planner** | Source, target, layers, transformations, schedule, scale, constraints, required capabilities. Does not generate every implementation detail. |
-| **Ingestion** | REST pagination, auth, incremental strategy, DLT pipeline. Uses DLT rules from RAG. |
-| **Transformation** | Branch 1: dbt models and tests. Spark branches: PySpark / Spark SQL / Iceberg or Delta. Uses layer and flattening rules from RAG. |
-| **Branch / Platform** | ClickHouse → Branch 1. Redshift + Spark/serverless/scale → Branch 4 or 5. |
-| **Workflow** | Airflow DAG from schedule plus org Airflow rules. |
-| **Validation** | Naming, bronze/silver, flattening, required tests, branch enabled, runtime available, schedule valid. Fail returns to planning/generation. |
+| **Ingestion** | REST pagination, auth, retries, incremental, DLT dual load (MinIO archive + ClickHouse Bronze). Uses DLT rules from RAG. |
+| **Transformation** | **dlt_dbt_clickhouse**: dbt models and tests. Spark backends: PySpark / Spark SQL / Iceberg or Delta. Uses layer and flattening rules from RAG. |
+| **Branch / Platform** | ClickHouse warehouse → **dlt_dbt_clickhouse**. Redshift + Spark/serverless/scale → Branch 4 or 5. |
+| **Validation** | Naming, layers, flattening, required tests, branch enabled, runtime available, schedule valid. Fail returns to planning/generation. |
+| **Workflow** | Airflow DAG from schedule plus org rules. **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors. Not one DAG per URL. |
 
 The five branches are **capabilities** (execution backends), not fixed pipelines. The generator considers target, scale, compute/storage, open-source vs managed vs serverless, cost, org rules, and **enabled** branches.
 
@@ -166,7 +171,7 @@ The five branches are **capabilities** (execution backends), not fixed pipelines
 
 ## Five independent branches
 
-All branches start from a **common ingestion layer** (DLT / shared source). Branch 3, 4, and 5 are **not** children of Branch 1 or 2.
+All backends start from a **common ingestion layer** (DLT / shared source). Branch 3, 4, and 5 are **not** children of dlt_dbt_clickhouse or Branch 2.
 
 ```text
                               Common Source
@@ -176,8 +181,8 @@ All branches start from a **common ingestion layer** (DLT / shared source). Bran
         ┌──────────────────────────┼──────────────────────────┐
         │             │            │            │             │
         ▼             ▼            ▼            ▼             ▼
-   BRANCH 1       BRANCH 2     BRANCH 3     BRANCH 4      BRANCH 5
-   Non-Big Data   Big Data     Databricks     AWS EMR      AWS Glue
+  dlt_dbt_CH      BRANCH 2     BRANCH 3     BRANCH 4      BRANCH 5
+  warehouse       Big Data     Databricks     AWS EMR      AWS Glue
         │             │            │            │             │
         ▼             ▼            ▼            ▼             ▼
    ClickHouse      MinIO       Databricks      S3            S3
@@ -193,15 +198,15 @@ All branches start from a **common ingestion layer** (DLT / shared source). Bran
                                                (optional)     (optional)
 ```
 
-| Branch | Focus | Compute | Primary storage / format | Final / serving |
+| Capability | Focus | Compute | Primary storage / format | Final / serving |
 | --- | --- | --- | --- | --- |
-| **1** | Non-big-data ELT | DLT + dbt | ClickHouse | **ClickHouse** |
+| **dlt_dbt_clickhouse** | Warehouse ELT | dlt + dbt | ClickHouse | **ClickHouse** |
 | **2** | Open-source lakehouse | Spark / PySpark | MinIO + Parquet / Iceberg | **Iceberg / MinIO** |
 | **3** | Databricks lakehouse | Databricks + Spark | Delta + Unity Catalog | **Delta / Databricks** |
 | **4** | AWS managed Spark | EMR + PySpark | S3 + Iceberg / Parquet | **S3 + optional Redshift** |
 | **5** | AWS serverless ETL | Glue + Spark | S3 + Iceberg / Parquet | **S3 + optional Redshift** |
 
-**Branch 1** — warehouse ELT: DLT → ClickHouse (RAW/bronze) → dbt → ClickHouse (TRANS/silver). SQL ELT, tests, documentation.
+**dlt_dbt_clickhouse** — warehouse ELT: dlt → MinIO **raw archive** (JSONL, bucket `nexus-dlt-dbt-clickhouse-{env}`, default `-dev`) **and** ClickHouse `raw_{env}` (append-only Bronze) → dbt target `{env}` → `stg_*` / `int_*` → **Conformed Gold** → domain marts (dbt-only). ClickHouse is the analytical destination. MinIO is not this capability’s Gold. Env: [environments.md](environments.md). Details: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Path: `branches/dlt_dbt_clickhouse/`.
 
 **Branch 2** — open lakehouse: DLT → MinIO Parquet → Iceberg → PySpark → Iceberg gold. ClickHouse may query later; it is **not** the primary destination.
 
@@ -221,7 +226,7 @@ Branches are independent capabilities. They must not always run. A registry such
 
 ```yaml
 branches:
-  branch_1_clickhouse:
+  dlt_dbt_clickhouse:
     enabled: true
   branch_2_iceberg:
     enabled: true
@@ -233,16 +238,16 @@ branches:
     enabled: false
 ```
 
-Only enabled branches participate. Combinations can change over time (for example Branch 1+2, or 1+3). A disabled branch stays implemented. The LLM must treat enabled/disabled as the available capability set.
+Only enabled capabilities participate. Combinations can change over time (for example dlt_dbt_clickhouse + Branch 2). A disabled capability stays implemented. The LLM must treat enabled/disabled as the available set.
 
 ---
 
 ## Cross-cutting layers
 
-**Airflow (Phase 2)** orchestrates enabled branches. It is not another processing branch.
+**Airflow (Phase 2)** orchestrates enabled capabilities. It is not another processing backend. **dlt_dbt_clickhouse**: **one DAG per source**, endpoint dlt tasks, then dbt with selectors. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). See [observability.md](observability.md).
 
 ```text
-Airflow → Branch 1 (DLT/dbt) | Branch 2 (Spark/Iceberg) | Branch 3/4/5 (cloud jobs)
+Airflow → dlt_dbt_clickhouse | Branch 2 (Spark/Iceberg) | Branch 3/4/5 (cloud jobs)
 ```
 
 **Streaming (Phase 6)** — Kafka → Spark Structured Streaming → Iceberg / Delta / ClickHouse. Add only after batch is stable.
@@ -265,13 +270,13 @@ The root `pyproject.toml` / `uv.lock` currently include DLT, dbt-core, and dbt-c
 
 > A package in the shared local env does not mean every branch needs it at runtime.
 
-- Branch 1: DLT + dbt + ClickHouse
+- **dlt_dbt_clickhouse**: DLT + dbt + ClickHouse
 - Branch 2: Spark/PySpark + Iceberg
 - Branch 3: Databricks Spark + Delta
 - Branch 4: EMR Spark + libraries
 - Branch 5: Glue Spark + libraries
 
-dbt is required for Branch 1 initially, not for Branches 2–5. Databricks, EMR, and Glue must **not** use the host `.venv` as their runtime.
+dbt is required for **dlt_dbt_clickhouse** initially, not for Branches 2–5. Databricks, EMR, and Glue must **not** use the host `.venv` as their runtime.
 
 ---
 
@@ -294,7 +299,7 @@ ai-nexusflow/
 │   ├── sources/
 │   └── dlt/pipelines/
 ├── branches/
-│   ├── branch_1_clickhouse/dbt/
+│   ├── dlt_dbt_clickhouse/
 │   ├── branch_2_iceberg/
 │   ├── branch_3_databricks/
 │   ├── branch_4_emr/
@@ -316,11 +321,11 @@ ai-nexusflow/
 | `common/` | Config, schemas, logging, utilities |
 | `ingestion/` | Shared DLT sources |
 | `branches/` | Independent execution implementations |
-| `branches/branch_1_clickhouse/dbt/` | dbt for Branch 1 |
+| `branches/dlt_dbt_clickhouse/` | dbt for **dlt_dbt_clickhouse** |
 | `orchestration/airflow/` | DAGs for enabled branches |
 | `agents/` | Planner, router, generator, validator, executor |
 | `ui/` | Streamlit (Phase 3) |
 | `docker/` | Init scripts; Compose file stays at root |
 | `infrastructure/` | Terraform, AWS, Databricks |
 | `config/` | Env and branch activation |
-| `docs/` | Architecture, roadmap, setup |
+| `docs/` | Platform architecture, dlt_dbt_clickhouse, dlt, dbt, observability, environments, roadmap, setup |

@@ -4,7 +4,7 @@ Independent execution backends for the same ingestion problem. Enable/disable in
 
 | Folder | Phase | Status |
 | --- | --- | --- |
-| `branch_1_clickhouse` | 1 M1 | dbt stub present; DLT not implemented |
+| `dlt_dbt_clickhouse` | 1 M1 | dbt stub present; DLT not implemented |
 | `branch_2_iceberg` | 1 M2 | Not implemented |
 | `branch_3_databricks` | 1 M3 | Not implemented |
 | `branch_4_emr` | 5 | Not implemented |
