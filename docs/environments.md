@@ -15,4 +15,22 @@
 
 One dbt project and one dlt codebase **per capability**. Env is **target / config**, not a forked repo.
 
-Details: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md), [dlt-extraction.md](dlt-extraction.md), [dbt-modeling.md](dbt-modeling.md).
+**Variable:** `NEXUS_ENV` (`dev` or `prd`, default **`dev`**). Python/dlt read it. dbt `--target` must be the same value (`target.name`). Shared run id is `NEXUS_RUN_ID` (see capability docs). Until Terraform, only `dev` is used.
+
+### Job vs table vs bucket
+
+These are three different names. Do not reuse the dlt job name as the Bronze table or the MinIO bucket.
+
+| Name | Question it answers | Example (`dev`) |
+| --- | --- | --- |
+| **Job** (dlt pipeline / later Airflow task) | Which extract ran? | `pipe_one` |
+| **Table** (REST resource) | What entity is stored? | `pull_request` |
+| **Bucket** (capability + env) | Which archive owns the JSONL? | warehouse: `nexus-dlt-dbt-clickhouse-dev`; lakehouse: `nexus-dlt-dbt-spark-iceberg-archive-dev` |
+
+Override dlt’s default “pipeline name = dataset.” Dataset/database (warehouse) or catalog.schema (lakehouse) stay env/layer names. The table stays the resource. The job stays the task id.
+
+A second GitHub endpoint (`issues`) is a new job and a new table. It still uses the **same** archive bucket for that capability+env. Prefixes inside the bucket are `{source}/{endpoint}/...`.
+
+Worked example (same API, both capabilities): [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+
+Details: [dlt-extraction.md](dlt-extraction.md), [dbt-modeling.md](dbt-modeling.md).

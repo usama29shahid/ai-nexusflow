@@ -100,7 +100,7 @@ When the API is full-refresh only: extract the snapshot, archive it, append Bron
 
 Extract once in memory (or one normalize pass), then:
 
-1. **Filesystem / S3 destination** → MinIO bucket `nexus-dlt-dbt-clickhouse-{env}` (default `nexus-dlt-dbt-clickhouse-dev`; see [environments.md](environments.md)).
+1. **Filesystem / S3 destination** → MinIO bucket `nexus-dlt-dbt-clickhouse-{env}` from `NEXUS_ENV` (default `dev` → `nexus-dlt-dbt-clickhouse-dev`; see [environments.md](environments.md)). The dlt **job name** is not the bucket.
 2. **ClickHouse destination** → database `raw_{source}_{env}` (e.g. `raw_github_dev`), MergeTree-style append.
 
 Replay mode (later): **do not call the API**. Read JSONL from the prefix, load Bronze with a **new** `run_id`, run dbt.

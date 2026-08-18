@@ -68,6 +68,9 @@ If `docker` is not found in WSL, integration is off.
 `.env` at the **repository root**. Do not commit it. Start from `.env.example`:
 
 ```env
+NEXUS_ENV=dev
+# NEXUS_RUN_ID=   # set per load; do not reuse one eternal value
+
 CLICKHOUSE_DB=warehouse
 CLICKHOUSE_USER=default
 CLICKHOUSE_PASSWORD=
@@ -143,13 +146,18 @@ dbt-core        1.11.13
 dbt-clickhouse  1.10.2
 ```
 
-When ingestion exists:
+When ingestion exists (env = dbt `--target`; default `dev`). Warehouse vs lakehouse: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
 ```bash
-uv run python ingestion/dlt/pipelines/<pipeline>.py
-uv run dbt run --project-dir branches/dlt_dbt_clickhouse
-uv run dbt test --project-dir branches/dlt_dbt_clickhouse
+export NEXUS_ENV=dev
+export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
+uv run python branches/dlt_dbt_clickhouse/dlt/github/pipe_one.py
+uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
+  --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
+uv run dbt test --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
 ```
+
+Lakehouse (Milestone 2, Spark Thrift required): `--project-dir branches/dlt_dbt_spark_iceberg` and `branches/dlt_dbt_spark_iceberg/dlt/github/pipe_one.py`.
 
 dbt uses `~/.dbt/profiles.yml` unless you pass `--profiles-dir`. Optional project copy: `profiles.example.yml` → `profiles.yml` in this folder (gitignored). Do not commit `profiles.yml`.
 

@@ -14,11 +14,16 @@ The **DAG, prefixes, SCD, and folder grain** below apply to both warehouse and l
 
 Lakehouse catalog/schema rules: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). ClickHouse database rules: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Env: [environments.md](environments.md).
 
-Project: `branches/dlt_dbt_clickhouse` (`nexus_dbt`) is the warehouse project. Profile **target** = env (`dev` until Terraform, later `prd`). One project per capability; do not fork the repo per env.
+Profile **target** = env (`NEXUS_ENV`, default `dev` until Terraform, later `prd`). One project per capability; do not fork the repo per env. Run with `--target "$NEXUS_ENV"`.
 
-`+database` by folder (ClickHouse): `stg_{source}_{target}` for staging, `int_{target}` / `gold_{target}` / `marts_{target}` for shared layers. dbt `source()` reads `raw_{source}_{env}`.
+**Where `{{ target.name }}` goes:**
 
-Pass `var('run_id')` on every run (same value as dlt). Until Airflow, that is the generated local `run_id`.
+- **ClickHouse:** into **database** names (`raw_github_{{ target.name }}`, `stg_github_{{ target.name }}`, `gold_{{ target.name }}`). `sources.yml` and `+schema` (ClickHouse database) use that suffix. If `dbt_project.yml` cannot interpolate, use `generate_schema_name`.
+- **Iceberg / dbt-spark:** into the Polaris **catalog** only (`nexus_{{ target.name }}`). `+schema` stays `raw_{source}`, `stg_{source}`, `gold`, … — never `gold_{{ target.name }}`.
+
+`source()` examples: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+
+Pass `var('run_id')` on every run (same value as dlt / `NEXUS_RUN_ID`). Until Airflow, that is the generated local `run_id`.
 
 ---
 

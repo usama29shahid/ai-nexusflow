@@ -19,7 +19,7 @@ REST API
                       → optional published
 ```
 
-Until Airflow exists (Phase 2), the same path runs on the host with `uv run`. Generate **one `run_id` per local run** and pass it to **both** dlt and dbt. Later, Airflow supplies the DAG `run_id`. Env is **`dev` until Terraform**.
+Until Airflow exists (Phase 2), the same path runs on the host with `uv run`. Generate **one `run_id` per local run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. Later, Airflow supplies the DAG `run_id`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
 
 ---
 
@@ -162,6 +162,79 @@ Which models exist depends on the **requirement**. There is no mandatory full st
 
 ---
 
+## Worked example: GitHub `pipe_one`
+
+Illustration of the rules above. Pipelines are **not implemented yet**. Lakehouse copy of the same API: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+
+Assumptions: source GitHub, endpoint `pull_request/{param1}`, job name `pipe_one`. `{param1}` is a URL id with the **same** payload contract → one parameterized pipeline, not a `{param_variant}` prefix and not a new Gold table.
+
+**Three names** ([environments.md](environments.md)):
+
+```text
+Job     pipe_one
+Table   pull_request
+Bucket  nexus-dlt-dbt-clickhouse-{env}     # all warehouse JSONL for this env
+Prefix  github/pull_request/dt=.../run_id=.../part-*.jsonl.gz
+Bronze  raw_github_{env}.pull_request
+```
+
+Do not name the ClickHouse database or MinIO bucket `pipe_one`. dlt dataset = `raw_github_{env}`, not the job name.
+
+**Archive (`NEXUS_ENV=dev`):** one MinIO service; dlt writes objects (prefixes, not mkdir):
+
+```text
+s3://nexus-dlt-dbt-clickhouse-dev/
+  github/pull_request/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
+```
+
+**dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Interpolate env into database names. If `+schema` cannot use `target.name` in `dbt_project.yml`, a `generate_schema_name` macro does the same.
+
+`models/staging/github/sources.yml` (proposed):
+
+```yaml
+version: 2
+sources:
+  - name: github_raw
+    database: raw_github_{{ target.name }}
+    schema: raw_github_{{ target.name }}
+    tables:
+      - name: pull_request
+```
+
+`dbt_project.yml` (proposed fragment):
+
+```yaml
+models:
+  nexus_dbt:
+    staging:
+      github:
+        +schema: stg_github_{{ target.name }}
+    intermediate:
+      +schema: int_{{ target.name }}
+    gold:
+      +schema: gold_{{ target.name }}
+    marts:
+      +schema: marts_{{ target.name }}
+    published:
+      +schema: pub_{{ target.name }}
+```
+
+Staging: `stg_github_dev.stg_github_pull_request` via `{{ source('github_raw', 'pull_request') }}`. Gold only if a requirement **names** a model.
+
+From the repo root (when code exists):
+
+```bash
+export NEXUS_ENV=dev
+export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
+uv run python branches/dlt_dbt_clickhouse/dlt/github/pipe_one.py
+uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
+  --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
+```
+
+`prd` later: same files, `NEXUS_ENV=prd` and `--target prd` → bucket `-prd`, databases `*_prd`.
+
+---
+
 ## First pipeline (implementation later)
 
-Working path: one REST source → dlt → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_{source}_dev` → dbt target `dev` (`stg_{source}_dev` and at least one model in `gold_dev`). Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark, Databricks, Airflow, or LLM in that slice.
+Working path: the example above (or one similar REST source) → dlt → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_{source}_dev` → dbt `--target dev`. Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark, Databricks, Airflow, or LLM in that slice.

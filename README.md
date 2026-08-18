@@ -104,7 +104,7 @@ Empty capability folders have short READMEs. Fill them when that phase has real 
 ## Docs
 
 - [Architecture](docs/architecture.md) — branches, RAG, agents, on/off router
-- [Environments](docs/environments.md) — `dev` until Terraform; `prd` later; all branches
+- [Environments](docs/environments.md) — `NEXUS_ENV` (`dev` default); job vs table vs bucket; `prd` later
 - [dlt_dbt_clickhouse](docs/dlt-dbt-clickhouse.md) — archive, Bronze, Gold, run ids
 - [dlt_dbt_spark_iceberg](docs/dlt-dbt-spark-iceberg.md) — Polaris, Iceberg, dbt-spark, Trino
 - [dlt extraction](docs/dlt-extraction.md) — REST auth, pagination, retries, dual load

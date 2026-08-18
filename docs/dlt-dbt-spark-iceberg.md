@@ -21,7 +21,7 @@ REST API
             → Trino reads Iceberg (BI / analysts)
 ```
 
-Until Airflow exists (Phase 2), the path runs on the host with `uv run` against Docker Spark/Thrift (added in Milestone 2). Generate **one `run_id` per local run** and pass it to **both** dlt and dbt. Env is **`dev` until Terraform**.
+Until Airflow exists (Phase 2), the path runs on the host with `uv run` against Docker Spark/Thrift (added in Milestone 2). Generate **one `run_id` per local run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
 
 Spark writes and maintains Iceberg (industry lakehouse pattern). Trino does **not** run dbt. Do not use the dbt-trino adapter on this capability.
 
@@ -124,11 +124,87 @@ Same logical table vs ClickHouse:
 
 ## dbt-spark
 
-Project `nexus_lakehouse`. Profile target = env (`dev` until Terraform). Adapter **`dbt-spark`** (Thrift to Docker Spark in Milestone 2). Model `+schema` maps to Iceberg namespaces above.
+Project `nexus_lakehouse`. Profile target = `NEXUS_ENV` (`dev` until Terraform). Adapter **`dbt-spark`** (Thrift to Docker Spark in Milestone 2). Model `+schema` maps to Iceberg namespaces above.
 
 SQL models by default. Python/PySpark models only when the transformation genuinely benefits from Spark programming.
 
 Pass `var('run_id')` on every run (same value as dlt).
+
+`{{ target.name }}` is the Polaris **catalog** (`nexus_{{ target.name }}`). Model `+schema` stays `stg_github`, `int`, `gold`, … — **do not** copy ClickHouse `stg_github_{{ target.name }}` / `gold_{{ target.name }}`.
+
+---
+
+## Worked example: GitHub `pipe_one`
+
+Same job and table as the warehouse example. **Separate code** under `branches/dlt_dbt_spark_iceberg`. Do not write the ClickHouse archive bucket or `raw_github_dev`. Warehouse peer: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Pipelines are **not implemented yet**.
+
+`{param1}` is a URL id with the same payload contract → one parameterized pipeline.
+
+**Three names** ([environments.md](environments.md)):
+
+```text
+Job           pipe_one
+Table         pull_request
+Archive       nexus-dlt-dbt-spark-iceberg-archive-{env}
+Warehouse S3  nexus-dlt-dbt-spark-iceberg-{env}     # Iceberg files; not JSONL; not per-job
+Prefix        github/pull_request/dt=.../run_id=.../part-*.jsonl.gz
+Bronze        nexus_{env}.raw_github.pull_request
+```
+
+Do not name the catalog, schema, table, or either MinIO bucket `pipe_one`.
+
+**Archive (`NEXUS_ENV=dev`):**
+
+```text
+s3://nexus-dlt-dbt-spark-iceberg-archive-dev/
+  github/pull_request/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
+```
+
+**dbt** — `--target` = env. Catalog from target; schemas are layer names without env.
+
+`models/staging/github/sources.yml` (proposed):
+
+```yaml
+version: 2
+sources:
+  - name: github_raw
+    database: nexus_{{ target.name }}
+    schema: raw_github
+    tables:
+      - name: pull_request
+```
+
+`dbt_project.yml` (proposed fragment; already the folder `+schema` intent):
+
+```yaml
+models:
+  nexus_lakehouse:
+    staging:
+      github:
+        +schema: stg_github
+    intermediate:
+      +schema: int
+    gold:
+      +schema: gold
+    marts:
+      +schema: marts
+    published:
+      +schema: pub
+```
+
+Spark profile target `dev` / `prd` must attach catalog `nexus_dev` / `nexus_prd`. Staging: `nexus_dev.stg_github.stg_github_pull_request`.
+
+From the repo root (when Spark Thrift and code exist):
+
+```bash
+export NEXUS_ENV=dev
+export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
+uv run python branches/dlt_dbt_spark_iceberg/dlt/github/pipe_one.py
+uv run dbt run --project-dir branches/dlt_dbt_spark_iceberg --target "$NEXUS_ENV" \
+  --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
+```
+
+`prd` later: same files, `NEXUS_ENV=prd` → archive `-prd`, catalog `nexus_prd`, schemas unchanged.
 
 ---
 
