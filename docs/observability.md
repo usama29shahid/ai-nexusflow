@@ -43,7 +43,8 @@ Until Airflow: generate `local-{utc_timestamp}` (or UUID); pass the **same** val
 | Bucket | Contents |
 | --- | --- |
 | `nexus-dlt-dbt-clickhouse-dev` | Raw API JSONL — **data archive**, not logs |
-| `nexus-branch-2-dev` | Lakehouse — **data**, not logs |
+| `nexus-dlt-dbt-spark-iceberg-archive-dev` | Lakehouse JSONL archive — **data**, not logs |
+| `nexus-dlt-dbt-spark-iceberg-dev` | Iceberg warehouse — **data**, not logs |
 | `nexus-airflow-logs-dev` | Airflow task logs — **ops**, not table data |
 
 `prd` suffixes after Terraform. See [environments.md](environments.md).

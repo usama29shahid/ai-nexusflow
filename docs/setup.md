@@ -4,7 +4,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 > **Infrastructure is containerized. Python stays on the host.**
 
-Docker Compose runs ClickHouse, MinIO, and later Spark/Iceberg, Airflow, Kafka. **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
+Docker Compose runs ClickHouse, MinIO, and later Polaris/Spark/Trino, Airflow, Kafka. **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
 
 ```text
 git clone
@@ -16,7 +16,7 @@ cp .env.example .env          # or paste your .env
 | --- | --- | --- |
 | Python, uv, DLT, dbt | App / ELT | Host |
 | ClickHouse, MinIO | Warehouse, object store | Docker |
-| Spark / Iceberg (later) | Branch 2 | Docker |
+| Spark / Polaris / Trino (later) | dlt_dbt_spark_iceberg | Docker |
 | Airflow, Kafka (later) | Orchestration, streaming | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).

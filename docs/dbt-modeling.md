@@ -1,10 +1,22 @@
-# dbt modeling — medallion + dimensional (dlt_dbt_clickhouse)
+# dbt modeling — medallion + dimensional
 
-dbt is the **transformation** layer on ClickHouse. It reads Bronze via `source()`. It does not call REST APIs and does not write the MinIO archive.
+dbt is the **transformation** layer. It reads Bronze via `source()`. It does not call REST APIs and does not write the MinIO archive.
 
-Project: `branches/dlt_dbt_clickhouse` (`nexus_dbt`). Profile **target** = env (`dev` until Terraform, later `prd`). One project; do not fork the repo per env.
+The **DAG, prefixes, SCD, and folder grain** below apply to both warehouse and lakehouse capabilities. Physical names differ because ClickHouse is two-level and Iceberg is three-level.
 
-`+database` by folder: `stg_{source}_{target}` for staging, `int_{target}` / `gold_{target}` / `marts_{target}` for shared layers. dbt `source()` reads `raw_{source}_{env}`. See [environments.md](environments.md) and [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
+| | `dlt_dbt_clickhouse` | `dlt_dbt_spark_iceberg` |
+| --- | --- | --- |
+| Project | `branches/dlt_dbt_clickhouse` (`nexus_dbt`) | `branches/dlt_dbt_spark_iceberg` (`nexus_lakehouse`) |
+| Adapter | dbt-clickhouse | dbt-spark |
+| Bronze | `raw_{source}_{env}.table` | `nexus_{env}.raw_{source}.table` |
+| Staging | database `stg_{source}_{env}` | schema `stg_{source}` in catalog `nexus_{env}` |
+| Gold | database `gold_{env}` | schema `gold` in catalog `nexus_{env}` |
+
+Lakehouse catalog/schema rules: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). ClickHouse database rules: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Env: [environments.md](environments.md).
+
+Project: `branches/dlt_dbt_clickhouse` (`nexus_dbt`) is the warehouse project. Profile **target** = env (`dev` until Terraform, later `prd`). One project per capability; do not fork the repo per env.
+
+`+database` by folder (ClickHouse): `stg_{source}_{target}` for staging, `int_{target}` / `gold_{target}` / `marts_{target}` for shared layers. dbt `source()` reads `raw_{source}_{env}`.
 
 Pass `var('run_id')` on every run (same value as dlt). Until Airflow, that is the generated local `run_id`.
 
@@ -138,13 +150,15 @@ One dbt invocation per **source** DAG, with selectors for models downstream of t
 
 ## Folder layout
 
+Same folders in both dbt projects. ClickHouse maps folders to **databases**; Iceberg maps them to **schemas** inside catalog `nexus_{env}`.
+
 ```text
 models/
-  staging/{source}/          stg_{source}_{env}
-  intermediate/shared/       int_{env}
-  gold/dims|facts|events     gold_{env}
-  marts/{domain}/            marts_{env}
-  published/                 pub_{env}  optional
+  staging/{source}/          CH: stg_{source}_{env}     Iceberg: nexus_{env}.stg_{source}
+  intermediate/shared/       CH: int_{env}              Iceberg: nexus_{env}.int
+  gold/dims|facts|events     CH: gold_{env}             Iceberg: nexus_{env}.gold
+  marts/{domain}/            CH: marts_{env}            Iceberg: nexus_{env}.marts
+  published/                 CH: pub_{env} optional     Iceberg: nexus_{env}.pub
 ```
 
-Staging subfolders are REST **sources**. Gold subfolders are **grain** (not github/pokeapi). Leave `models/example/` until the first real source.
+Staging subfolders are REST **sources**. Gold subfolders are **grain** (not github/pokeapi). Leave `models/example/` on the warehouse project until the first real source.

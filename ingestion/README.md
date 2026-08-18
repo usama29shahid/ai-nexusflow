@@ -1,5 +1,9 @@
 # ingestion
 
-Shared REST source definitions for **later** backends (Iceberg, Databricks, …).
+Optional shared REST **contracts** for later reuse.
 
-Until a second capability needs the same API client, dlt pipelines for the warehouse live in `branches/dlt_dbt_clickhouse/dlt/{source}/`.
+Until a shared client is justified, each capability owns dlt:
+
+- Warehouse: `branches/dlt_dbt_clickhouse/dlt/{source}/`
+- Lakehouse: `branches/dlt_dbt_spark_iceberg/dlt/{source}/`
+

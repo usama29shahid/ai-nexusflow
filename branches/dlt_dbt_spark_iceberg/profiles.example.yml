@@ -1,0 +1,20 @@
+# Optional. Copy to profiles.yml in this directory if you do not use ~/.dbt
+# (profiles.yml is gitignored). dbt does not load the repo .env.
+#
+# Spark Thrift and Apache Polaris are added in Phase 1 Milestone 2.
+# Catalog name must match the Polaris catalog (nexus_dev until Terraform).
+#
+#   uv run dbt debug --project-dir branches/dlt_dbt_spark_iceberg --profiles-dir branches/dlt_dbt_spark_iceberg
+
+nexus_lakehouse:
+  target: dev
+  outputs:
+    dev:
+      type: spark
+      method: thrift
+      host: "{{ env_var('SPARK_THRIFT_HOST', 'localhost') }}"
+      port: "{{ env_var('SPARK_THRIFT_PORT', '10000') | as_number }}"
+      user: "{{ env_var('SPARK_THRIFT_USER', 'dbt') }}"
+      schema: gold
+      # Iceberg catalog registered in Spark as nexus_dev (Polaris).
+      # Three-level names: nexus_dev.{schema}.{table}

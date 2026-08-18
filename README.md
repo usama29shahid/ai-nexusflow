@@ -11,12 +11,12 @@ User request → LLM + RAG (org rules) → select enabled branch → Airflow →
 | Capability | Pattern | Primary output |
 | --- | --- | --- |
 | **dlt_dbt_clickhouse** | dlt → ClickHouse → dbt | ClickHouse |
-| 2 | DLT → MinIO → Iceberg → Spark | Iceberg on MinIO |
+| **dlt_dbt_spark_iceberg** | dlt → Iceberg (Polaris) → dbt-spark → Trino | Iceberg on MinIO |
 | 3 | DLT → Databricks → Delta → Unity Catalog | Delta |
 | 4 | DLT → S3 → EMR → Iceberg | S3 (+ optional Redshift) |
 | 5 | DLT → S3 → Glue → Iceberg | S3 (+ optional Redshift) |
 
-Platform design: [docs/architecture.md](docs/architecture.md). Warehouse capability: [docs/dlt-dbt-clickhouse.md](docs/dlt-dbt-clickhouse.md).
+Platform design: [docs/architecture.md](docs/architecture.md). Warehouse: [docs/dlt-dbt-clickhouse.md](docs/dlt-dbt-clickhouse.md). Lakehouse: [docs/dlt-dbt-spark-iceberg.md](docs/dlt-dbt-spark-iceberg.md).
 
 ---
 
@@ -42,6 +42,7 @@ Details and checklists: [docs/roadmap.md](docs/roadmap.md).
 - Host uv (Python 3.12, DLT, dbt-clickhouse) — not inside Docker
 - Docker Compose: ClickHouse + MinIO
 - dbt project: `branches/dlt_dbt_clickhouse`
+- Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until M2)
 - Branch switches: `config/branches.yaml`
 
 **Next:** Phase 1 Milestone 1 — first **dlt_dbt_clickhouse** pipeline.
@@ -80,10 +81,10 @@ ai-nexusflow/
 ├── scripts/setup.sh
 ├── config/branches.yaml
 ├── common/
-├── ingestion/                  # shared DLT
+├── ingestion/                  # optional shared contracts; dlt lives per branch
 ├── branches/
 │   ├── dlt_dbt_clickhouse/
-│   ├── branch_2_iceberg/
+│   ├── dlt_dbt_spark_iceberg/
 │   ├── branch_3_databricks/
 │   ├── branch_4_emr/
 │   └── branch_5_glue/
@@ -105,6 +106,7 @@ Empty capability folders have short READMEs. Fill them when that phase has real 
 - [Architecture](docs/architecture.md) — branches, RAG, agents, on/off router
 - [Environments](docs/environments.md) — `dev` until Terraform; `prd` later; all branches
 - [dlt_dbt_clickhouse](docs/dlt-dbt-clickhouse.md) — archive, Bronze, Gold, run ids
+- [dlt_dbt_spark_iceberg](docs/dlt-dbt-spark-iceberg.md) — Polaris, Iceberg, dbt-spark, Trino
 - [dlt extraction](docs/dlt-extraction.md) — REST auth, pagination, retries, dual load
 - [dbt modeling](docs/dbt-modeling.md) — medallion + dimensional DAG
 - [Observability](docs/observability.md) — Airflow logs, dlt/dbt, no custom log stack

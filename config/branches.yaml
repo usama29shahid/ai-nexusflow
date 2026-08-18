@@ -4,7 +4,7 @@
 branches:
   dlt_dbt_clickhouse:
     enabled: true
-  branch_2_iceberg:
+  dlt_dbt_spark_iceberg:
     enabled: false
   branch_3_databricks:
     enabled: false

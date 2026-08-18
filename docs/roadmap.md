@@ -5,7 +5,7 @@ Build a **working ELT foundation first**. Add Spark, cloud, orchestration, and L
 Each phase must be **runnable**, not a folder of stubs. Later agents generate and **select** these branches; they should not invent a platform that was never built.
 
 ```text
-Phase 1  dlt_dbt_clickhouse → Branch 2 → Branch 3   (each must run end-to-end)
+Phase 1  dlt_dbt_clickhouse → dlt_dbt_spark_iceberg → Branch 3   (each must run end-to-end)
 Phase 2  Airflow
 Phase 3  LLM: multi-agent + RAG + Streamlit (live app)
 Phase 4  Terraform (dev / prod) + infra
@@ -23,9 +23,9 @@ The LLM layer is Phase 3 — after Branches 1–3 and Airflow exist — not afte
 
 Same source problem, three independent backends.
 
-**Do not start Branch 2 until dlt_dbt_clickhouse is verified. Do not start Branch 3 until Branch 2 is verified.**
+**Do not start dlt_dbt_spark_iceberg until dlt_dbt_clickhouse is verified. Do not start Branch 3 until the lakehouse capability is verified.**
 
-Python, uv, DLT, and dbt stay on the **host**. ClickHouse and MinIO are already in Docker Compose. Spark for Branch 2 is added as Docker infra when Milestone 2 starts.
+Python, uv, DLT, and dbt stay on the **host**. ClickHouse and MinIO are already in Docker Compose. Polaris, Spark, and Trino are added as Docker infra when Milestone 2 starts.
 
 ### Milestone 1 — dlt_dbt_clickhouse (first pipeline)
 
@@ -40,15 +40,17 @@ Source → DLT → MinIO archive (JSONL) + ClickHouse raw (Bronze, append)
 - Shared local `run_id` into dlt and dbt (Airflow later)
 - Verify row counts and tests
 
-MinIO for this capability is the **raw API archive** (replay), **one bucket per capability per env**. It is **not** the analytical lakehouse. Iceberg-on-MinIO is Branch 2. `dev` until Terraform. See [environments.md](environments.md) and [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
+MinIO for this capability is the **raw API archive** (replay), **one archive bucket per capability per env**. It is **not** the analytical lakehouse. Iceberg-on-MinIO is **dlt_dbt_spark_iceberg**. `dev` until Terraform. See [environments.md](environments.md) and [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
 
-### Milestone 2 — Branch 2
+### Milestone 2 — dlt_dbt_spark_iceberg
 
 ```text
-Source → DLT → MinIO (Parquet) → Iceberg → PySpark → Iceberg gold
+Source → DLT → MinIO JSONL archive
+      + Iceberg Bronze (Apache Polaris, nexus_dev.raw_{source})
+      → dbt-spark → Iceberg gold / marts → Trino
 ```
 
-Open-source lakehouse without Databricks. Gold lives in Iceberg on MinIO.
+Open-source lakehouse without Databricks. Persistent tables are Iceberg on MinIO. Spark is compute. Trino is serving. Folder: `branches/dlt_dbt_spark_iceberg`. Standards: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
 ### Milestone 3 — Branch 3
 
@@ -56,7 +58,7 @@ Open-source lakehouse without Databricks. Gold lives in Iceberg on MinIO.
 Source → DLT → Databricks Spark → Delta Lake → Unity Catalog gold
 ```
 
-Independent of dlt_dbt_clickhouse and Branch 2. Aligns with Databricks coursework.
+Independent of dlt_dbt_clickhouse and dlt_dbt_spark_iceberg. Aligns with Databricks coursework.
 
 **Phase 1 done when:** all three pipelines run and you can show data in ClickHouse, Iceberg/MinIO, and Databricks Delta.
 
@@ -64,7 +66,7 @@ Independent of dlt_dbt_clickhouse and Branch 2. Aligns with Databricks coursewor
 
 ## Phase 2 — Airflow
 
-- DAGs that trigger enabled dlt_dbt_clickhouse / Branch 2 / 3
+- DAGs that trigger enabled dlt_dbt_clickhouse / dlt_dbt_spark_iceberg / Branch 3
 - **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors
 - Remote task logs to MinIO (`nexus-airflow-logs-dev` until Terraform)
 - Schedule, retries, clear task boundaries
@@ -132,6 +134,7 @@ Kafka + Spark Structured Streaming, after batch (and AWS batch paths) are stable
 - [x] `.venv` permission issue identified and resolved
 - [x] Development architecture documented (`docs/`)
 - [x] dlt_dbt_clickhouse warehouse, dlt, dbt, and observability standards documented
+- [x] dlt_dbt_spark_iceberg folder skeleton and lakehouse standards documented
 
 ### Current versions
 
@@ -146,7 +149,7 @@ dbt-clickhouse  1.10.2
 
 - [ ] DLT ingestion pipeline (dlt_dbt_clickhouse)
 - [ ] ClickHouse bronze / dbt silver + tests
-- [ ] MinIO / Parquet / Iceberg / PySpark (Branch 2)
+- [ ] MinIO archive + Iceberg / Polaris / dbt-spark / Trino (dlt_dbt_spark_iceberg)
 - [ ] Databricks / Delta / Unity Catalog (Branch 3)
 - [ ] Airflow
 - [ ] LLM ELT generator, RAG, Streamlit

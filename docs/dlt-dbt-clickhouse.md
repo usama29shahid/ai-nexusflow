@@ -44,7 +44,8 @@ Same MinIO **service**. Isolation is **one bucket per capability per env**. Unti
 | Bucket | Role |
 | --- | --- |
 | `nexus-dlt-dbt-clickhouse-dev` | This capability’s raw API archive (replay). Not Iceberg. |
-| `nexus-branch-2-dev` | Iceberg lakehouse backend (when that work starts). Not this Bronze. |
+| `nexus-dlt-dbt-spark-iceberg-archive-dev` | Lakehouse JSONL archive (`dlt_dbt_spark_iceberg`). Not this Bronze. |
+| `nexus-dlt-dbt-spark-iceberg-dev` | Iceberg warehouse for Polaris catalog `nexus_dev`. Not this Bronze. |
 | `nexus-airflow-logs-dev` | Phase 2 Airflow remote task logs. Not data. |
 
 Later: the same names with `-prd`.
