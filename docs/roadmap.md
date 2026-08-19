@@ -128,7 +128,7 @@ Kafka + Spark Structured Streaming, after batch (and AWS batch paths) are stable
 - [x] Docker Compose: ClickHouse + MinIO
 - [x] Python project with uv (`pyproject.toml`, `uv.lock`)
 - [x] DLT, dbt-core, dbt-clickhouse
-- [x] dbt project `nexus_dbt` initialized (`branches/dlt_dbt_clickhouse`)
+- [x] dbt project `nexus_clickhouse` initialized (`branches/dlt_dbt_clickhouse`)
 - [x] End-goal folder skeleton and `scripts/setup.sh`
 - [x] Python / DLT / dbt versions verified
 - [x] `.venv` permission issue identified and resolved

@@ -272,7 +272,7 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud job
 | --- | --- | --- |
 | *(none)* | MinIO | Shared object store |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
-| `lakehouse` | Spark Thrift, Polaris, Trino (Milestone 2) | `dlt_dbt_spark_iceberg` |
+| `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `airflow` | Airflow (Phase 2) | Orchestration |
 
 Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, or comma-separated). That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).

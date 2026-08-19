@@ -6,7 +6,7 @@ The **DAG, prefixes, SCD, and folder grain** below apply to both warehouse and l
 
 | | `dlt_dbt_clickhouse` | `dlt_dbt_spark_iceberg` |
 | --- | --- | --- |
-| Project | `branches/dlt_dbt_clickhouse` (`nexus_dbt`) | `branches/dlt_dbt_spark_iceberg` (`nexus_lakehouse`) |
+| Project | `branches/dlt_dbt_clickhouse` (`nexus_clickhouse`) | `branches/dlt_dbt_spark_iceberg` (`nexus_lakehouse`) |
 | Adapter | dbt-clickhouse | dbt-spark |
 | Bronze | `raw_{source}_{env}.table` | `nexus_{env}.raw_{source}.table` |
 | Staging | database `stg_{source}_{env}` | schema `stg_{source}` in catalog `nexus_{env}` |

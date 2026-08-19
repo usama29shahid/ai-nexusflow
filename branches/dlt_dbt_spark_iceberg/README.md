@@ -10,10 +10,14 @@ Standards: [docs/dlt-dbt-spark-iceberg.md](../../docs/dlt-dbt-spark-iceberg.md) 
 - `dlt/{source}/` — extract pipelines (archive + Iceberg Bronze). Independent of `dlt_dbt_clickhouse`.
 - `models/` — dbt (`nexus_lakehouse`, adapter `dbt-spark`). SQL via Spark Thrift by default; PySpark only for complex `.py` models.
 
-Spark, Polaris, and Trino Compose services land in Phase 1 Milestone 2. Not implemented yet.
+Spark Thrift / Polaris / Trino: Docker profile `lakehouse` (see [docs/setup.md](../../docs/setup.md)).
 
-From the repo root (after Spark Thrift exists):
+dbt needs profile `nexus_lakehouse` in `~/.dbt/profiles.yml`, or a local copy. Source `.env` first (dbt does not load it):
 
 ```bash
+cd ~/projects/ai-nexusflow
+set -a && source .env && set +a
+cp branches/dlt_dbt_spark_iceberg/profiles.example.yml branches/dlt_dbt_spark_iceberg/profiles.yml   # once; gitignored
 uv run dbt debug --project-dir branches/dlt_dbt_spark_iceberg
+# or: --profiles-dir branches/dlt_dbt_spark_iceberg
 ```

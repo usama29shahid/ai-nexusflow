@@ -221,9 +221,9 @@ uv run dbt run --project-dir branches/dlt_dbt_spark_iceberg --target "$NEXUS_ENV
 
 ## Compose (Milestone 2)
 
-Python/dlt/dbt on the **host**. Polaris, Spark (Thrift), Trino, MinIO in Docker. ClickHouse stays for the warehouse capability only.
+Python/dlt/dbt on the **host**. Polaris, Spark Thrift, Trino, and MinIO in Docker. ClickHouse stays on profile `clickhouse` only.
 
-Profiles (when services are added): `warehouse` (ClickHouse + MinIO), `lakehouse` (MinIO + Polaris + Spark + Trino).
+Profiles: `clickhouse` (ClickHouse + MinIO), `lakehouse` (MinIO + Polaris + Spark Thrift + Trino). Default `.env`: `COMPOSE_PROFILES=clickhouse,lakehouse`. Config under `docker/lakehouse/`. See [setup.md](setup.md).
 
 ---
 

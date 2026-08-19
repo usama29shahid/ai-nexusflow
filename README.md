@@ -40,7 +40,7 @@ Details and checklists: [docs/roadmap.md](docs/roadmap.md).
 **Environment and repo skeleton are ready.** Pipelines are not.
 
 - Host uv (Python 3.12, DLT, dbt-clickhouse) — not inside Docker
-- Docker Compose: MinIO always; `COMPOSE_PROFILES=clickhouse` for ClickHouse (`lakehouse` / `airflow` later)
+- Docker Compose: MinIO always; `COMPOSE_PROFILES=clickhouse,lakehouse` (ClickHouse + Polaris + Spark Thrift + Trino)
 - dbt project: `branches/dlt_dbt_clickhouse`
 - Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until M2)
 - Branch switches: `config/branches.yaml`

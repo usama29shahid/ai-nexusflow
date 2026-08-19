@@ -1,12 +1,15 @@
 # Profiles: MinIO has none (always starts). Optional stacks:
 #   clickhouse — ClickHouse (dlt_dbt_clickhouse)
-#   lakehouse  — Spark Thrift, Polaris, Trino (dlt_dbt_spark_iceberg; Milestone 2)
+#   lakehouse  — Spark Thrift, Polaris, Trino (dlt_dbt_spark_iceberg)
 #   airflow    — Airflow (Phase 2)
-# Set COMPOSE_PROFILES in .env, or: docker compose --profile clickhouse up -d
+#
+# Both branches: COMPOSE_PROFILES=clickhouse,lakehouse in .env
+# Python/dlt/dbt run on the host — not in this file.
+
 services:
 
   # ============================================================
-  # ClickHouse - Data Warehouse  (profile: clickhouse)
+  # ClickHouse — warehouse (profile: clickhouse)
   # ============================================================
   clickhouse:
     image: clickhouse/clickhouse-server:latest
@@ -41,9 +44,8 @@ services:
       timeout: 5s
       retries: 5
 
-
   # ============================================================
-  # MinIO - S3 Compatible Object Storage (always on; not a profile)
+  # MinIO — shared object store (always on; not a profile)
   # ============================================================
   minio:
     image: minio/minio:latest
@@ -75,6 +77,178 @@ services:
       timeout: 5s
       retries: 5
 
+  # ============================================================
+  # MinIO buckets — both capabilities (always; one-shot)
+  # ============================================================
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    restart: "no"
+
+    depends_on:
+      minio:
+        condition: service_healthy
+
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      NEXUS_ENV: ${NEXUS_ENV:-dev}
+
+    volumes:
+      - ./docker/minio/init/create-buckets.sh:/create-buckets.sh:ro
+
+    entrypoint: ["/bin/sh", "/create-buckets.sh"]
+
+  # ============================================================
+  # Apache Polaris — Iceberg REST catalog (profile: lakehouse)
+  # ============================================================
+  polaris:
+    image: apache/polaris:latest
+    container_name: polaris
+    restart: unless-stopped
+    profiles: [lakehouse]
+
+    ports:
+      - "${POLARIS_HTTP_PORT:-8181}:8181"
+      - "${POLARIS_MGMT_PORT:-8182}:8182"
+
+    environment:
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ENDPOINT_URL_STS: http://minio:9000
+      POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,${POLARIS_CLIENT_ID:-root},${POLARIS_CLIENT_SECRET:-s3cr3t}"
+      polaris.realm-context.realms: POLARIS
+      quarkus.otel.sdk.disabled: "true"
+      # Local dev: in-memory metastore + auto keys are OK; S3-only (MinIO), no FILE type.
+      polaris.readiness.ignore-severe-issues: "true"
+      polaris.features."SUPPORTED_CATALOG_STORAGE_TYPES": "[\"S3\"]"
+
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8182/q/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+
+  # ============================================================
+  # Polaris bootstrap — catalog nexus_{NEXUS_ENV} (profile: lakehouse)
+  # ============================================================
+  polaris-setup:
+    image: alpine:3.20
+    container_name: polaris-setup
+    profiles: [lakehouse]
+    restart: "no"
+
+    depends_on:
+      polaris:
+        condition: service_healthy
+
+    environment:
+      CLIENT_ID: ${POLARIS_CLIENT_ID:-root}
+      CLIENT_SECRET: ${POLARIS_CLIENT_SECRET:-s3cr3t}
+      NEXUS_ENV: ${NEXUS_ENV:-dev}
+      POLARIS_CATALOG_NAME: nexus_${NEXUS_ENV:-dev}
+      POLARIS_WAREHOUSE_BUCKET: nexus-dlt-dbt-spark-iceberg-${NEXUS_ENV:-dev}
+      S3_ENDPOINT_EXTERNAL: http://localhost:${MINIO_API_PORT:-9002}
+      S3_ENDPOINT_INTERNAL: http://minio:9000
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+
+    volumes:
+      - ./docker/lakehouse/polaris:/polaris:ro
+
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        sh /polaris/bootstrap-catalog.sh
+        touch /tmp/polaris-setup-done
+        tail -f /dev/null
+
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/polaris-setup-done"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  # ============================================================
+  # Spark Thrift — dbt-spark SQL endpoint (profile: lakehouse)
+  # ============================================================
+  spark-thrift:
+    image: tabulario/spark-iceberg:3.5.5_1.8.1
+    container_name: spark-thrift
+    restart: unless-stopped
+    profiles: [lakehouse]
+
+    ports:
+      - "${SPARK_THRIFT_PORT:-10000}:10000"
+      - "${SPARK_UI_PORT:-4040}:4040"
+
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+
+    volumes:
+      - ./docker/lakehouse/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+
+    depends_on:
+      polaris-setup:
+        condition: service_healthy
+
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        /opt/spark/sbin/start-thriftserver.sh \
+          --driver-java-options "-Dderby.system.home=/tmp/derby"
+        echo "Spark Thrift Server starting; tailing logs..."
+        sleep 5
+        tail -F /opt/spark/logs/*HiveThriftServer2*.out
+
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/10000'"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 180s
+
+  # ============================================================
+  # Trino — BI / SQL on Iceberg (profile: lakehouse)
+  # ============================================================
+  trino:
+    image: trinodb/trino:476
+    container_name: trino
+    restart: unless-stopped
+    profiles: [lakehouse]
+
+    ports:
+      - "${TRINO_PORT:-8080}:8080"
+
+    environment:
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID:-root}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET:-s3cr3t}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+
+    volumes:
+      - ./docker/lakehouse/trino/catalog:/etc/trino/catalog:ro
+
+    depends_on:
+      polaris-setup:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/v1/info"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
 
 # ==============================================================
 # Persistent Volumes

@@ -43,8 +43,8 @@ set -a
 # shellcheck source=/dev/null
 source .env
 set +a
-# Existing .env files may omit this; warehouse is the Milestone 1 default.
-export COMPOSE_PROFILES="${COMPOSE_PROFILES:-clickhouse}"
+# Existing .env files may omit this; both branches is the default dev stack.
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:-clickhouse,lakehouse}"
 
 echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES})..."
 docker compose up -d
@@ -57,4 +57,7 @@ echo "Done."
 echo "  Profiles:   ${COMPOSE_PROFILES} (MinIO always)"
 echo "  ClickHouse: curl http://localhost:8123/ping"
 echo "  MinIO UI:   http://localhost:9001"
+echo "  Polaris:    http://localhost:8181"
+echo "  Trino UI:   http://localhost:8080"
+echo "  Spark Thrift: localhost:10000 (dbt-spark)"
 echo "  Python:     uv run python --version"

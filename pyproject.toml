@@ -7,5 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "dbt-clickhouse>=1.10.2",
     "dbt-core>=1.11.13",
+    "dbt-spark[pyhive]>=1.9.0",
     "dlt>=1.30.0",
 ]

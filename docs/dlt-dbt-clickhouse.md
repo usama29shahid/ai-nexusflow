@@ -205,7 +205,7 @@ sources:
 
 ```yaml
 models:
-  nexus_dbt:
+  nexus_clickhouse:
     staging:
       github:
         +schema: stg_github_{{ target.name }}

@@ -1,16 +1,20 @@
 # Optional. Copy to profiles.yml in this directory if you do not use ~/.dbt
-# (profiles.yml is gitignored). dbt does not load the repo .env.
+# (profiles.yml is gitignored). dbt does NOT load the repo .env — export vars first:
 #
-#   uv run dbt debug --project-dir branches/dlt_dbt_clickhouse --profiles-dir branches/dlt_dbt_clickhouse
+#   set -a && source ../../.env && set +a
+#   uv run dbt debug --project-dir . --profiles-dir .
+#
+# Profile name matches Compose stack: clickhouse → nexus_clickhouse
+# (lakehouse → nexus_lakehouse).
 
-nexus_dbt:
+nexus_clickhouse:
   target: dev
   outputs:
     dev:
       type: clickhouse
       host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
-      port: 8123
+      port: "{{ env_var('CLICKHOUSE_HTTP_PORT', '8123') | as_number }}"
       user: "{{ env_var('CLICKHOUSE_USER', 'default') }}"
-      password: "{{ env_var('CLICKHOUSE_PASSWORD', '') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
       schema: "{{ env_var('CLICKHOUSE_DB', 'warehouse') }}"
       secure: false

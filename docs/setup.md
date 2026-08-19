@@ -17,7 +17,7 @@ cp .env.example .env          # or paste your .env
 | Python, uv, DLT, dbt | App / ELT | Host |
 | MinIO | Shared object store (no profile) | Docker |
 | ClickHouse | Warehouse (`profile: clickhouse`) | Docker |
-| Spark / Polaris / Trino (later) | Lakehouse (`profile: lakehouse`) | Docker |
+| Polaris, Spark Thrift, Trino | Lakehouse (`profile: lakehouse`) | Docker |
 | Airflow, Kafka (later) | `airflow` / `kafka` profiles | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).
@@ -74,11 +74,12 @@ NEXUS_ENV=dev
 
 # Which optional stacks to start. MinIO always runs (not a profile).
 # clickhouse | lakehouse | airflow — comma-separated for more than one.
-COMPOSE_PROFILES=clickhouse
+COMPOSE_PROFILES=clickhouse,lakehouse
 
+CLICKHOUSE_HOST=localhost
 CLICKHOUSE_DB=warehouse
 CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=
+CLICKHOUSE_PASSWORD=change-me
 
 CLICKHOUSE_HTTP_PORT=8123
 CLICKHOUSE_NATIVE_PORT=9000
@@ -100,7 +101,7 @@ One file at the repo root. **Profiles name stacks**, not every container. MinIO 
 | --- | --- | --- |
 | *(none)* | MinIO | Shared object store |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
-| `lakehouse` | Spark Thrift, Polaris, Trino (Milestone 2) | `dlt_dbt_spark_iceberg` |
+| `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `airflow` | Airflow (Phase 2) | Orchestration |
 
 `COMPOSE_PROFILES` in `.env` is which **containers** run. `config/branches.yaml` is which **pipelines** may execute. Keep them aligned by hand.
@@ -109,10 +110,10 @@ One file at the repo root. **Profiles name stacks**, not every container. MinIO 
 # Warehouse day
 COMPOSE_PROFILES=clickhouse
 
-# Lakehouse day (Milestone 2; Spark/Polaris/Trino not in Compose yet)
+# Lakehouse day
 COMPOSE_PROFILES=lakehouse
 
-# Both (needs RAM)
+# Both branches (default in .env.example)
 COMPOSE_PROFILES=clickhouse,lakehouse
 ```
 
@@ -143,8 +144,12 @@ There is no application `docker compose build` for Python. Images are pulled.
 | ClickHouse native | `localhost:9000` |
 | MinIO API | `localhost:9002` |
 | MinIO console | `http://localhost:9001` |
+| Polaris REST | `http://localhost:8181` |
+| Spark Thrift (dbt-spark) | `localhost:10000` |
+| Spark UI | `http://localhost:4040` |
+| Trino UI | `http://localhost:8080` |
 
-From **another container**, use Compose DNS: `clickhouse:8123`, `minio:9000` (MinIO listens on 9000 inside the network; the host maps API to 9002).
+From **another container**, use Compose DNS: `clickhouse:8123`, `minio:9000`, `polaris:8181`, `spark-thrift:10000`, `trino:8080` (MinIO listens on 9000 inside the network; the host maps API to 9002).
 
 ### Verify
 
@@ -155,6 +160,16 @@ curl http://localhost:8123/ping
 Expected: `Ok.`
 
 Open the MinIO console with credentials from `.env`.
+
+**Lakehouse stack** (when `lakehouse` profile is active):
+
+```bash
+curl --fail http://localhost:8182/q/health          # Polaris management health
+curl --fail http://localhost:8080/v1/info         # Trino
+bash -c 'cat < /dev/null > /dev/tcp/localhost/10000' && echo "Spark Thrift OK"
+```
+
+Trino CLI (inside container): `docker exec -it trino trino --catalog nexus_dev`
 
 ---
 
@@ -191,7 +206,17 @@ uv run dbt test --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
 
 Lakehouse (Milestone 2, Spark Thrift required): `--project-dir branches/dlt_dbt_spark_iceberg` and `branches/dlt_dbt_spark_iceberg/dlt/github/pipe_one.py`.
 
-dbt uses `~/.dbt/profiles.yml` unless you pass `--profiles-dir`. Optional project copy: `profiles.example.yml` → `profiles.yml` in this folder (gitignored). Do not commit `profiles.yml`.
+dbt uses `~/.dbt/profiles.yml` unless you pass `--profiles-dir`. Profile names match Compose stacks: **`nexus_clickhouse`**, **`nexus_lakehouse`**. Passwords and hosts come from **environment variables only** (never hardcode secrets in `profiles.yml`).
+
+dbt does **not** load the repo `.env`. Source it before every dbt command:
+
+```bash
+set -a && source .env && set +a
+uv run dbt debug --project-dir branches/dlt_dbt_clickhouse
+uv run dbt debug --project-dir branches/dlt_dbt_spark_iceberg
+```
+
+Optional project copy: `profiles.example.yml` → `profiles.yml` in the branch folder (gitignored). Do not commit `profiles.yml`.
 
 ---
 
