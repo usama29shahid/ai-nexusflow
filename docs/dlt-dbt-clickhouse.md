@@ -4,7 +4,7 @@ Public name: **dlt_dbt_clickhouse** (dlt → dbt → ClickHouse). This is the wa
 
 The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md).
 
-dbt project: `branches/dlt_dbt_clickhouse`. Config key: `dlt_dbt_clickhouse` in [`config/branches.yaml`](../config/branches.yaml).
+dbt project: `branches/dlt_dbt_clickhouse`. Config key: `dlt_dbt_clickhouse` in [`config/branches.yaml`](../config/branches.yaml). Docker profile: **`clickhouse`** (MinIO always on). See [setup.md](setup.md).
 
 This capability is **ClickHouse-primary**. MinIO here is a **raw API archive**, not the Iceberg lakehouse backend.
 

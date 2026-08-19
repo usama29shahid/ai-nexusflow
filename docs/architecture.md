@@ -266,6 +266,17 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud job
 
 **Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. See [setup.md](setup.md).
 
+**Compose profiles** (one file at the repo root). Name profiles after **stacks**, not every container. MinIO has **no** profile so it always starts. Isolation between capabilities is buckets and catalogs on that MinIO, not a second Compose project.
+
+| Profile | Starts | Capability |
+| --- | --- | --- |
+| *(none)* | MinIO | Shared object store |
+| `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
+| `lakehouse` | Spark Thrift, Polaris, Trino (Milestone 2) | `dlt_dbt_spark_iceberg` |
+| `airflow` | Airflow (Phase 2) | Orchestration |
+
+Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, or comma-separated). That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
+
 **Production (later):** optional CI image for Python. Terraform in Phase 4. Not part of Phase 1.
 
 ---
@@ -332,7 +343,7 @@ ai-nexusflow/
 | `orchestration/airflow/` | DAGs for enabled branches |
 | `agents/` | Planner, router, generator, validator, executor |
 | `ui/` | Streamlit (Phase 3) |
-| `docker/` | Init scripts; Compose file stays at root |
+| `docker/` | Init scripts; Compose file stays at root (profiles in that file) |
 | `infrastructure/` | Terraform, AWS, Databricks |
 | `config/` | Env and branch activation |
 | `docs/` | Platform architecture, warehouse, lakehouse, dlt, dbt, observability, environments, roadmap, setup |

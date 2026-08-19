@@ -40,7 +40,7 @@ Details and checklists: [docs/roadmap.md](docs/roadmap.md).
 **Environment and repo skeleton are ready.** Pipelines are not.
 
 - Host uv (Python 3.12, DLT, dbt-clickhouse) — not inside Docker
-- Docker Compose: ClickHouse + MinIO
+- Docker Compose: MinIO always; `COMPOSE_PROFILES=clickhouse` for ClickHouse (`lakehouse` / `airflow` later)
 - dbt project: `branches/dlt_dbt_clickhouse`
 - Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until M2)
 - Branch switches: `config/branches.yaml`
@@ -60,7 +60,7 @@ chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
-That is `docker compose up -d` plus `uv sync` on the host. Python/DLT/dbt never run inside Compose.
+That is `docker compose up -d` (profiles from `.env`) plus `uv sync` on the host. Python/DLT/dbt never run inside Compose.
 
 ```bash
 curl http://localhost:8123/ping
@@ -76,7 +76,7 @@ uv run dbt --version
 ```text
 ai-nexusflow/
 ├── README.md
-├── docker-compose.yml          # infra only
+├── docker-compose.yml          # infra only; profiles for optional stacks
 ├── pyproject.toml              # host uv
 ├── scripts/setup.sh
 ├── config/branches.yaml

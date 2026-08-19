@@ -6,7 +6,7 @@ The five-backend platform story lives in [architecture.md](architecture.md). Ext
 
 dbt project: `branches/dlt_dbt_spark_iceberg` (`nexus_lakehouse`). Config key: `dlt_dbt_spark_iceberg` in [`config/branches.yaml`](../config/branches.yaml).
 
-**Independent of `dlt_dbt_clickhouse`.** Same first APIs (github, dataforseo, pokeapi), separate Python/dlt/dbt code. Shared infrastructure only (Compose, MinIO **service**, later Polaris / Spark / Trino). Isolation is buckets and catalogs, not shared pipeline modules.
+**Independent of `dlt_dbt_clickhouse`.** Same first APIs (github, dataforseo, pokeapi), separate Python/dlt/dbt code. Shared infrastructure only (Compose, MinIO **service**, later Polaris / Spark / Trino). Isolation is buckets and catalogs, not shared pipeline modules. Docker profile for this stack is **`lakehouse`** (not `spark`); MinIO is unprofiled. See [setup.md](setup.md).
 
 ```text
 REST API

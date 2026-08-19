@@ -4,7 +4,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 > **Infrastructure is containerized. Python stays on the host.**
 
-Docker Compose runs ClickHouse, MinIO, and later Polaris/Spark/Trino, Airflow, Kafka. **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
+Docker Compose runs **MinIO always**, plus optional stacks via **profiles** (`clickhouse`, later `lakehouse` and `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
 
 ```text
 git clone
@@ -15,9 +15,10 @@ cp .env.example .env          # or paste your .env
 | Component | Purpose | Where it runs |
 | --- | --- | --- |
 | Python, uv, DLT, dbt | App / ELT | Host |
-| ClickHouse, MinIO | Warehouse, object store | Docker |
-| Spark / Polaris / Trino (later) | dlt_dbt_spark_iceberg | Docker |
-| Airflow, Kafka (later) | Orchestration, streaming | Docker |
+| MinIO | Shared object store (no profile) | Docker |
+| ClickHouse | Warehouse (`profile: clickhouse`) | Docker |
+| Spark / Polaris / Trino (later) | Lakehouse (`profile: lakehouse`) | Docker |
+| Airflow, Kafka (later) | `airflow` / `kafka` profiles | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).
 
@@ -33,12 +34,12 @@ chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
-The script copies `.env` if missing, checks Docker, installs **uv** if missing, starts Compose, and runs `uv sync` on the host. It does **not** apt-install Docker on WSL (use Docker Desktop WSL integration). On a bare VPS/EC2, install Docker Engine once, then re-run the script.
+The script copies `.env` if missing, checks Docker, installs **uv** if missing, starts Compose (using `COMPOSE_PROFILES`, default `clickhouse`), and runs `uv sync` on the host. It does **not** apt-install Docker on WSL (use Docker Desktop WSL integration). On a bare VPS/EC2, install Docker Engine once, then re-run the script.
 
 Day to day (deps unchanged):
 
 ```bash
-docker compose up -d
+docker compose up -d          # uses COMPOSE_PROFILES from .env
 ```
 
 After `pyproject.toml` / `uv.lock` changes:
@@ -71,6 +72,10 @@ If `docker` is not found in WSL, integration is off.
 NEXUS_ENV=dev
 # NEXUS_RUN_ID=   # set per load; do not reuse one eternal value
 
+# Which optional stacks to start. MinIO always runs (not a profile).
+# clickhouse | lakehouse | airflow — comma-separated for more than one.
+COMPOSE_PROFILES=clickhouse
+
 CLICKHOUSE_DB=warehouse
 CLICKHOUSE_USER=default
 CLICKHOUSE_PASSWORD=
@@ -89,6 +94,28 @@ MINIO_ROOT_PASSWORD=minioadmin123
 
 ## Docker Compose
 
+One file at the repo root. **Profiles name stacks**, not every container. MinIO has no profile so it always starts. Isolation between capabilities is buckets on that MinIO, not a second Compose project. Design: [architecture.md](architecture.md).
+
+| Profile | Starts | Maps to |
+| --- | --- | --- |
+| *(none)* | MinIO | Shared object store |
+| `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
+| `lakehouse` | Spark Thrift, Polaris, Trino (Milestone 2) | `dlt_dbt_spark_iceberg` |
+| `airflow` | Airflow (Phase 2) | Orchestration |
+
+`COMPOSE_PROFILES` in `.env` is which **containers** run. `config/branches.yaml` is which **pipelines** may execute. Keep them aligned by hand.
+
+```env
+# Warehouse day
+COMPOSE_PROFILES=clickhouse
+
+# Lakehouse day (Milestone 2; Spark/Polaris/Trino not in Compose yet)
+COMPOSE_PROFILES=lakehouse
+
+# Both (needs RAM)
+COMPOSE_PROFILES=clickhouse,lakehouse
+```
+
 From the repo root:
 
 ```bash
@@ -97,9 +124,14 @@ docker compose ps
 docker compose logs
 docker compose logs clickhouse
 docker compose config
+docker compose --profile lakehouse up -d    # one-off; does not need .env change
 docker compose down          # keeps named volumes
 # docker compose down -v     # deletes ClickHouse/MinIO data — avoid
 ```
+
+Switching stacks: change `COMPOSE_PROFILES` and `docker compose up -d`. Do **not** use `down -v` to switch — that wipes MinIO buckets. `down` without `-v` stops containers and keeps `minio_data` / `clickhouse_data`.
+
+If `.env` has no `COMPOSE_PROFILES`, a bare `docker compose up -d` starts **MinIO only**. `./scripts/setup.sh` defaults to `clickhouse` when the variable is unset.
 
 There is no application `docker compose build` for Python. Images are pulled.
 

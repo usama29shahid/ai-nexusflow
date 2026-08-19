@@ -1,12 +1,18 @@
+# Profiles: MinIO has none (always starts). Optional stacks:
+#   clickhouse — ClickHouse (dlt_dbt_clickhouse)
+#   lakehouse  — Spark Thrift, Polaris, Trino (dlt_dbt_spark_iceberg; Milestone 2)
+#   airflow    — Airflow (Phase 2)
+# Set COMPOSE_PROFILES in .env, or: docker compose --profile clickhouse up -d
 services:
 
   # ============================================================
-  # ClickHouse - Data Warehouse
+  # ClickHouse - Data Warehouse  (profile: clickhouse)
   # ============================================================
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     container_name: clickhouse
     restart: unless-stopped
+    profiles: [clickhouse]
 
     ports:
       - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
@@ -37,7 +43,7 @@ services:
 
 
   # ============================================================
-  # MinIO - S3 Compatible Object Storage
+  # MinIO - S3 Compatible Object Storage (always on; not a profile)
   # ============================================================
   minio:
     image: minio/minio:latest

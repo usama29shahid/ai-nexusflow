@@ -39,7 +39,14 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Starting infrastructure..."
+set -a
+# shellcheck source=/dev/null
+source .env
+set +a
+# Existing .env files may omit this; warehouse is the Milestone 1 default.
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:-clickhouse}"
+
+echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES})..."
 docker compose up -d
 
 echo "Syncing Python environment on the host..."
@@ -47,6 +54,7 @@ uv sync
 
 echo
 echo "Done."
+echo "  Profiles:   ${COMPOSE_PROFILES} (MinIO always)"
 echo "  ClickHouse: curl http://localhost:8123/ping"
 echo "  MinIO UI:   http://localhost:9001"
 echo "  Python:     uv run python --version"
