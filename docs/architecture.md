@@ -168,7 +168,7 @@ USER → PLANNER AGENT → RAG / Rules → ELT PLAN / SPECIFICATION
 | --- | --- |
 | **Planner** | Source, target, layers, transformations, schedule, scale, constraints, required capabilities. Does not generate every implementation detail. |
 | **Ingestion** | REST pagination, auth, retries, incremental, DLT dual load (MinIO archive + Bronze). ClickHouse Bronze for **dlt_dbt_clickhouse**; Iceberg Bronze via Polaris for **dlt_dbt_spark_iceberg**. Separate dlt code per capability. |
-| **Transformation** | **dlt_dbt_clickhouse**: dbt-clickhouse. **dlt_dbt_spark_iceberg**: dbt-spark (SQL default) writing Iceberg. Spark backends for later branches: PySpark / Spark SQL / Delta. |
+| **Transformation** | **dlt_dbt_clickhouse**: dbt-clickhouse. **dlt_dbt_spark_iceberg**: dbt-spark, **Thrift default** for SQL models; PySpark only for complex `.py` models. Later branches: EMR/Glue PySpark, Databricks. |
 | **Branch / Platform** | ClickHouse warehouse → **dlt_dbt_clickhouse**. Open Iceberg lakehouse → **dlt_dbt_spark_iceberg**. Redshift + Spark/serverless/scale → Branch 4 or 5. |
 | **Validation** | Naming, layers, flattening, required tests, branch enabled, runtime available, schedule valid. Fail returns to planning/generation. |
 | **Workflow** | Airflow DAG from schedule plus org rules. **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors. Not one DAG per URL. |
@@ -214,7 +214,7 @@ All backends start from the **same REST APIs** (github, dataforseo, pokeapi firs
 
 **dlt_dbt_clickhouse** — warehouse ELT: dlt → MinIO **raw archive** **and** ClickHouse `raw_{source}_{env}` → dbt `stg_{source}_{env}` → shared `int_{env}` / `gold_{env}` / marts. ClickHouse is the analytical destination. MinIO is not this capability’s Gold. Env: [environments.md](environments.md). Details: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Path: `branches/dlt_dbt_clickhouse/`.
 
-**dlt_dbt_spark_iceberg** — open lakehouse: dlt → MinIO JSONL archive **and** Iceberg Bronze via **Apache Polaris** (`nexus_{env}.raw_{source}`) → dbt-spark → Iceberg gold/marts → **Trino**. ClickHouse is not this capability’s destination. Details: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). Path: `branches/dlt_dbt_spark_iceberg/`.
+**dlt_dbt_spark_iceberg** — open lakehouse: dlt → MinIO JSONL archive **and** Iceberg Bronze via **Apache Polaris** (`nexus_{env}.raw_{source}`) → dbt-spark (**Thrift** for `.sql`; PySpark only for complex `.py`) → Iceberg gold/marts → **Trino**. ClickHouse is not this capability’s destination. Details: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). Path: `branches/dlt_dbt_spark_iceberg/`.
 
 **Branch 3** — Databricks: DLT → Spark → Delta → Unity Catalog gold. Compute = Databricks, storage = Delta, catalog = Unity Catalog. PostgreSQL/ClickHouse are not primary destinations.
 
@@ -282,7 +282,7 @@ The root `pyproject.toml` / `uv.lock` currently include DLT, dbt-core, and dbt-c
 - Branch 4: EMR Spark + libraries
 - Branch 5: Glue Spark + libraries
 
-dbt-clickhouse is required for **dlt_dbt_clickhouse** now. dbt-spark is added when Milestone 2 starts. Databricks, EMR, and Glue must **not** use the host `.venv` as their runtime. Spark **jobs** do not run inside `.venv`; Thrift is the dbt client path.
+dbt-clickhouse is required for **dlt_dbt_clickhouse** now. dbt-spark is added when Milestone 2 starts. Databricks, EMR, and Glue must **not** use the host `.venv` as their runtime. Spark **jobs** do not run inside `.venv`. For this capability, **Thrift is the dbt SQL client**; PySpark is only for complex dbt Python models (see [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md)).
 
 ---
 
