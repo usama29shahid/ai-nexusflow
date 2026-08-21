@@ -1,0 +1,21 @@
+{
+  "name": "AI-NexusFlow",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "install": "chmod +x scripts/cloud-agent-install.sh scripts/cloud-agent-start.sh && ./scripts/cloud-agent-install.sh",
+  "start": "./scripts/cloud-agent-start.sh",
+  "ports": [
+    { "name": "ClickHouse HTTP", "port": 8123 },
+    { "name": "ClickHouse native", "port": 9000 },
+    { "name": "MinIO console", "port": 9001 },
+    { "name": "MinIO API", "port": 9002 },
+    { "name": "Polaris REST", "port": 8181 },
+    { "name": "Polaris management", "port": 8182 },
+    { "name": "Spark Thrift", "port": 10000 },
+    { "name": "Spark UI", "port": 4040 },
+    { "name": "Trino", "port": 8080 }
+  ]
+}
