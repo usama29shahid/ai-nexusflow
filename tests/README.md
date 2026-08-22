@@ -1,3 +1,3 @@
 # tests
 
-Integration and end-to-end tests against Compose services. Not implemented yet.
+Integration tests run on the host against Compose services (`uv run`). Not inside Docker.

@@ -17,6 +17,9 @@ clean-targets:
 models:
   nexus_lakehouse:
     staging:
+      dlt_smoke:
+        +schema: stg_dlt_smoke
+        +materialized: view
       github:
         +schema: stg_github
       dataforseo:

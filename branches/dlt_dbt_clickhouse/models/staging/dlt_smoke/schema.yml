@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: stg_dlt_smoke_smoke
+    description: Staging for the ClickHouse dlt smoke Bronze table (no REST API).
+    columns:
+      - name: smoke_id
+        data_tests:
+          - not_null
+      - name: smoke_name
+        data_tests:
+          - not_null
+      - name: run_id
+        data_tests:
+          - not_null
+      - name: _dlt_id
+        data_tests:
+          - not_null
+          - unique
+      - name: smoke_row_key
+        description: Business key plus load run (Bronze is append-only).
+        data_tests:
+          - not_null
+          - unique

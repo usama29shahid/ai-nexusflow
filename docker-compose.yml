@@ -193,9 +193,11 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      MINIO_API_PORT: ${MINIO_API_PORT:-9002}
 
     volumes:
       - ./docker/lakehouse/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./docker/lakehouse/spark/minio-localhost-proxy.py:/opt/spark/minio-localhost-proxy.py:ro
 
     depends_on:
       polaris-setup:
@@ -204,7 +206,26 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        set -e
+        set -euo pipefail
+        MINIO_API_PORT="${MINIO_API_PORT:-9002}"
+        export MINIO_API_PORT
+        python3 /opt/spark/minio-localhost-proxy.py &
+        proxy_pid=$$!
+        for _ in $$(seq 1 30); do
+          if bash -c "cat < /dev/null > /dev/tcp/127.0.0.1/$${MINIO_API_PORT}" 2>/dev/null; then
+            echo "MinIO proxy listening on 127.0.0.1:$${MINIO_API_PORT}"
+            break
+          fi
+          if ! kill -0 "$${proxy_pid}" 2>/dev/null; then
+            echo "MinIO proxy exited before binding port $${MINIO_API_PORT}" >&2
+            exit 1
+          fi
+          sleep 1
+        done
+        if ! bash -c "cat < /dev/null > /dev/tcp/127.0.0.1/$${MINIO_API_PORT}" 2>/dev/null; then
+          echo "MinIO proxy failed to start on port $${MINIO_API_PORT}" >&2
+          exit 1
+        fi
         /opt/spark/sbin/start-thriftserver.sh \
           --driver-java-options "-Dderby.system.home=/tmp/derby"
         echo "Spark Thrift Server starting; tailing logs..."
@@ -235,6 +256,7 @@ services:
       POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET:-s3cr3t}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
 
     volumes:
       - ./docker/lakehouse/trino/catalog:/etc/trino/catalog:ro

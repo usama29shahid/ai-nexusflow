@@ -242,3 +242,6 @@ dbt_packages/
 # Python / uv
 .venv/
 __pycache__/
+
+# vscode
+.vscode/    

@@ -52,6 +52,40 @@ docker compose up -d
 echo "Syncing Python environment on the host..."
 uv sync
 
+if [[ ",${COMPOSE_PROFILES}," == *",lakehouse,"* ]]; then
+  echo "Lakehouse profile: re-registering Iceberg smoke table (Polaris in-memory catalog)..."
+  wait_healthy() {
+    local service="$1"
+    for _ in $(seq 1 60); do
+      if docker compose ps "${service}" 2>/dev/null | grep -q "(healthy)"; then
+        return 0
+      fi
+      sleep 2
+    done
+    echo "Timed out waiting for ${service}." >&2
+    return 1
+  }
+  wait_healthy polaris-setup
+  set +e
+  uv run python tests/integration/register_lakehouse_smoke.py
+  register_rc=$?
+  set -e
+  case "${register_rc}" in
+    0)
+      echo "  Iceberg smoke table registered."
+      ;;
+    2)
+      echo "  No Iceberg smoke files in MinIO yet (first-time OK)."
+      echo "  After uv run python tests/integration/dlt_lakehouse_smoke.py, run ./scripts/lakehouse-restore.sh"
+      ;;
+    *)
+      echo "  Failed to re-register Iceberg smoke table in Polaris (exit ${register_rc})." >&2
+      echo "  Lakehouse queries will fail until: ./scripts/lakehouse-restore.sh" >&2
+      exit 1
+      ;;
+  esac
+fi
+
 echo
 echo "Done."
 echo "  Profiles:   ${COMPOSE_PROFILES} (MinIO always)"

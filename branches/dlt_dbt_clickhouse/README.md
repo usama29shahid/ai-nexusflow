@@ -24,3 +24,16 @@ cp branches/dlt_dbt_clickhouse/profiles.example.yml branches/dlt_dbt_clickhouse/
 set -a && source .env && set +a
 uv run dbt debug --project-dir branches/dlt_dbt_clickhouse --profiles-dir branches/dlt_dbt_clickhouse
 ```
+
+Smoke staging (after `uv run python tests/integration/dlt_clickhouse_smoke.py`):
+
+```bash
+export NEXUS_ENV="${NEXUS_ENV:-dev}"
+export NEXUS_RUN_ID="${NEXUS_RUN_ID:-local}"
+uv run dbt run --project-dir branches/dlt_dbt_clickhouse \
+  --profiles-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
+  --select stg_dlt_smoke_smoke --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
+uv run dbt test --project-dir branches/dlt_dbt_clickhouse \
+  --profiles-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
+  --select stg_dlt_smoke_smoke source:dlt_smoke_raw
+```

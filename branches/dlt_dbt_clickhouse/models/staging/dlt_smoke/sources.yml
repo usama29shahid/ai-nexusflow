@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: dlt_smoke_raw
+    description: >
+      Bronze rows from tests/integration/dlt_clickhouse_smoke.py.
+      dlt ClickHouse names tables {dataset}___{table} inside CLICKHOUSE_DB.
+    database: "{{ env_var('CLICKHOUSE_DB', 'warehouse') }}"
+    schema: "{{ env_var('CLICKHOUSE_DB', 'warehouse') }}"
+    tables:
+      - name: smoke
+        identifier: "raw_dlt_smoke_{{ target.name }}___smoke"
+        columns:
+          - name: id
+            data_tests:
+              - not_null
+          - name: run_id
+            data_tests:
+              - not_null
+          - name: _dlt_id
+            data_tests:
+              - not_null
+              - unique

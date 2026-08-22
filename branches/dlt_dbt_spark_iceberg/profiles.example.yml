@@ -17,6 +17,6 @@ nexus_lakehouse:
       port: "{{ env_var('SPARK_THRIFT_PORT', '10000') | as_number }}"
       user: "{{ env_var('SPARK_THRIFT_USER', 'dbt') }}"
       schema: gold
+      catalog: "nexus_{{ env_var('NEXUS_ENV', 'dev') }}"
       threads: 4
-      # Iceberg catalog registered in Spark as nexus_dev (Polaris).
-      # Three-level names: nexus_dev.{schema}.{table}
+      # Iceberg three-level names: nexus_{env}.{schema}.{table} (see macros/iceberg_catalog.sql)
