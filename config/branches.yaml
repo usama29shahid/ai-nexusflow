@@ -5,7 +5,7 @@ branches:
   dlt_dbt_clickhouse:
     enabled: true
   dlt_dbt_spark_iceberg:
-    enabled: false
+    enabled: true
   branch_3_databricks:
     enabled: false
   branch_4_emr:
