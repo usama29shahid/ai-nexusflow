@@ -4,7 +4,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 > **Infrastructure is containerized. Python stays on the host.**
 
-Docker Compose runs **MinIO always**, plus optional stacks via **profiles** (`clickhouse`, later `lakehouse` and `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
+Docker Compose runs **MinIO always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, and later `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
 
 ```text
 git clone
@@ -18,6 +18,7 @@ cp .env.example .env          # or paste your .env
 | MinIO | Shared object store (no profile) | Docker |
 | ClickHouse | Warehouse (`profile: clickhouse`) | Docker |
 | Polaris, Spark Thrift, Trino | Lakehouse (`profile: lakehouse`) | Docker |
+| CloudBeaver | Web database IDE (`profile: cloudbeaver`) | Docker |
 | Airflow, Kafka (later) | `airflow` / `kafka` profiles | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).
@@ -73,8 +74,8 @@ NEXUS_ENV=dev
 # NEXUS_RUN_ID=   # set per load; do not reuse one eternal value
 
 # Which optional stacks to start. MinIO always runs (not a profile).
-# clickhouse | lakehouse | airflow — comma-separated for more than one.
-COMPOSE_PROFILES=clickhouse,lakehouse
+# clickhouse | lakehouse | cloudbeaver | airflow — comma-separated for more than one.
+COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver
 
 CLICKHOUSE_HOST=localhost
 CLICKHOUSE_DB=warehouse
@@ -102,6 +103,7 @@ One file at the repo root. **Profiles name stacks**, not every container. MinIO 
 | *(none)* | MinIO | Shared object store |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
+| `cloudbeaver` | CloudBeaver web database IDE | Database administration and SQL exploration |
 | `airflow` | Airflow (Phase 2) | Orchestration |
 
 `COMPOSE_PROFILES` in `.env` is which **containers** run. `config/branches.yaml` is which **pipelines** may execute. Keep them aligned by hand.
@@ -115,6 +117,9 @@ COMPOSE_PROFILES=lakehouse
 
 # Both branches (default in .env.example)
 COMPOSE_PROFILES=clickhouse,lakehouse
+
+# Both branches plus the web database IDE
+COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver
 ```
 
 From the repo root:
@@ -126,6 +131,7 @@ docker compose logs
 docker compose logs clickhouse
 docker compose config
 docker compose --profile lakehouse up -d    # one-off; does not need .env change
+docker compose --profile cloudbeaver up -d  # one-off; does not need .env change
 docker compose down          # keeps named volumes
 # docker compose down -v     # deletes ClickHouse/MinIO data — avoid
 ```
@@ -148,8 +154,9 @@ There is no application `docker compose build` for Python. Images are pulled.
 | Spark Thrift (dbt-spark) | `localhost:10000` |
 | Spark UI | `http://localhost:4040` |
 | Trino UI | `http://localhost:8080` |
+| CloudBeaver | `http://localhost:8978` |
 
-From **another container**, use Compose DNS: `clickhouse:8123`, `minio:9000`, `polaris:8181`, `spark-thrift:10000`, `trino:8080` (MinIO listens on 9000 inside the network; the host maps API to 9002).
+From **another container**, use Compose DNS: `clickhouse:8123`, `minio:9000`, `polaris:8181`, `spark-thrift:10000`, `trino:8080` (MinIO listens on 9000 inside the network; the host maps API to 9002). CloudBeaver connects to ClickHouse at `clickhouse:8123` and Trino at `trino:8080`; do not use `localhost` for those connections inside CloudBeaver.
 
 ### Verify
 
@@ -170,6 +177,8 @@ bash -c 'cat < /dev/null > /dev/tcp/localhost/10000' && echo "Spark Thrift OK"
 ```
 
 Trino CLI (inside container): `docker exec -it trino trino --catalog nexus_dev`
+
+CloudBeaver opens at `http://localhost:8978`. Its users, settings, and saved connections persist in the named `cloudbeaver_workspace` volume. Do not use `docker compose down -v` unless you intend to delete named volumes.
 
 ---
 

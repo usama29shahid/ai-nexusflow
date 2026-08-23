@@ -272,6 +272,21 @@ services:
       retries: 20
       start_period: 60s
 
+  # ============================================================
+  # CloudBeaver — web database IDE (profile: cloudbeaver)
+  # ============================================================
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: cloudbeaver
+    restart: unless-stopped
+    profiles: [cloudbeaver]
+
+    ports:
+      - "127.0.0.1:${CLOUDBEAVER_PORT:-8978}:8978"
+
+    volumes:
+      - cloudbeaver_workspace:/opt/cloudbeaver/workspace
+
 # ==============================================================
 # Persistent Volumes
 # ==============================================================
@@ -280,3 +295,4 @@ volumes:
   clickhouse_data:
   clickhouse_logs:
   minio_data:
+  cloudbeaver_workspace:
