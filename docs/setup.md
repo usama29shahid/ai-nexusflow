@@ -4,7 +4,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 > **Infrastructure is containerized. Python stays on the host.**
 
-Docker Compose runs **MinIO always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, and later `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
+Docker Compose runs **MinIO always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
 
 ```text
 git clone
@@ -19,7 +19,8 @@ cp .env.example .env          # or paste your .env
 | ClickHouse | Warehouse (`profile: clickhouse`) | Docker |
 | Polaris, Spark Thrift, Trino | Lakehouse (`profile: lakehouse`) | Docker |
 | CloudBeaver | Web database IDE (`profile: cloudbeaver`) | Docker |
-| Airflow, Kafka (later) | `airflow` / `kafka` profiles | Docker |
+| Airflow | Orchestration (`profile: airflow`, on-demand) | Docker |
+| Kafka (later) | Streaming (`kafka` profile) | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).
 
@@ -75,6 +76,7 @@ NEXUS_ENV=dev
 
 # Which optional stacks to start. MinIO always runs (not a profile).
 # clickhouse | lakehouse | cloudbeaver | airflow — comma-separated for more than one.
+# Airflow is on-demand: omit from the default, or: docker compose --profile airflow up -d
 COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver
 
 CLICKHOUSE_HOST=localhost
@@ -104,7 +106,7 @@ One file at the repo root. **Profiles name stacks**, not every container. MinIO 
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `cloudbeaver` | CloudBeaver web database IDE | Database administration and SQL exploration |
-| `airflow` | Airflow (Phase 2) | Orchestration |
+| `airflow` | Airflow (on-demand) | Orchestration; remote task logs in MinIO |
 
 `COMPOSE_PROFILES` in `.env` is which **containers** run. `config/branches.yaml` is which **pipelines** may execute. Keep them aligned by hand.
 
@@ -120,6 +122,9 @@ COMPOSE_PROFILES=clickhouse,lakehouse
 
 # Both branches plus the web database IDE
 COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver
+
+# Orchestration day (Airflow UI + scheduler; add to any of the above)
+COMPOSE_PROFILES=clickhouse,lakehouse,airflow
 ```
 
 From the repo root:
@@ -132,6 +137,7 @@ docker compose logs clickhouse
 docker compose config
 docker compose --profile lakehouse up -d    # one-off; does not need .env change
 docker compose --profile cloudbeaver up -d  # one-off; does not need .env change
+docker compose --profile airflow up -d      # one-off profile; Airflow secrets must already be in .env
 docker compose down          # keeps named volumes
 # docker compose down -v     # deletes ClickHouse/MinIO data — avoid
 ```
@@ -140,7 +146,7 @@ Switching stacks: change `COMPOSE_PROFILES` and `docker compose up -d`. Do **not
 
 If `.env` has no `COMPOSE_PROFILES`, a bare `docker compose up -d` starts **MinIO only**. `./scripts/setup.sh` defaults to `clickhouse` when the variable is unset.
 
-There is no application `docker compose build` for Python. Images are pulled.
+There is no application `docker compose build` for Python. Images are pulled. The Airflow image includes the amazon provider used for MinIO remote task logging.
 
 ### Ports (from the host)
 
@@ -155,6 +161,7 @@ There is no application `docker compose build` for Python. Images are pulled.
 | Spark UI | `http://localhost:4040` |
 | Trino UI | `http://localhost:8080` |
 | CloudBeaver | `http://localhost:8978` |
+| Airflow UI | `http://127.0.0.1:8081` |
 
 From **another container**, use Compose DNS: `clickhouse:8123`, `minio:9000`, `polaris:8181`, `spark-thrift:10000`, `trino:8080` (MinIO listens on 9000 inside the network; the host maps API to 9002). CloudBeaver connects to ClickHouse at `clickhouse:8123` and Trino at `trino:8080`; do not use `localhost` for those connections inside CloudBeaver.
 
@@ -179,6 +186,14 @@ bash -c 'cat < /dev/null > /dev/tcp/localhost/10000' && echo "Spark Thrift OK"
 Trino CLI (inside container): `docker exec -it trino trino --catalog nexus_dev`
 
 CloudBeaver opens at `http://localhost:8978`. Its users, settings, and saved connections persist in the named `cloudbeaver_workspace` volume. Do not use `docker compose down -v` unless you intend to delete named volumes.
+
+**Airflow** (when `airflow` profile is active):
+
+```bash
+curl --fail http://127.0.0.1:8081/health
+```
+
+UI login uses `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` (example default `admin` / `change-me`, local WSL only — change on shared hosts). `AIRFLOW__CORE__FERNET_KEY` and `AIRFLOW__WEBSERVER__SECRET_KEY` are required; `./scripts/setup.sh` generates them when blank. Trigger manual DAG `nexus_airflow_smoke` to verify the scheduler and MinIO remote task logs (`nexus-airflow-logs-dev`). Details: [orchestration/airflow/README.md](../orchestration/airflow/README.md).
 
 ---
 

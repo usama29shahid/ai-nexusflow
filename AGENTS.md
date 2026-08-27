@@ -35,7 +35,7 @@ Implement and verify `dlt_dbt_clickhouse` before starting Spark/Iceberg, Databri
 ## Local development
 
 - Run Python, `uv`, dlt, and dbt on the host from the repository root; do not run `uv sync` in a bind-mounted Compose container.
-- Docker Compose runs infrastructure: MinIO always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow later via `airflow`.
+- Docker Compose runs infrastructure: MinIO always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow on-demand via `airflow`; CloudBeaver via `cloudbeaver`.
 - Use `.env` for local configuration and secrets. Never commit `.env`, `profiles.yml`, credentials, API keys, or tokens.
 - Default environment is `NEXUS_ENV=dev`. `prd` is a Phase 4/Terraform naming contract, not a second local stack.
 - dbt does not load `.env` itself; source it before dbt commands. Keep dbt `--target` equal to `NEXUS_ENV`.

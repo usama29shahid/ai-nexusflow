@@ -2,4 +2,4 @@
 
 Cross-cutting workflow (Airflow), not a data branch.
 
-Phase 2. Not implemented yet.
+Start on demand with Compose profile `airflow`. Details: [airflow/README.md](airflow/README.md).

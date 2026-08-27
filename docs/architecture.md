@@ -273,9 +273,9 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud job
 | *(none)* | MinIO | Shared object store |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
-| `airflow` | Airflow (Phase 2) | Orchestration |
+| `airflow` | Airflow (on-demand) | Orchestration |
 
-Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, or comma-separated). That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
+Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, or comma-separated). Airflow is optional; start with `docker compose --profile airflow up -d` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
 
 **Production (later):** optional CI image for Python. Terraform in Phase 4. Not part of Phase 1.
 

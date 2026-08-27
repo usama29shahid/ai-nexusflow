@@ -66,12 +66,13 @@ Independent of dlt_dbt_clickhouse and dlt_dbt_spark_iceberg. Aligns with Databri
 
 ## Phase 2 — Airflow
 
-- DAGs that trigger enabled dlt_dbt_clickhouse / dlt_dbt_spark_iceberg / Branch 3
-- **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors
+- Docker Compose profile `airflow` (on-demand): Postgres metadata + LocalExecutor webserver/scheduler
 - Remote task logs to MinIO (`nexus-airflow-logs-dev` until Terraform)
-- Schedule, retries, clear task boundaries
-- On/off in config: Airflow only runs **enabled** branches
-- Add Airflow in Docker here (not in Phase 1)
+- Smoke DAG `nexus_airflow_smoke` under `orchestration/airflow/dags/`
+- Later: DAGs that trigger enabled dlt_dbt_clickhouse / dlt_dbt_spark_iceberg / Branch 3
+- **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors
+- Schedule, retries, clear task boundaries; only **enabled** branches
+- Host dlt/dbt execution bridge is a separate design step (no `.venv` bind-mount)
 
 This is the execution surface Phase 3 agents will target.
 
@@ -126,6 +127,7 @@ Kafka + Spark Structured Streaming, after batch (and AWS batch paths) are stable
 - [x] GitHub repository `ai-nexusflow`
 - [x] WSL2 + Docker Desktop WSL integration
 - [x] Docker Compose: ClickHouse + MinIO
+- [x] Docker Compose profile `airflow` (Postgres + LocalExecutor + MinIO remote logs + `nexus_airflow_smoke`)
 - [x] Python project with uv (`pyproject.toml`, `uv.lock`)
 - [x] DLT, dbt-core, dbt-clickhouse
 - [x] dbt project `nexus_clickhouse` initialized (`branches/dlt_dbt_clickhouse`)
@@ -151,7 +153,7 @@ dbt-clickhouse  1.10.2
 - [ ] ClickHouse bronze / dbt silver + tests
 - [ ] MinIO archive + Iceberg / Polaris / dbt-spark / Trino (dlt_dbt_spark_iceberg)
 - [ ] Databricks / Delta / Unity Catalog (Branch 3)
-- [ ] Airflow
+- [ ] Airflow source/ELT DAGs over enabled branches (Compose `airflow` profile + smoke DAG exist)
 - [ ] LLM ELT generator, RAG, Streamlit
 - [ ] Terraform dev/prod
 - [ ] AWS EMR / Glue

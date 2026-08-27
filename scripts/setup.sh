@@ -16,6 +16,37 @@ if [[ ! -f .env ]]; then
   fi
 fi
 
+# Fill Airflow crypto secrets when blank (Compose requires them; never commit real values).
+ensure_airflow_secrets() {
+  local fernet secret
+  if ! grep -q '^AIRFLOW__CORE__FERNET_KEY=.\+' .env; then
+    fernet="$(python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+    if grep -q '^AIRFLOW__CORE__FERNET_KEY=' .env; then
+      sed -i "s|^AIRFLOW__CORE__FERNET_KEY=.*|AIRFLOW__CORE__FERNET_KEY=${fernet}|" .env
+    else
+      printf '\nAIRFLOW__CORE__FERNET_KEY=%s\n' "${fernet}" >> .env
+    fi
+    echo "Generated AIRFLOW__CORE__FERNET_KEY in .env"
+  fi
+  if ! grep -q '^AIRFLOW__WEBSERVER__SECRET_KEY=.\+' .env; then
+    secret="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    if grep -q '^AIRFLOW__WEBSERVER__SECRET_KEY=' .env; then
+      sed -i "s|^AIRFLOW__WEBSERVER__SECRET_KEY=.*|AIRFLOW__WEBSERVER__SECRET_KEY=${secret}|" .env
+    else
+      printf '\nAIRFLOW__WEBSERVER__SECRET_KEY=%s\n' "${secret}" >> .env
+    fi
+    echo "Generated AIRFLOW__WEBSERVER__SECRET_KEY in .env"
+  fi
+  if ! grep -q '^AIRFLOW_ADMIN_PASSWORD=.\+' .env; then
+    if grep -q '^AIRFLOW_ADMIN_PASSWORD=' .env; then
+      sed -i 's|^AIRFLOW_ADMIN_PASSWORD=.*|AIRFLOW_ADMIN_PASSWORD=change-me|' .env
+    else
+      printf '\nAIRFLOW_ADMIN_PASSWORD=change-me\n' >> .env
+    fi
+  fi
+}
+ensure_airflow_secrets
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is not installed or not on PATH." >&2
   echo "WSL: enable Docker Desktop → Settings → Resources → WSL Integration → Ubuntu." >&2
@@ -94,4 +125,8 @@ echo "  MinIO UI:   http://localhost:9001"
 echo "  Polaris:    http://localhost:8181"
 echo "  Trino UI:   http://localhost:8080"
 echo "  Spark Thrift: localhost:10000 (dbt-spark)"
+if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* ]]; then
+  echo "  Airflow UI: http://127.0.0.1:${AIRFLOW_WEBSERVER_PORT:-8081}"
+  echo "  Airflow login: ${AIRFLOW_ADMIN_USER:-admin} / (AIRFLOW_ADMIN_PASSWORD in .env — local-only; change on shared hosts)"
+fi
 echo "  Python:     uv run python --version"
