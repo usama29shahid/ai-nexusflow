@@ -4,7 +4,7 @@ dlt is the **REST extraction and load** layer. It is not the dimensional model.
 
 For **dlt_dbt_clickhouse**, runnable pipelines live under `branches/dlt_dbt_clickhouse/dlt/{source}/`. Repo `ingestion/sources/` stays a stub until another backend needs the same REST client. They run on the **host** with `uv run`, not inside Docker.
 
-This document is the org standard for RAG and for future generated pipelines. Pipelines are **not implemented yet**.
+This document is the org standard for RAG and for future generated pipelines. Pipelines are **not implemented yet**. GitHub source semantics: [github-ingestion.md](github-ingestion.md).
 
 ---
 
@@ -18,7 +18,7 @@ This document is the org standard for RAG and for future generated pipelines. Pi
    - ClickHouse `raw_{source}_{env}` (e.g. `raw_github_dev`): append-only Bronze.
 5. Keep **pipeline state** (incremental cursors, schema) in dlt — not a custom watermark table.
 
-dlt may create nested/child tables from JSON. Leave them in Bronze. Flatten in dbt `stg_*`.
+**dlt stops at archive + Bronze.** Staging, intermediate, Gold, marts, and tests are dbt-only. dlt may create nested/child tables from JSON; leave them in Bronze and flatten in dbt `stg_*`.
 
 ---
 
@@ -27,13 +27,14 @@ dlt may create nested/child tables from JSON. Leave them in Bronze. Flatten in d
 | Grain | Rule |
 | --- | --- |
 | **Source** | pokeapi, dataforseo, github, … — Airflow DAG grain later |
-| **Endpoint pipeline** | One dlt pipeline (or REST resource) per endpoint |
-| **Param variant** | Separate pipeline only if payload **contract** differs (schema, grain, auth, incremental). Same schema, different URL id → parameters on one pipeline |
+| **Endpoint pipeline** | One dlt script (or REST resource) per endpoint; name the script after the resource (`pull_requests.py`, not `pipe_one.py`) |
+| **Param variant** | Separate pipeline/table only if payload **contract** differs (schema, grain, auth, incremental). Same schema, different URL id → parameters on one pipeline; later Airflow may run multiple jobs with different params |
 
 Code layout (when implemented):
 
 ```text
 branches/dlt_dbt_clickhouse/dlt/{source}/   # endpoint pipelines → raw_{source}_{env}
+  # e.g. github/commits.py, github/pull_requests.py, github/issues.py
 ingestion/sources/                          # stub until a second backend shares REST defs
 ```
 

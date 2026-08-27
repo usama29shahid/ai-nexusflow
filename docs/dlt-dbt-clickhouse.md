@@ -2,7 +2,7 @@
 
 Public name: **dlt_dbt_clickhouse** (dlt → dbt → ClickHouse). This is the warehouse ELT **capability**, not a git branch.
 
-The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md).
+The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). GitHub source contract: [github-ingestion.md](github-ingestion.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md).
 
 dbt project: `branches/dlt_dbt_clickhouse`. Config key: `dlt_dbt_clickhouse` in [`config/branches.yaml`](../config/branches.yaml). Docker profile: **`clickhouse`** (MinIO always on). See [setup.md](setup.md).
 
@@ -162,29 +162,29 @@ Which models exist depends on the **requirement**. There is no mandatory full st
 
 ---
 
-## Worked example: GitHub `pipe_one`
+## Worked example: GitHub `pull_requests`
 
-Illustration of the rules above. Pipelines are **not implemented yet**. Lakehouse copy of the same API: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+Illustration of the rules above. Pipelines are **not implemented yet**. Full GitHub source contract: [github-ingestion.md](github-ingestion.md). Lakehouse copy of the same API: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
-Assumptions: source GitHub, endpoint `pull_request/{param1}`, job name `pipe_one`. `{param1}` is a URL id with the **same** payload contract → one parameterized pipeline, not a `{param_variant}` prefix and not a new Gold table.
+Assumptions: source GitHub, endpoint `GET /repos/{owner}/{repo}/pulls`, resource `pull_requests`. `owner` / `repo` are URL parameters with the **same** payload contract → one parameterized script and one Bronze table, not a `{param_variant}` archive prefix and not a new Gold table. Opaque job names such as `pipe_one` are not used.
 
 **Three names** ([environments.md](environments.md)):
 
 ```text
-Job     pipe_one
-Table   pull_request
-Bucket  nexus-dlt-dbt-clickhouse-{env}     # all warehouse JSONL for this env
-Prefix  github/pull_request/dt=.../run_id=.../part-*.jsonl.gz
-Bronze  raw_github_{env}.pull_request
+Job     pull_requests.py / github_pull_requests   # script now; Airflow task id later
+Table   pull_requests
+Bucket  nexus-dlt-dbt-clickhouse-{env}            # all warehouse JSONL for this env
+Prefix  github/pull_requests/dt=.../run_id=.../part-*.jsonl.gz
+Bronze  raw_github_{env}.pull_requests
 ```
 
-Do not name the ClickHouse database or MinIO bucket `pipe_one`. dlt dataset = `raw_github_{env}`, not the job name.
+Do not name the ClickHouse database or MinIO bucket after the job. dlt dataset = `raw_github_{env}`, not the script name. Script name, Bronze table, and archive `{endpoint}` segment stay aligned (`pull_requests`).
 
 **Archive (`NEXUS_ENV=dev`):** one MinIO service; dlt writes objects (prefixes, not mkdir):
 
 ```text
 s3://nexus-dlt-dbt-clickhouse-dev/
-  github/pull_request/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
+  github/pull_requests/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
 ```
 
 **dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Interpolate env into database names. If `+schema` cannot use `target.name` in `dbt_project.yml`, a `generate_schema_name` macro does the same.
@@ -198,7 +198,7 @@ sources:
     database: raw_github_{{ target.name }}
     schema: raw_github_{{ target.name }}
     tables:
-      - name: pull_request
+      - name: pull_requests
 ```
 
 `dbt_project.yml` (proposed fragment):
@@ -219,14 +219,14 @@ models:
       +schema: pub_{{ target.name }}
 ```
 
-Staging: `stg_github_dev.stg_github_pull_request` via `{{ source('github_raw', 'pull_request') }}`. Gold only if a requirement **names** a model.
+Staging: `stg_github_dev.stg_github_pull_requests` via `{{ source('github_raw', 'pull_requests') }}`. Gold only if a requirement **names** a model. dlt ends at MinIO + Bronze; all post-Bronze work is dbt-only.
 
 From the repo root (when code exists):
 
 ```bash
 export NEXUS_ENV=dev
 export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
-uv run python branches/dlt_dbt_clickhouse/dlt/github/pipe_one.py
+uv run python branches/dlt_dbt_clickhouse/dlt/github/pull_requests.py
 uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
   --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
 ```
