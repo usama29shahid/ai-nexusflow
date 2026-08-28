@@ -1,2 +1,2 @@
-# Production settings (non-secret). Secrets stay in .env / a secret manager.
+# Production settings (non-secret). Secrets: HashiCorp Vault — see docs/vault.md.
 environment: prod

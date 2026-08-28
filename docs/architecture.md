@@ -264,7 +264,7 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud job
 
 ## Development vs production
 
-**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. See [setup.md](setup.md).
+**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. **Secrets on the VPS:** HashiCorp Vault (KV v2) + Vault Agent → env injection — see [vault.md](vault.md). See [setup.md](setup.md).
 
 **Compose profiles** (one file at the repo root). Name profiles after **stacks**, not every container. MinIO has **no** profile so it always starts. Isolation between capabilities is buckets and catalogs on that MinIO, not a second Compose project.
 
@@ -274,6 +274,7 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud job
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `airflow` | Airflow (on-demand) | Orchestration |
+| `vault` | HashiCorp Vault + Agent | Secrets — [vault.md](vault.md) |
 
 Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, or comma-separated). Airflow is optional; start with `docker compose --profile airflow up -d` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
 

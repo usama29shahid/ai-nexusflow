@@ -21,7 +21,7 @@ from dlt.destinations import clickhouse, filesystem
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _load_dotenv(path: Path) -> None:
+def _load_dotenv(path: Path, *, overwrite: bool = False) -> None:
     if not path.is_file():
         return
     for raw in path.read_text().splitlines():
@@ -31,7 +31,10 @@ def _load_dotenv(path: Path) -> None:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip().strip("'").strip('"')
-        os.environ.setdefault(key, value)
+        if overwrite:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
 
 
 def _required(name: str) -> str:
@@ -53,6 +56,9 @@ def _rows(run_id: str) -> list[dict[str, object]]:
 
 def main() -> None:
     _load_dotenv(REPO_ROOT / ".env")
+    secrets_file = REPO_ROOT / ".nexusflow" / "secrets.env"
+    if os.environ.get("NEXUS_SECRETS_BACKEND", "env") == "vault" and secrets_file.is_file():
+        _load_dotenv(secrets_file, overwrite=True)
     env = os.environ.get("NEXUS_ENV", "dev")
     run_id = os.environ.get(
         "NEXUS_RUN_ID",

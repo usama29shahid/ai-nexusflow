@@ -4,6 +4,8 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 > **Infrastructure is containerized. Python stays on the host.**
 
+Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running.
+
 Docker Compose runs **MinIO always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
 
 ```text
@@ -20,6 +22,7 @@ cp .env.example .env          # or paste your .env
 | Polaris, Spark Thrift, Trino | Lakehouse (`profile: lakehouse`) | Docker |
 | CloudBeaver | Web database IDE (`profile: cloudbeaver`) | Docker |
 | Airflow | Orchestration (`profile: airflow`, on-demand) | Docker |
+| HashiCorp Vault | Secrets (`profile: vault` when `NEXUS_SECRETS_BACKEND=vault`) | Docker |
 | Kafka (later) | Streaming (`kafka` profile) | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).
@@ -41,8 +44,12 @@ The script copies `.env` if missing, checks Docker, installs **uv** if missing, 
 Day to day (deps unchanged):
 
 ```bash
-docker compose up -d          # uses COMPOSE_PROFILES from .env
+./scripts/start.sh              # COMPOSE_PROFILES from .env
+./scripts/start.sh all          # every stack — see docs/operations.md
+./scripts/start.sh down         # stop everything cleanly
 ```
+
+Full runbook: [operations.md](operations.md).
 
 After `pyproject.toml` / `uv.lock` changes:
 
@@ -93,6 +100,38 @@ MINIO_CONSOLE_PORT=9001
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin123
 ```
+
+On the **VPS**, move passwords and tokens into Vault KV (see [vault.md](vault.md)). Keep only configuration in `.env` when `NEXUS_SECRETS_BACKEND=vault`.
+
+---
+
+## Secrets (HashiCorp Vault)
+
+Full standard: [vault.md](vault.md).
+
+| Mode | `NEXUS_SECRETS_BACKEND` | Where secrets live |
+| --- | --- | --- |
+| Local WSL (default) | `env` | `.env` (gitignored) |
+| Hostinger VPS (target) | `vault` | Vault KV v2 → Agent → `.nexusflow/secrets.env` |
+
+Prefer `./scripts/start.sh` — it loads secrets, unseals Vault when needed, and starts Compose:
+
+```bash
+./scripts/start.sh              # COMPOSE_PROFILES from .env
+./scripts/start.sh smoke
+./scripts/start.sh dbt debug --project-dir branches/dlt_dbt_clickhouse
+```
+
+Or manually:
+
+```bash
+source scripts/load-secrets.sh
+docker compose up -d
+```
+
+When `NEXUS_SECRETS_BACKEND=env`, `load-secrets.sh` sources `.env` only.
+
+Never commit `.env`, Vault root token, unseal keys, or Agent credentials.
 
 ---
 
@@ -232,13 +271,16 @@ Lakehouse (Milestone 2, Spark Thrift required): `--project-dir branches/dlt_dbt_
 
 dbt uses `~/.dbt/profiles.yml` unless you pass `--profiles-dir`. Profile names match Compose stacks: **`nexus_clickhouse`**, **`nexus_lakehouse`**. Passwords and hosts come from **environment variables only** (never hardcode secrets in `profiles.yml`).
 
-dbt does **not** load the repo `.env`. Source it before every dbt command:
+dbt does **not** load the repo `.env`. Source config and secrets before every dbt command:
 
 ```bash
+# VPS (after Vault): source scripts/load-secrets.sh
 set -a && source .env && set +a
 uv run dbt debug --project-dir branches/dlt_dbt_clickhouse
 uv run dbt debug --project-dir branches/dlt_dbt_spark_iceberg
 ```
+
+On the VPS with Vault, use `scripts/load-secrets.sh` instead of sourcing `.env` alone. See [vault.md](vault.md).
 
 Optional project copy: `profiles.example.yml` → `profiles.yml` in the branch folder (gitignored). Do not commit `profiles.yml`.
 

@@ -44,7 +44,7 @@ Official GitHub references:
 | API | GitHub REST API |
 | Base URL | `https://api.github.com` |
 | Repository identity | `owner` and `repo` path parameters |
-| Authentication | Bearer token from environment or secret configuration |
+| Authentication | Bearer token from environment or [HashiCorp Vault](vault.md) (`GITHUB_TOKEN`) |
 | Token | Read-only fine-grained personal access token during local development |
 | API version | Explicit `X-GitHub-Api-Version` request header, pinned and updated deliberately |
 | Response media type | GitHub's JSON media type |

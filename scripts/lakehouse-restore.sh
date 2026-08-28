@@ -13,8 +13,9 @@ if [[ ! -f .env ]]; then
 fi
 
 set -a
+chmod +x scripts/load-secrets.sh 2>/dev/null || true
 # shellcheck source=/dev/null
-source .env
+source scripts/load-secrets.sh
 set +a
 
 NEXUS_ENV="${NEXUS_ENV:-dev}"

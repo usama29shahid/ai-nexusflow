@@ -150,6 +150,7 @@ activemq-data/
 # Environments
 .env
 .envrc
+.nexusflow/
 .venv
 env/
 venv/
@@ -246,3 +247,5 @@ __pycache__/
 # vscode
 .vscode/    
 .aider*
+
+.env_copy

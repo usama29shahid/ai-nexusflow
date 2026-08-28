@@ -3,6 +3,7 @@
 #   lakehouse   — Spark Thrift, Polaris, Trino (dlt_dbt_spark_iceberg)
 #   cloudbeaver — CloudBeaver web IDE
 #   airflow     — Airflow (on-demand orchestration)
+#   vault       — HashiCorp Vault + Agent (NEXUS_SECRETS_BACKEND=vault)
 #
 # Both branches: COMPOSE_PROFILES=clickhouse,lakehouse in .env
 # Airflow: add airflow to COMPOSE_PROFILES or: docker compose --profile airflow up -d
@@ -47,6 +48,80 @@ x-airflow-common: &airflow-common
       condition: service_completed_successfully
 
 services:
+
+  # ============================================================
+  # HashiCorp Vault — secrets (profile: vault)
+  # ============================================================
+  vault:
+    image: hashicorp/vault:1.18
+    container_name: vault
+    restart: unless-stopped
+    profiles: [vault]
+
+    cap_add:
+      - IPC_LOCK
+
+    ports:
+      - "127.0.0.1:${VAULT_PORT:-8200}:8200"
+
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_API_ADDR: http://vault:8200
+
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mkdir -p /vault/data
+        chown -R 100:1000 /vault/data
+        exec vault server -config=/vault/config/config.hcl
+
+    user: "0:0"
+
+    volumes:
+      - vault_data:/vault/data
+      - ./docker/vault/config.hcl:/vault/config/config.hcl:ro
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8200/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  vault-agent:
+    image: hashicorp/vault:1.18
+    container_name: vault-agent
+    restart: unless-stopped
+    profiles: [vault]
+
+    cap_add:
+      - IPC_LOCK
+
+    depends_on:
+      vault:
+        condition: service_healthy
+
+    user: "0:0"
+
+    environment:
+      NEXUS_ENV: ${NEXUS_ENV:-dev}
+      VAULT_ADDR: http://vault:8200
+
+    volumes:
+      - ./docker/vault/agent.hcl:/vault/config/agent.hcl:ro
+      - ./.nexusflow/agent-autoauth.hcl:/vault/config/agent-autoauth.hcl:ro
+      - ./docker/vault/templates:/vault/templates:ro
+      - ./.nexusflow:/nexusflow
+
+    command: agent -config=/vault/config/agent.hcl -config=/vault/config/agent-autoauth.hcl
 
   # ============================================================
   # ClickHouse — warehouse (profile: clickhouse)
@@ -427,6 +502,7 @@ services:
 # ==============================================================
 
 volumes:
+  vault_data:
   clickhouse_data:
   clickhouse_logs:
   minio_data:

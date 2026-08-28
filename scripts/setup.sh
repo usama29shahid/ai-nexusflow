@@ -45,7 +45,13 @@ ensure_airflow_secrets() {
     fi
   fi
 }
-ensure_airflow_secrets
+# Airflow crypto in .env only when secrets stay in env (not Vault).
+ensure_airflow_secrets_if_env() {
+  if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]]; then
+    return 0
+  fi
+  ensure_airflow_secrets
+}
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is not installed or not on PATH." >&2
@@ -77,7 +83,23 @@ set +a
 # Existing .env files may omit this; both branches is the default dev stack.
 export COMPOSE_PROFILES="${COMPOSE_PROFILES:-clickhouse,lakehouse}"
 
-echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES})..."
+ensure_airflow_secrets_if_env
+
+if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]]; then
+  echo "Secrets backend: vault — platform service (independent of branch profiles)..."
+  docker compose --profile vault up -d vault
+  chmod +x scripts/vault-bootstrap.sh
+  ./scripts/vault-bootstrap.sh
+  chmod +x scripts/load-secrets.sh
+  set -a
+  # shellcheck source=/dev/null
+  source scripts/load-secrets.sh
+  set +a
+else
+  echo "Secrets backend: env (.env)"
+fi
+
+echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES}; MinIO always)..."
 docker compose up -d
 
 echo "Syncing Python environment on the host..."

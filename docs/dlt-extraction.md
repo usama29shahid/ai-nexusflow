@@ -42,7 +42,7 @@ ingestion/sources/                          # stub until a second backend shares
 
 ## Authentication
 
-Configure per source. Secrets from environment / `.env` (later: vault). Never commit keys.
+Configure per source. Secrets from the environment — injected by [HashiCorp Vault Agent](vault.md) on the VPS (`NEXUS_SECRETS_BACKEND=vault`) or from `.env` for local bootstrap (`NEXUS_SECRETS_BACKEND=env`). Never commit keys.
 
 | Pattern | When |
 | --- | --- |
@@ -52,7 +52,7 @@ Configure per source. Secrets from environment / `.env` (later: vault). Never co
 | HTTP Basic | Rare; still supported |
 | OAuth2 | Token URL + client credentials or refresh; dlt REST source can hold the token flow |
 
-dlt REST source: declare auth on the client (`api_key`, `bearer`, `http_basic`, `oauth2`). Rotate via env vars, not hardcoded config.
+dlt REST source: declare auth on the client (`api_key`, `bearer`, `http_basic`, `oauth2`). Rotate via Vault KV (see [vault.md](vault.md)) or env vars — not hardcoded config.
 
 ---
 
