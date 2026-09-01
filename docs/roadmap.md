@@ -1,46 +1,64 @@
 # Roadmap
 
-Build a **working ELT foundation first**. Add Spark, cloud, orchestration, and LLM only when the previous layer is runnable and has a clear purpose.
+Build a **working ELT foundation first**. Add Spark, cloud, LLM, and streaming only when the previous layer is runnable and has a clear purpose.
 
 Each phase must be **runnable**, not a folder of stubs. Later agents generate and **select** these branches; they should not invent a platform that was never built.
 
 ```text
-Phase 1  dlt_dbt_clickhouse → dlt_dbt_spark_iceberg → Branch 3   (each must run end-to-end)
-Phase 2  Airflow
-Phase 3  LLM: multi-agent + RAG + Streamlit (live app)
-Phase 4  Terraform (dev / prod) + infra
-Phase 5  AWS EMR + AWS Glue
-Phase 6  Kafka + Spark Streaming
+Phase 1  Branches 1–3 + Airflow + observability data lake
+Phase 2  LLM: multi-agent + RAG + Streamlit (live app)
+Phase 3  Terraform (dev / prod) + infra
+Phase 4  AWS EMR + AWS Glue
+Phase 5  Kafka + Spark Streaming
 ```
 
-This shows **senior DE** (warehouse, open lakehouse, Databricks, Airflow, later AWS and streaming) **and** **LLM/AI** (agents that consume those capabilities).
+This shows **senior DE** (warehouse, open lakehouse, Databricks, Airflow, observability, later AWS and streaming) **and** **LLM/AI** (agents that consume those capabilities).
 
-The LLM layer is Phase 3 — after Branches 1–3 and Airflow exist — not after all five cloud branches, and not before any pipeline runs.
+The LLM layer is Phase 2 — after Phase 1 branches, Airflow, and the observability lake contract exist — not before any pipeline runs.
 
 ---
 
-## Phase 1 — Branches 1, 2, and 3 up and running
+## Phase 1 — Branches, Airflow, and observability
 
-Same source problem, three independent backends.
+Same source problem, three independent backends — plus **orchestration** and a **tool-agnostic observability data lake** from the first milestone.
 
 **Do not start dlt_dbt_spark_iceberg until dlt_dbt_clickhouse is verified. Do not start Branch 3 until the lakehouse capability is verified.**
 
-Python, uv, DLT, and dbt stay on the **host**. ClickHouse and MinIO are already in Docker Compose. Polaris, Spark, and Trino are added as Docker infra when Milestone 2 starts.
+Python, uv, DLT, and dbt stay on the **host**. Docker Compose runs MinIO (always), branch stacks (`clickhouse`, `lakehouse`), **Airflow** (`airflow` profile), and (when implemented) OTel Collector + optional observability reader profiles (`signoz`, `openmetadata`).
 
-### Milestone 1 — dlt_dbt_clickhouse (first pipeline)
+### Observability (Phase 1 — all milestones)
+
+```text
+dlt / dbt / Airflow  →  common/observability  →  OTel Collector  →  MinIO nexus-telemetry-{env}
+                                              →  artifacts + summaries (direct MinIO)
+Readers (optional):  lake  →  SigNoz | OpenMetadata | Elementary native stores
+```
+
+- **System of record:** MinIO `nexus-telemetry-{env}` — neutral formats for migration ([observability.md](observability.md)).
+- **Required per run:** `NEXUS_RUN_ID`, run summary in lake, dbt artifacts copied after dbt, OTLP when collector is up.
+- **Readers:** SigNoz, OpenMetadata, Elementary keep their **own DBs as indexes**; ingest from the lake on demand (local) or continuously (VPS).
+- **Airflow task stdout:** `nexus-airflow-logs-{env}` — separate from the telemetry lake.
+
+Implementation order within Phase 1: telemetry bucket + Collector + SDK first; instrument dlt/dbt/Airflow; reader profiles and ingest script when the first pipeline runs.
+
+### Milestone 1 — dlt_dbt_clickhouse + Airflow + observability foundation
 
 ```text
 Source → DLT → MinIO archive (JSONL) + ClickHouse raw (Bronze, append)
       → dbt stg_* / Gold (ClickHouse)
+      → telemetry lake (every run)
+Airflow → DAG per source (smoke, then first REST source) → same dlt/dbt on host
 ```
 
 - One stable REST (or similar) source
 - DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_{source}_dev`
 - dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
-- Shared local `run_id` into dlt and dbt (Airflow later)
-- Verify row counts and tests
+- Shared `NEXUS_RUN_ID` into dlt and dbt (`local-*` manual; Airflow DAG `run_id` when orchestrated)
+- Observability lake writes verified for manual and Airflow-triggered runs
+- Airflow: smoke DAG + first source DAG for enabled `dlt_dbt_clickhouse`; remote logs to MinIO
+- Verify row counts, dbt tests, and lake objects under `nexus-telemetry-dev/`
 
-MinIO for this capability is the **raw API archive** (replay), **one archive bucket per capability per env**. It is **not** the analytical lakehouse. Iceberg-on-MinIO is **dlt_dbt_spark_iceberg**. `dev` until Terraform. See [environments.md](environments.md) and [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
+MinIO archive buckets are **raw API replay**, not the observability lake. See [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md) and [observability.md](observability.md).
 
 ### Milestone 2 — dlt_dbt_spark_iceberg
 
@@ -48,9 +66,11 @@ MinIO for this capability is the **raw API archive** (replay), **one archive buc
 Source → DLT → MinIO JSONL archive
       + Iceberg Bronze (Apache Polaris, nexus_dev.raw_{source})
       → dbt-spark → Iceberg gold / marts → Trino
+      → same observability lake contract (branch tag dlt_dbt_spark_iceberg)
+Airflow → lakehouse source DAGs when branch enabled
 ```
 
-Open-source lakehouse without Databricks. Persistent tables are Iceberg on MinIO. Spark is compute. Trino is serving. Folder: `branches/dlt_dbt_spark_iceberg`. Standards: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+Open-source lakehouse without Databricks. Folder: `branches/dlt_dbt_spark_iceberg`. Standards: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
 ### Milestone 3 — Branch 3
 
@@ -58,27 +78,13 @@ Open-source lakehouse without Databricks. Persistent tables are Iceberg on MinIO
 Source → DLT → Databricks Spark → Delta Lake → Unity Catalog gold
 ```
 
-Independent of dlt_dbt_clickhouse and dlt_dbt_spark_iceberg. Aligns with Databricks coursework.
+Independent of dlt_dbt_clickhouse and dlt_dbt_spark_iceberg.
 
-**Phase 1 done when:** all three pipelines run and you can show data in ClickHouse, Iceberg/MinIO, and Databricks Delta.
-
----
-
-## Phase 2 — Airflow
-
-- Docker Compose profile `airflow` (on-demand): Postgres metadata + LocalExecutor webserver/scheduler
-- Remote task logs to MinIO (`nexus-airflow-logs-dev` until Terraform)
-- Smoke DAG `nexus_airflow_smoke` under `orchestration/airflow/dags/`
-- Later: DAGs that trigger enabled dlt_dbt_clickhouse / dlt_dbt_spark_iceberg / Branch 3
-- **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors
-- Schedule, retries, clear task boundaries; only **enabled** branches
-- Host dlt/dbt execution bridge is a separate design step (no `.venv` bind-mount)
-
-This is the execution surface Phase 3 agents will target.
+**Phase 1 done when:** all three pipelines run, Airflow orchestrates enabled branches, observability lake receives every run, and you can show data in ClickHouse, Iceberg/MinIO, and Databricks Delta.
 
 ---
 
-## Phase 3 — LLM, multi-agent, RAG, Streamlit
+## Phase 2 — LLM, multi-agent, RAG, Streamlit
 
 ```text
 Streamlit → Planner → RAG (org standards) → ELT spec
@@ -87,25 +93,26 @@ Streamlit → Planner → RAG (org standards) → ELT spec
 ```
 
 - LangGraph specialized agents (not one mega-prompt)
-- RAG: naming, bronze/silver, DLT/dbt/Spark/Databricks, Airflow rules
-- Streamlit: request, retrieved rules, spec, generated artifacts, run status
-- Host on AWS or a Hostinger **VPS** (not shared PHP hosting)
+- RAG (Qdrant): naming, bronze/silver, DLT/dbt/Spark/Databricks, Airflow and **observability contract** rules
+- Supabase: auth and user session memory
+- Streamlit: request, retrieved rules, spec, generated artifacts, run status from lake summaries
+- Validation agent rejects pipelines missing observability hooks or disabled branches
 
-Details: [architecture.md](architecture.md).
+Details: [architecture.md](architecture.md), [platform-showcase-vision.md](platform-showcase-vision.md).
 
 ---
 
-## Phase 4 — Terraform and infra
+## Phase 3 — Terraform and infra
 
 Compose already exists for local services. This phase is **env promotion**.
 
 - Terraform **dev** and **prd** (prd is when `-prd` buckets and `*_prd` databases are created)
-- Repeatable ClickHouse / MinIO / Airflow (and later AWS) wiring
+- Repeatable ClickHouse / MinIO / Airflow / observability stacks (and later AWS) wiring
 - Secrets and networking; no keys in git
 
 ---
 
-## Phase 5 — AWS EMR and Glue (Branches 4 and 5)
+## Phase 4 — AWS EMR and Glue (Branches 4 and 5)
 
 - Branch 4: DLT → S3 → EMR/PySpark → Iceberg → S3 (optional Redshift)
 - Branch 5: DLT → S3 → Glue → Iceberg → S3 (optional Redshift)
@@ -114,7 +121,7 @@ Same on/off router. Do not leave clusters on 24/7 for a demo; run jobs on demand
 
 ---
 
-## Phase 6 — Streaming
+## Phase 5 — Streaming
 
 Kafka + Spark Structured Streaming, after batch (and AWS batch paths) are stable.
 
@@ -135,8 +142,7 @@ Kafka + Spark Structured Streaming, after batch (and AWS batch paths) are stable
 - [x] Python / DLT / dbt versions verified
 - [x] `.venv` permission issue identified and resolved
 - [x] Development architecture documented (`docs/`)
-- [x] dlt_dbt_clickhouse warehouse, dlt, dbt, and observability standards documented
-- [x] dlt_dbt_spark_iceberg folder skeleton and lakehouse standards documented
+- [x] Observability architecture documented (data lake, Airflow Phase 1, reader model)
 
 ### Current versions
 
@@ -149,11 +155,15 @@ dbt-clickhouse  1.10.2
 
 ### Not implemented yet
 
+- [x] Observability foundation: `nexus-telemetry-{env}` bucket, OTel Collector, `common/observability` SDK
+- [x] SigNoz / OpenMetadata reader Compose profiles (`signoz`, `openmetadata`)
+- [ ] Pipeline instrumentation (dlt/dbt/Airflow wired to lake on every run)
 - [ ] DLT ingestion pipeline (dlt_dbt_clickhouse)
 - [ ] ClickHouse bronze / dbt silver + tests
 - [ ] MinIO archive + Iceberg / Polaris / dbt-spark / Trino (dlt_dbt_spark_iceberg)
 - [ ] Databricks / Delta / Unity Catalog (Branch 3)
-- [ ] Airflow source/ELT DAGs over enabled branches (Compose `airflow` profile + smoke DAG exist)
+- [ ] Airflow source/ELT DAGs beyond smoke (profile + smoke DAG exist)
+- [ ] SigNoz / OpenMetadata lake ingest automation (`observability-ingest.sh` implementation)
 - [ ] LLM ELT generator, RAG, Streamlit
 - [ ] Terraform dev/prod
 - [ ] AWS EMR / Glue
@@ -163,10 +173,17 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**Phase 1 Milestone 1:** implement and verify **dlt_dbt_clickhouse** (DLT → MinIO archive + ClickHouse `raw_{source}_dev` → dbt `stg_{source}_dev` / `gold_dev`). No Spark, Databricks, Airflow, or LLM in that slice.
+**Phase 1 Milestone 1:** implement and verify **dlt_dbt_clickhouse** with the **observability data lake contract** and **Airflow** source DAGs:
+
+```text
+REST → dlt → MinIO archive + ClickHouse Bronze → dbt → lake telemetry
+Airflow DAG (same scripts, DAG run_id = NEXUS_RUN_ID)
+```
+
+No Spark, Databricks, or LLM in that slice. Reader stacks (SigNoz, OpenMetadata, Elementary) can follow once lake writes are proven.
 
 Guiding principle:
 
-> **Build a simple, working ELT foundation first. Add advanced technologies only when the foundation is stable and the new technology has a clear purpose.**
+> **Build a simple, working ELT foundation first. Every pipeline run lands on the observability lake. Observability products are readers, not write dependencies.**
 
 The objective is every branch as a reliable, independently selectable capability that an LLM agent can choose from a user’s data-engineering requirement.

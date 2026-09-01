@@ -1,0 +1,49 @@
+# OTel Collector — lake + SigNoz reader forward (when signoz profile is running).
+# Env: NEXUS_ENV, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  awss3:
+    s3uploader:
+      region: ${env:AWS_REGION}
+      s3_bucket: nexus-telemetry-${env:NEXUS_ENV}
+      s3_prefix: otel/
+      s3_force_path_style: true
+    marshaler: otlp_json
+
+  otlp/signoz:
+    endpoint: signoz:4317
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [awss3, otlp/signoz]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [awss3, otlp/signoz]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [awss3, otlp/signoz]

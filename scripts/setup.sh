@@ -99,7 +99,7 @@ else
   echo "Secrets backend: env (.env)"
 fi
 
-echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES}; MinIO always)..."
+echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES}; MinIO + OTel always)..."
 docker compose up -d
 
 echo "Syncing Python environment on the host..."
@@ -141,7 +141,7 @@ fi
 
 echo
 echo "Done."
-echo "  Profiles:   ${COMPOSE_PROFILES} (MinIO always)"
+echo "  Profiles:   ${COMPOSE_PROFILES} (MinIO + OTel always)"
 echo "  ClickHouse: curl http://localhost:8123/ping"
 echo "  MinIO UI:   http://localhost:9001"
 echo "  Polaris:    http://localhost:8181"

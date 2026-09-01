@@ -6,7 +6,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running.
 
-Docker Compose runs **MinIO always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
+Docker Compose runs **MinIO and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
 
 ```text
 git clone
@@ -18,10 +18,13 @@ cp .env.example .env          # or paste your .env
 | --- | --- | --- |
 | Python, uv, DLT, dbt | App / ELT | Host |
 | MinIO | Shared object store (no profile) | Docker |
+| OTel Collector | Observability gateway → `nexus-telemetry-{env}` (always on) | Docker |
+| SigNoz | Trace UI reader (`profile: signoz`) | Docker |
+| OpenMetadata | Data catalog reader (`profile: openmetadata`) | Docker |
 | ClickHouse | Warehouse (`profile: clickhouse`) | Docker |
 | Polaris, Spark Thrift, Trino | Lakehouse (`profile: lakehouse`) | Docker |
 | CloudBeaver | Web database IDE (`profile: cloudbeaver`) | Docker |
-| Airflow | Orchestration (`profile: airflow`, on-demand) | Docker |
+| Airflow | Orchestration (`profile: airflow`, Phase 1) | Docker |
 | HashiCorp Vault | Secrets (`profile: vault` when `NEXUS_SECRETS_BACKEND=vault`) | Docker |
 | Kafka (later) | Streaming (`kafka` profile) | Docker |
 
@@ -81,7 +84,7 @@ If `docker` is not found in WSL, integration is off.
 NEXUS_ENV=dev
 # NEXUS_RUN_ID=   # set per load; do not reuse one eternal value
 
-# Which optional stacks to start. MinIO always runs (not a profile).
+# Which optional stacks to start. MinIO + otel-collector always run (not a profile).
 # clickhouse | lakehouse | cloudbeaver | airflow — comma-separated for more than one.
 # Airflow is on-demand: omit from the default, or: docker compose --profile airflow up -d
 COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver
@@ -141,7 +144,7 @@ One file at the repo root. **Profiles name stacks**, not every container. MinIO 
 
 | Profile | Starts | Maps to |
 | --- | --- | --- |
-| *(none)* | MinIO | Shared object store |
+| *(none)* | MinIO, otel-collector | Shared object store + observability gateway |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `cloudbeaver` | CloudBeaver web database IDE | Database administration and SQL exploration |

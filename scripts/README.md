@@ -24,13 +24,13 @@ cp .env.example .env   # or paste your .env
 
 | Kind | Profiles / services | Tied to a branch? |
 | --- | --- | --- |
-| Always | MinIO (no profile) | No — shared |
+| Always | MinIO + otel-collector (no profile) | No — shared |
 | Platform | `vault`, `airflow`, `cloudbeaver` | No |
 | Branch | `clickhouse`, `lakehouse` | Yes — `dlt_dbt_clickhouse` / `dlt_dbt_spark_iceberg` |
 
 Set branch stacks in `.env` `COMPOSE_PROFILES` (e.g. `clickhouse,lakehouse`). Do **not** put `vault` in `COMPOSE_PROFILES` only for secrets — use `NEXUS_SECRETS_BACKEND=vault`; `start.sh` starts Vault as platform infra.
 
-`start.sh` sources `.env` and, when Vault is enabled, `.nexusflow/secrets.env`. See [docs/vault.md](../docs/vault.md).
+`start.sh` sources `.env` for config. When `NEXUS_SECRETS_BACKEND=vault`, commands that need credentials call `vault-ensure.sh` then source `.nexusflow/secrets.env` (passwords never from `.env`). See [docs/vault.md](../docs/vault.md).
 
 After `docker compose down` and bringing the **lakehouse** profile back up, Polaris forgets Iceberg table registrations (MinIO data is kept). Restore Trino access:
 

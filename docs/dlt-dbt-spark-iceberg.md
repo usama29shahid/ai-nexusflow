@@ -21,7 +21,7 @@ REST API
             → Trino reads Iceberg (BI / analysts)
 ```
 
-Until Airflow exists (Phase 2), the path runs on the host with `uv run` against Docker Spark/Thrift (added in Milestone 2). Generate **one `run_id` per local run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
+Until source DAGs exist, the path runs on the host with `uv run` or via Airflow (Phase 1) against Docker Spark/Thrift (Milestone 2). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
 
 Spark writes and maintains Iceberg (industry lakehouse pattern). Trino does **not** run dbt. Do not use the dbt-trino adapter on this capability.
 
@@ -54,7 +54,8 @@ Until Terraform, only `-dev` exists.
 | `nexus-dlt-dbt-clickhouse-dev` | Branch 1 JSONL archive. Not this capability. |
 | `nexus-dlt-dbt-spark-iceberg-archive-dev` | This capability’s raw API archive (replay). Not Iceberg. |
 | `nexus-dlt-dbt-spark-iceberg-dev` | Iceberg warehouse root for Polaris catalog `nexus_dev`. |
-| `nexus-airflow-logs-dev` | Phase 2 Airflow remote task logs. Not data. |
+| `nexus-airflow-logs-dev` | Airflow remote task logs (Phase 1). Not data. |
+| `nexus-telemetry-dev` | Observability data lake (Phase 1). Not raw API archive. |
 
 Archive keys (same logic as the warehouse capability; different bucket):
 

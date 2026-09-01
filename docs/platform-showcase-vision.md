@@ -8,7 +8,7 @@
 
 ## Purpose and status
 
-This document is a future reference for the Phase 3 LLM/RAG capability. It
+This document is a future reference for the Phase 2 LLM/RAG capability. It
 describes the intended logic for turning a natural-language ELT requirement
 into reviewed, validated, and executable artifacts, plus the information a
 future Streamlit portfolio/control dashboard may present.
@@ -25,9 +25,7 @@ roadmap documents remain authoritative:
 - [Observability](observability.md)
 - [Environments](environments.md)
 
-The capability depends on the earlier phases being runnable. Phase 1 provides
-the data branches, and Phase 2 provides Airflow orchestration. UI work is last;
-it must not delay the first working ELT vertical slice.
+The capability depends on the earlier phases being runnable. Phase 1 delivers the data branches, Airflow orchestration, and the observability data lake. This vision must not delay the first working ELT vertical slice.
 
 ## Illustrative user requirement
 
@@ -318,14 +316,13 @@ The dashboard may link to:
 
 ## Phase boundaries
 
-This vision belongs to Phase 3 and must not pull future work into the current
-vertical slice.
+This vision belongs to **Phase 2** (LLM) and must not pull future work into the current vertical slice.
 
 ### Before this capability
 
-- Verify `dlt_dbt_clickhouse` end to end.
+- Verify `dlt_dbt_clickhouse` end to end with observability lake writes.
 - Verify the lakehouse capability and Branch 3 according to the roadmap.
-- Add Airflow orchestration over enabled capabilities.
+- Airflow orchestration over enabled capabilities (Phase 1).
 - Establish stable dlt, dbt, run-ID, artifact, and observability contracts.
 
 ### Deferred by this document

@@ -76,7 +76,7 @@ The dlt unit is one endpoint resource: **one script per endpoint**. A different 
 
 Script name, dlt resource name, Bronze table name, archive `{endpoint}` segment, and dbt `source()` table name use the **same** resource identifier. Do not use opaque job names such as `pipe_one`.
 
-| Resource | Script (when implemented) | Bronze table | Archive segment | Airflow task id (Phase 2) |
+| Resource | Script (when implemented) | Bronze table | Archive segment | Airflow task id (Phase 1) |
 |---|---|---|---|---|
 | `commits` | `commits.py` | `commits` | `github/commits/...` | `github_commits` |
 | `pull_requests` | `pull_requests.py` | `pull_requests` | `github/pull_requests/...` | `github_pull_requests` |
@@ -228,7 +228,7 @@ Do not retry indefinitely. Ordinary 401, permission-related 403, 404, and 422 re
 
 A 403 response accompanied by GitHub rate-limit headers is handled as rate limiting: use the reset information or documented delay before making another request. A normal permission-related 403 must not be treated as a transient failure.
 
-dlt HTTP retries and future Airflow task retries are separate concerns. Airflow is not part of this Phase 1 implementation.
+dlt HTTP retries and Airflow task retries are separate concerns. Airflow task retry policy belongs in the DAG definition, not in this GitHub ingestion standard.
 
 ### Rate limits
 

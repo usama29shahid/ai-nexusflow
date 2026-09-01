@@ -81,7 +81,7 @@ Use dlt HTTP retry behavior (exponential backoff on 429 and 5xx). Set:
 - **429:** honor `Retry-After` when present.
 - Optional **rate limiter** if the API publishes a quota.
 
-Airflow (Phase 2) retries the **task**. dlt retries **HTTP calls inside** the task. Those are different layers; both are valid. Do not build a third retry daemon.
+Airflow (Phase 1) retries the **task**. dlt retries **HTTP calls inside** the task. Those are different layers; both are valid. Do not build a third retry daemon.
 
 ---
 

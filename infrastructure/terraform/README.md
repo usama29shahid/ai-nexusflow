@@ -1,3 +1,3 @@
 # terraform
 
-Repeatable **dev** and **prod** environments. Phase 4. Not implemented yet.
+Repeatable **dev** and **prod** environments. Phase 3. Not implemented yet.

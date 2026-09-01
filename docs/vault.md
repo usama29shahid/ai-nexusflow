@@ -223,7 +223,7 @@ Store snapshots **off the VPS** (encrypted object storage or local secure copy).
 
 ### After VPS reboot
 
-Vault seals on restart. `./scripts/start.sh` (including `smoke`, `dbt`, and `all`) **unseals Vault and refreshes Agent output** when `NEXUS_SECRETS_BACKEND=vault`.
+Vault seals on restart. Commands that need credentials (`smoke`, `dbt`, stack starts) run **`scripts/vault-ensure.sh`** (fast path: unseal if sealed, ensure Agent, source `secrets.env`). Falls back to full **`vault-bootstrap.sh`** on first run or missing secrets. Infra-only commands (`stop-signoz`, etc.) skip Vault. Explicit full bootstrap: `./scripts/start.sh vault`.
 
 To run Vault only:
 
@@ -288,7 +288,7 @@ Fail clearly in dlt when a required secret env var is missing (e.g. `GITHUB_TOKE
 | Done | This document |
 | Done | `docker/vault/` config, Agent template, policy |
 | Done | Vault + vault-agent services in `docker-compose.yml` (`profile: vault`) |
-| Done | `scripts/vault-bootstrap.sh`, `scripts/load-secrets.sh` |
+| Done | `scripts/vault-ensure.sh`, `scripts/vault-bootstrap.sh`, `scripts/load-secrets.sh` |
 | Done | Verified: `dlt_clickhouse_smoke` with Vault-injected secrets |
 | Planned | GitHub ingestion using Vault-injected `GITHUB_TOKEN` |
 

@@ -5,9 +5,14 @@
 #   airflow     — Airflow (on-demand orchestration)
 #   vault       — HashiCorp Vault + Agent (NEXUS_SECRETS_BACKEND=vault)
 #
-# Both branches: COMPOSE_PROFILES=clickhouse,lakehouse in .env
+# Always (no profile): MinIO, minio-init, otel-collector
+# Optional readers: signoz, openmetadata (add to COMPOSE_PROFILES or ./scripts/start.sh observability)
 # Airflow: add airflow to COMPOSE_PROFILES or: docker compose --profile airflow up -d
 # Python/dlt/dbt run on the host — not in this file.
+
+include:
+  - path: ./docker/signoz/compose.yml
+  - path: ./docker/openmetadata/compose.yml
 
 x-airflow-common: &airflow-common
   image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.5-python3.12}
@@ -213,6 +218,37 @@ services:
       - ./docker/minio/init/create-buckets.sh:/create-buckets.sh:ro
 
     entrypoint: ["/bin/sh", "/create-buckets.sh"]
+
+  # ============================================================
+  # OTel Collector — observability gateway (always on; no profile)
+  # ============================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    container_name: otel-collector
+    restart: unless-stopped
+
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+    ports:
+      - "127.0.0.1:${OTEL_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${OTEL_HTTP_PORT:-4318}:4318"
+      - "127.0.0.1:${OTEL_HEALTH_PORT:-13133}:13133"
+
+    environment:
+      NEXUS_ENV: ${NEXUS_ENV:-dev}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_ENDPOINT_URL: http://minio:9000
+
+    volumes:
+      - ./docker/otel/${OTEL_COLLECTOR_CONFIG:-collector-config.yaml}:/etc/otelcol/config.yaml:ro
+
+    command: ["--config=/etc/otelcol/config.yaml"]
+
+    # Distroless image — no wget/curl; health is checked via published :13133 from the host.
 
   # ============================================================
   # Apache Polaris — Iceberg REST catalog (profile: lakehouse)

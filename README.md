@@ -109,6 +109,6 @@ Empty capability folders have short READMEs. Fill them when that phase has real 
 - [dlt_dbt_spark_iceberg](docs/dlt-dbt-spark-iceberg.md) — Polaris, Iceberg, dbt-spark, Trino
 - [dlt extraction](docs/dlt-extraction.md) — REST auth, pagination, retries, dual load
 - [dbt modeling](docs/dbt-modeling.md) — medallion + dimensional DAG
-- [Observability](docs/observability.md) — Airflow logs, dlt/dbt, no custom log stack
+- [Observability](docs/observability.md) — observability data lake, Airflow Phase 1, dlt/dbt emit contract, swappable readers (SigNoz, OpenMetadata, Elementary)
 - [Roadmap](docs/roadmap.md) — phases, status, next milestone
 - [Setup](docs/setup.md) — WSL / VPS / EC2, Docker, uv, troubleshooting

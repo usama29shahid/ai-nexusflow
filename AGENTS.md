@@ -18,13 +18,15 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 
 ## Current implementation priority
 
-The repository is a documented skeleton. The immediate task is Phase 1, Milestone 1 only:
+The repository is a documented skeleton. The immediate task is Phase 1, Milestone 1:
 
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
+              → observability data lake (MinIO nexus-telemetry-{env})
+Airflow DAG → same dlt/dbt on host (DAG run_id = NEXUS_RUN_ID)
 ```
 
-Implement and verify `dlt_dbt_clickhouse` before starting Spark/Iceberg, Databricks, Airflow, LLM/RAG, Terraform, AWS, or streaming work. Do not fill future-phase folders with speculative implementations.
+Implement and verify `dlt_dbt_clickhouse` and the observability write contract before starting Spark/Iceberg, Databricks, LLM/RAG, Terraform, AWS, or streaming work. Airflow smoke/source DAGs are part of Milestone 1, not a later phase. Do not fill future-phase folders with speculative implementations.
 
 ## Capability boundaries
 
@@ -37,9 +39,9 @@ Implement and verify `dlt_dbt_clickhouse` before starting Spark/Iceberg, Databri
 ## Local development
 
 - Run Python, `uv`, dlt, and dbt on the host from the repository root; do not run `uv sync` in a bind-mounted Compose container.
-- Docker Compose runs infrastructure: MinIO always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow on-demand via `airflow`; CloudBeaver via `cloudbeaver`.
+- Docker Compose runs infrastructure: MinIO + OTel Collector always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow on-demand via `airflow`; CloudBeaver via `cloudbeaver`; SigNoz / OpenMetadata via `signoz` / `openmetadata`.
 - Use `.env` for local configuration; secrets on the VPS come from HashiCorp Vault via Agent (see `docs/vault.md`). Local WSL may use `NEXUS_SECRETS_BACKEND=env` until Vault is running. Never commit `.env`, `profiles.yml`, credentials, API keys, or tokens.
-- Default environment is `NEXUS_ENV=dev`. `prd` is a Phase 4/Terraform naming contract, not a second local stack.
+- Default environment is `NEXUS_ENV=dev`. `prd` is a Phase 3/Terraform naming contract, not a second local stack.
 - dbt does not load `.env` itself; source it before dbt commands. Keep dbt `--target` equal to `NEXUS_ENV`.
 
 ## Ingestion rules
@@ -63,15 +65,18 @@ Implement and verify `dlt_dbt_clickhouse` before starting Spark/Iceberg, Databri
 - Keep Bronze append-only; model “current” or as-of logic downstream. Prefer natural or hashed keys over serial surrogate keys.
 - Add dbt tests appropriate to type, keys, uniqueness, relationships, and accepted values. Do not add a separate data-quality platform for the first milestone.
 
-## Orchestration and observability (future phases)
+## Orchestration and observability
 
-- Airflow is Phase 2 orchestration, not a transformation backend. Use one DAG per source, endpoint-level dlt tasks, then dbt selectors for downstream models.
-- Airflow owns task scheduling, retries, and operational logs; dlt owns load telemetry; dbt owns run artifacts. Do not build a custom logging service or use a data table as the operational source of truth.
-- Once Airflow exists, its DAG `run_id` replaces the local generator while preserving the same shared-run-ID contract.
+- Airflow is **Phase 1** orchestration, not a transformation backend. Use one DAG per source, endpoint-level dlt tasks, then dbt selectors; final `observability_publish` task for lake artifact upload.
+- **Observability data lake:** MinIO `nexus-telemetry-{env}` is the system of record. Pipeline code uses `common/observability` only — never SigNoz, OpenMetadata, or Elementary directly.
+- Airflow owns task scheduling, retries, and remote stdout (`nexus-airflow-logs-{env}`); dlt owns load telemetry in warehouse `_dlt_*` tables; dbt owns local `target/` plus artifact copy to the lake.
+- SigNoz, OpenMetadata, and Elementary are **readers** with their own native DBs (indexes). Ingest from the lake; do not replace their storage with MinIO.
+- Airflow DAG `run_id` = `NEXUS_RUN_ID` when orchestrated; `local-{timestamp}` for manual runs until then.
+- Do not build a custom logging service or use a ClickHouse table as the ops system of record.
 
 ## Future LLM/RAG behavior
 
-- Build LLM/RAG only in Phase 3, after Branches 1–3 and Airflow are runnable.
+- Build LLM/RAG only in **Phase 2**, after Phase 1 (branches, Airflow, observability lake) is runnable.
 - The LLM reasons over user requirements; RAG supplies organization-specific standards. Do not invent organization conventions or unsupported platform capabilities.
 - Keep planner, ingestion, transformation, platform/branch, workflow, and validation responsibilities separate. Validation must reject disabled branches, unavailable runtimes, invalid schedules, and standards violations.
 

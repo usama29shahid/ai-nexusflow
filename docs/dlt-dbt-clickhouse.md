@@ -19,7 +19,7 @@ REST API
                       → optional published
 ```
 
-Until Airflow exists (Phase 2), the same path runs on the host with `uv run`. Generate **one `run_id` per local run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. Later, Airflow supplies the DAG `run_id`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
+Until source DAGs exist, the same path runs on the host with `uv run` or via Airflow (Phase 1). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
 
 ---
 
@@ -46,7 +46,8 @@ Same MinIO **service**. Isolation is **one bucket per capability per env**. Unti
 | `nexus-dlt-dbt-clickhouse-dev` | This capability’s raw API archive (replay). Not Iceberg. |
 | `nexus-dlt-dbt-spark-iceberg-archive-dev` | Lakehouse JSONL archive (`dlt_dbt_spark_iceberg`). Not this Bronze. |
 | `nexus-dlt-dbt-spark-iceberg-dev` | Iceberg warehouse for Polaris catalog `nexus_dev`. Not this Bronze. |
-| `nexus-airflow-logs-dev` | Phase 2 Airflow remote task logs. Not data. |
+| `nexus-airflow-logs-dev` | Airflow remote task logs (Phase 1). Not data. |
+| `nexus-telemetry-dev` | Observability data lake (Phase 1). Not raw API archive. |
 
 Later: the same names with `-prd`.
 
@@ -142,7 +143,7 @@ A URL param is an extract variant. A **named** dim in the requirement is a model
 
 One correlation id for a run, used by **both dlt and dbt**. Do not invent a second id system.
 
-**Until Airflow (Phase 2):** generate one id per local invocation — `local-{utc_timestamp}` or a UUID. Set `NEXUS_RUN_ID` (or equivalent) and pass the **same** value into dlt (Bronze column) and dbt (`var('run_id')`). Do **not** reuse a single eternal string like `"default"` on every load — Bronze is append-only history.
+**Manual runs:** generate one id per invocation — `local-{utc_timestamp}` or a UUID. **Airflow runs:** use the DAG `run_id` as `NEXUS_RUN_ID`. Pass the **same** value into dlt (Bronze column) and dbt (`var('run_id')`). Do **not** reuse a single eternal string like `"default"` on every load — Bronze is append-only history.
 
 If dbt is run alone, `var('run_id')` may fall back to `'local'` for that ad-hoc run. **Loads** must still get a unique id.
 

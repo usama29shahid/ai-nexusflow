@@ -8,14 +8,18 @@ Quick reference when you forget start/stop steps. For first-time install see [se
 
 | Kind | Compose profile | Services |
 | --- | --- | --- |
-| **Always** | *(none)* | MinIO, minio-init |
+| **Always** | *(none)* | MinIO, minio-init, otel-collector |
 | **Branch — warehouse** | `clickhouse` | ClickHouse |
 | **Branch — lakehouse** | `lakehouse` | Polaris, polaris-setup, Spark Thrift, Trino |
 | **Platform** | `cloudbeaver` | CloudBeaver |
-| **Platform** | `airflow` | Airflow (postgres, webserver, scheduler) |
+| **Platform** | `airflow` | Airflow (postgres, webserver, scheduler) — Phase 1 orchestration |
+| **Platform** | `signoz` | SigNoz — pipeline trace reader |
+| **Platform** | `openmetadata` | OpenMetadata — data catalog reader |
 | **Platform** | `vault` | Vault, vault-agent (when `NEXUS_SECRETS_BACKEND=vault`) |
 
 Vault is **not** a branch. `start.sh` starts it when secrets backend is `vault`.
+
+**Observability (Phase 1):** MinIO bucket `nexus-telemetry-{env}` is the data lake. OTel Collector is always-on with MinIO (independent of branches). SigNoz and OpenMetadata are on-demand reader profiles. See [observability.md](observability.md).
 
 ---
 
@@ -67,6 +71,20 @@ Do **not** use `down -v` unless you intend to **delete** MinIO / ClickHouse data
 
 ---
 
+## Stop observability readers (keep MinIO + OTel + branches)
+
+SigNoz and OpenMetadata are on-demand. Stop them without tearing down the rest of the stack:
+
+```bash
+./scripts/start.sh stop-signoz          # revert OTel to lake-only export
+./scripts/start.sh stop-openmetadata
+./scripts/start.sh stop-observability   # both readers
+```
+
+MinIO and `otel-collector` stay running. When SigNoz stops, `start.sh` switches the collector back to `collector-config.yaml` (no forward to `signoz:4317`).
+
+---
+
 ## dlt / dbt (secrets loaded automatically)
 
 ```bash
@@ -104,7 +122,7 @@ Wait ~1 minute for Trino if the script says it is still initializing.
 
 ## Vault after VPS / container reboot
 
-Vault seals on restart. **`./scripts/start.sh`** (including `smoke`, `dbt`, and `all`) unseals Vault and refreshes `.nexusflow/secrets.env` when `NEXUS_SECRETS_BACKEND=vault`.
+Vault seals on restart. Commands that need credentials (`smoke`, `dbt`, stack starts) run **`scripts/vault-ensure.sh`** (unseal + Agent if needed) then source `.nexusflow/secrets.env`. Infra-only stops skip Vault. Full bootstrap: `./scripts/start.sh vault`.
 
 Vault only (no other stacks):
 
@@ -143,6 +161,9 @@ First time ever     →  ./scripts/setup.sh
 Start all stacks    →  ./scripts/start.sh all
 Start .env stacks   →  ./scripts/start.sh
 Stop all            →  ./scripts/start.sh down
+Stop SigNoz only    →  ./scripts/start.sh stop-signoz
+Stop OM only        →  ./scripts/start.sh stop-openmetadata
+Stop both readers   →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
 dlt smoke           →  ./scripts/start.sh smoke

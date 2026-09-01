@@ -1,3 +1,3 @@
 # terraform/environments/prod
 
-Prod environment. Phase 4. Not implemented yet.
+Prod environment. Phase 3. Not implemented yet.

@@ -1,6 +1,6 @@
 # Environments (dev / prd)
 
-`env` is `dev` or `prd` (lowercase in object names). **Until Terraform (Phase 4), `dev` is the only environment.** Compose, dlt, dbt, MinIO, ClickHouse, and later Polaris all use `dev`. `prd` is a naming contract for later — do not stand up a second Compose “prod stack” in Phase 1.
+`env` is `dev` or `prd` (lowercase in object names). **Until Terraform (Phase 3), `dev` is the only environment.** Compose, dlt, dbt, MinIO, ClickHouse, and later Polaris all use `dev`. `prd` is a naming contract for later — do not stand up a second Compose “prod stack” in Phase 1.
 
 **Same pattern on every capability.** Named backends use capability folders (`dlt_dbt_clickhouse`, `dlt_dbt_spark_iceberg`). Numbered folders remain for backends that are not named yet (`branch_3_databricks`, …).
 

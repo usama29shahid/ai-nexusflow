@@ -18,8 +18,11 @@ mc mb --ignore-existing "nexus/nexus-dlt-dbt-clickhouse-${NEXUS_ENV}"
 mc mb --ignore-existing "nexus/nexus-dlt-dbt-spark-iceberg-archive-${NEXUS_ENV}"
 mc mb --ignore-existing "nexus/nexus-dlt-dbt-spark-iceberg-${NEXUS_ENV}"
 
-# Phase 2 Airflow remote task logs (not data)
+# Phase 1 Airflow remote task logs (not data)
 mc mb --ignore-existing "nexus/nexus-airflow-logs-${NEXUS_ENV}"
+
+# Observability data lake (OTel batches, events, dbt artifacts, run summaries)
+mc mb --ignore-existing "nexus/nexus-telemetry-${NEXUS_ENV}"
 
 echo "MinIO buckets:"
 mc ls nexus/

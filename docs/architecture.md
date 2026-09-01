@@ -2,7 +2,7 @@
 
 AI-NexusFlow is a **multi-branch data engineering execution platform**. The same ingestion requirement can be routed to the most appropriate implementation. It is not five unrelated pipelines.
 
-The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. It is built in Phase 3, after Branches 1–3 run and Airflow can orchestrate them. Branches 4–5 (EMR, Glue) follow Terraform.
+The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. It is built in **Phase 2**, after Phase 1 (Branches 1–3, Airflow, and the observability data lake) is runnable. Branches 4–5 (EMR, Glue) follow Terraform.
 
 End state:
 
@@ -250,15 +250,15 @@ Only enabled capabilities participate. Combinations can change over time (for ex
 
 ## Cross-cutting layers
 
-**Airflow (Phase 2)** orchestrates enabled capabilities. It is not another processing backend. **dlt_dbt_clickhouse**: **one DAG per source**, endpoint dlt tasks, then dbt with selectors. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). See [observability.md](observability.md).
+**Airflow (Phase 1)** orchestrates enabled capabilities. It is not another processing backend. **dlt_dbt_clickhouse**: **one DAG per source**, endpoint dlt tasks, then dbt with selectors. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). Pipeline telemetry goes to the observability data lake (`nexus-telemetry-{env}`). See [observability.md](observability.md).
 
 ```text
 Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud jobs)
 ```
 
-**Streaming (Phase 6)** — Kafka → Spark Structured Streaming → Iceberg / Delta / ClickHouse. Add only after batch is stable.
+**Streaming (Phase 5)** — Kafka → Spark Structured Streaming → Iceberg / Delta / ClickHouse. Add only after batch is stable.
 
-**Terraform (Phase 4)** — dev and prod environments; not the first Docker Compose setup.
+**Terraform (Phase 3)** — dev and prod environments; not the first Docker Compose setup.
 
 ---
 
@@ -273,12 +273,14 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud job
 | *(none)* | MinIO | Shared object store |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
-| `airflow` | Airflow (on-demand) | Orchestration |
+| `airflow` | Airflow (on-demand) | Orchestration (Phase 1) |
+| `signoz` | SigNoz | Pipeline trace reader |
+| `openmetadata` | OpenMetadata | Data catalog reader |
 | `vault` | HashiCorp Vault + Agent | Secrets — [vault.md](vault.md) |
 
 Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, or comma-separated). Airflow is optional; start with `docker compose --profile airflow up -d` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
 
-**Production (later):** optional CI image for Python. Terraform in Phase 4. Not part of Phase 1.
+**Production (later):** optional CI image for Python. Terraform in Phase 3. Not part of Phase 1.
 
 ---
 
@@ -343,7 +345,7 @@ ai-nexusflow/
 | `branches/dlt_dbt_spark_iceberg/` | Lakehouse ELT (dlt + dbt-spark + Iceberg) |
 | `orchestration/airflow/` | DAGs for enabled branches |
 | `agents/` | Planner, router, generator, validator, executor |
-| `ui/` | Streamlit (Phase 3) |
+| `ui/` | Streamlit (Phase 2) |
 | `docker/` | Init scripts; Compose file stays at root (profiles in that file) |
 | `infrastructure/` | Terraform, AWS, Databricks |
 | `config/` | Env and branch activation |

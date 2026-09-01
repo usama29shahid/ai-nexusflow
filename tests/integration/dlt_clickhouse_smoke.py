@@ -110,6 +110,18 @@ def main() -> None:
     fs_info = fs_pipeline.run(rows, table_name="smoke")
     print("MinIO archive load:", fs_info)
     print(f"  bucket={bucket} endpoint={minio_endpoint}")
+
+    from common.observability.publish import publish_dlt_load
+
+    lake_uri = publish_dlt_load(
+        branch="dlt_dbt_clickhouse",
+        component="dlt",
+        pipeline_name="dlt_clickhouse_smoke",
+        status="ok",
+        run_id=run_id,
+        row_count=len(rows),
+    )
+    print(f"  observability lake: {lake_uri}")
     print(f"  run_id={run_id}")
     print("OK")
 

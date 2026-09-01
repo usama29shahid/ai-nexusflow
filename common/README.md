@@ -1,5 +1,7 @@
 # common
 
-Shared Python helpers: config loading, logging, schemas, utilities.
+Shared Python helpers used across branches (not tied to one execution branch).
 
-Phase: fill when the first DLT pipeline needs shared code. Not implemented yet.
+- `common/observability/` — observability data lake SDK (MinIO `nexus-telemetry-{env}`). See [docs/observability.md](../docs/observability.md).
+
+Import from repo root: `uv run python -c "from common.observability import ..."` or use `./scripts/start.sh` (sets `PYTHONPATH` to repo root).
