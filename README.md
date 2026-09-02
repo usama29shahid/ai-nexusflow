@@ -2,7 +2,7 @@
 
 Multi-branch data engineering platform that will later become an **organization-aware ELT generator** (LLM + RAG + Airflow).
 
-The same ingestion requirement can be routed to different backends. It is not five unrelated pipelines. The LLM is a **consumer of capabilities** you actually run — it does not invent a stack that was never built.
+The same ingestion requirement can be routed to different backends. It is one platform with two selectable backends, not a pile of unrelated pipelines. The LLM is a **consumer of capabilities** you actually run — it does not invent a stack that was never built.
 
 ```text
 User request → LLM + RAG (org rules) → select enabled branch → Airflow → ELT → validate
@@ -12,9 +12,6 @@ User request → LLM + RAG (org rules) → select enabled branch → Airflow →
 | --- | --- | --- |
 | **dlt_dbt_clickhouse** | dlt → ClickHouse → dbt | ClickHouse |
 | **dlt_dbt_spark_iceberg** | dlt → Iceberg (Polaris) → dbt-spark → Trino | Iceberg on MinIO |
-| 3 | DLT → Databricks → Delta → Unity Catalog | Delta |
-| 4 | DLT → S3 → EMR → Iceberg | S3 (+ optional Redshift) |
-| 5 | DLT → S3 → Glue → Iceberg | S3 (+ optional Redshift) |
 
 Platform design: [docs/architecture.md](docs/architecture.md). Warehouse: [docs/dlt-dbt-clickhouse.md](docs/dlt-dbt-clickhouse.md). Lakehouse: [docs/dlt-dbt-spark-iceberg.md](docs/dlt-dbt-spark-iceberg.md).
 
@@ -24,12 +21,9 @@ Platform design: [docs/architecture.md](docs/architecture.md). Warehouse: [docs/
 
 | Phase | What ships |
 | --- | --- |
-| **1** | Branches **1 → 2 → 3**, each up and running (in that order) |
-| **2** | Airflow over enabled branches |
+| **1** | ClickHouse (M1) + Spark/Iceberg (M2) + Airflow + observability producers (lake writes on every run) |
+| **2** | Terraform (dev/prd) + GitHub Actions + reader tools (SigNoz, OpenMetadata, Elementary) |
 | **3** | Multi-agent LangGraph, RAG, Streamlit (live app) |
-| **4** | Terraform dev/prod and infra |
-| **5** | AWS EMR and Glue (Branches 4 and 5) |
-| **6** | Kafka + Spark Structured Streaming |
 
 Details and checklists: [docs/roadmap.md](docs/roadmap.md).
 
@@ -84,15 +78,12 @@ ai-nexusflow/
 ├── ingestion/                  # optional shared contracts; dlt lives per branch
 ├── branches/
 │   ├── dlt_dbt_clickhouse/
-│   ├── dlt_dbt_spark_iceberg/
-│   ├── branch_3_databricks/
-│   ├── branch_4_emr/
-│   └── branch_5_glue/
+│   └── dlt_dbt_spark_iceberg/
 ├── orchestration/airflow/
 ├── agents/
 ├── ui/
 ├── docker/                     # init scripts; compose stays at root
-├── infrastructure/             # Terraform, AWS, Databricks
+├── infrastructure/             # Terraform (Phase 2)
 ├── tests/
 └── docs/
 ```

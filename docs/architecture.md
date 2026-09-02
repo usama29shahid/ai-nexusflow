@@ -1,8 +1,8 @@
 # Architecture
 
-AI-NexusFlow is a **multi-branch data engineering execution platform**. The same ingestion requirement can be routed to the most appropriate implementation. It is not five unrelated pipelines.
+AI-NexusFlow is a **multi-branch data engineering execution platform**. The same ingestion requirement can be routed to the most appropriate implementation. It is one platform with two selectable backends, not a pile of unrelated pipelines.
 
-The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. It is built in **Phase 2**, after Phase 1 (Branches 1–3, Airflow, and the observability data lake) is runnable. Branches 4–5 (EMR, Glue) follow Terraform.
+The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. It is built in **Phase 3**, after Phase 1 (two capabilities, Airflow, and observability producers) is runnable and Phase 2 (Terraform, CI, reader tools) supports the ops story.
 
 End state:
 
@@ -44,17 +44,7 @@ LLM selects dlt_dbt_spark_iceberg
 dlt → MinIO archive + Iceberg Bronze (Polaris) → dbt-spark → Trino
 ```
 
-```text
-"Ingest this REST API into Redshift"
-        ↓
-LLM gathers more context
-        ↓
-   Branch 4 (EMR)  or  Branch 5 (Glue)
-        ↓
-     Redshift
-```
-
-Routing can depend on volume, distributed processing, serverless vs cluster, existing infra, cost, performance, and organization rules. The agent must not select a **disabled** branch.
+Routing can depend on volume, distributed processing, existing infra, cost, performance, and organization rules. The agent must not select a **disabled** branch.
 
 ---
 
@@ -96,7 +86,7 @@ Execution
 Data Quality / Result
 ```
 
-The generator must **not invent organization conventions**. The user may give `RAW`, `TRANS`, and `daily at 6 AM`; RAG supplies naming, bronze/silver/gold, flattening, deduplication, incremental loading, shared vs domain models, tool selection, serverless rules, and Airflow standards.
+The generator must **not invent organization conventions**. The user may give `RAW`, `TRANS`, and `daily at 6 AM`; RAG supplies naming, bronze/silver/gold, flattening, deduplication, incremental loading, shared vs domain models, tool selection, and Airflow standards.
 
 Warehouse capability rules (DAG vs ladder, archive, dlt vs dbt, run ids): [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-extraction.md](dlt-extraction.md), [dbt-modeling.md](dbt-modeling.md), [observability.md](observability.md).
 
@@ -128,11 +118,11 @@ Data-layer rules
 └── Incremental processing
 
 Technology rules
-├── DLT, dbt, Spark, Databricks, EMR, Glue
+├── DLT, dbt, Spark / Iceberg / Trino
 └── Tool-selection rules
 
 Platform rules
-├── Serverless, runtime, infrastructure, environment
+├── Runtime, infrastructure, environment
 
 Orchestration rules
 ├── Airflow DAGs, schedule, retries, dependencies, alerting
@@ -168,61 +158,49 @@ USER → PLANNER AGENT → RAG / Rules → ELT PLAN / SPECIFICATION
 | --- | --- |
 | **Planner** | Source, target, layers, transformations, schedule, scale, constraints, required capabilities. Does not generate every implementation detail. |
 | **Ingestion** | REST pagination, auth, retries, incremental, DLT dual load (MinIO archive + Bronze). ClickHouse Bronze for **dlt_dbt_clickhouse**; Iceberg Bronze via Polaris for **dlt_dbt_spark_iceberg**. Separate dlt code per capability. |
-| **Transformation** | **dlt_dbt_clickhouse**: dbt-clickhouse. **dlt_dbt_spark_iceberg**: dbt-spark, **Thrift default** for SQL models; PySpark only for complex `.py` models. Later branches: EMR/Glue PySpark, Databricks. |
-| **Branch / Platform** | ClickHouse warehouse → **dlt_dbt_clickhouse**. Open Iceberg lakehouse → **dlt_dbt_spark_iceberg**. Redshift + Spark/serverless/scale → Branch 4 or 5. |
+| **Transformation** | **dlt_dbt_clickhouse**: dbt-clickhouse. **dlt_dbt_spark_iceberg**: dbt-spark, **Thrift default** for SQL models; PySpark only for complex `.py` models. |
+| **Branch / Platform** | ClickHouse warehouse → **dlt_dbt_clickhouse**. Open Iceberg lakehouse → **dlt_dbt_spark_iceberg**. |
 | **Validation** | Naming, layers, flattening, required tests, branch enabled, runtime available, schedule valid. Fail returns to planning/generation. |
 | **Workflow** | Airflow DAG from schedule plus org rules. **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors. Not one DAG per URL. |
 
-The five branches are **capabilities** (execution backends), not fixed pipelines. The generator considers target, scale, compute/storage, open-source vs managed vs serverless, cost, org rules, and **enabled** branches.
+The two branches are **capabilities** (execution backends), not fixed pipelines. The generator considers target, scale, compute/storage, cost, org rules, and **enabled** branches.
 
 ---
 
-## Five independent branches
+## Two independent capabilities
 
-All backends start from the **same REST APIs**. Primary source: **Route API** (`route` — ecommerce catalog and later transactional entities). Future secondary sources (for example DataForSEO) keep isolated Bronze/staging and may feed shared Gold. Each capability owns **its own** dlt and dbt code. Branch 3, 4, and 5 are **not** children of dlt_dbt_clickhouse or dlt_dbt_spark_iceberg. Source contract: [route-ingestion.md](route-ingestion.md).
+All backends start from the **same REST APIs**. Primary source: **Route API** (`route` — ecommerce catalog and later transactional entities). Future secondary sources (for example DataForSEO) keep isolated Bronze/staging and may feed shared Gold. Each capability owns **its own** dlt and dbt code. Source contract: [route-ingestion.md](route-ingestion.md).
 
 ```text
-                         Same REST APIs (route primary; others later)
-                                           │
-        ┌──────────────┬───────────────────┼────────────┬──────────────┐
-        │              │                   │            │              │
-        ▼              ▼                   ▼            ▼              ▼
-  dlt_dbt_CH    dlt_dbt_spark_iceberg   BRANCH 3    BRANCH 4      BRANCH 5
-  warehouse     lakehouse               Databricks  AWS EMR       AWS Glue
-        │              │                   │            │              │
-        ▼              ▼                   ▼            ▼              ▼
-   ClickHouse     MinIO + Polaris      Databricks      S3             S3
-   + archive      Iceberg + Spark          │            │              │
-        │              │                   ▼            ▼              ▼
-        ▼              ▼               Spark/Delta   EMR/Spark     Glue/Spark
-       dbt         dbt-spark               │            │              │
-        │              │                   ▼            ▼              ▼
-        ▼              ▼               Unity/Delta  S3/Iceberg    S3/Iceberg
-   ClickHouse      Iceberg + Trino                      │              │
-                                                        ▼              ▼
-                                                     Redshift       Redshift
-                                                     (optional)     (optional)
+              Same REST APIs (route primary; others later)
+                               │
+              ┌────────────────┼────────────────┐
+              │                                 │
+              ▼                                 ▼
+        dlt_dbt_clickhouse              dlt_dbt_spark_iceberg
+           warehouse                         lakehouse
+              │                                 │
+              ▼                                 ▼
+         ClickHouse                      MinIO + Polaris
+         + archive                       Iceberg + Spark
+              │                                 │
+              ▼                                 ▼
+             dbt                            dbt-spark
+              │                                 │
+              ▼                                 ▼
+         ClickHouse                      Iceberg + Trino
 ```
 
 | Capability | Focus | Compute | Primary storage / format | Final / serving |
 | --- | --- | --- | --- | --- |
 | **dlt_dbt_clickhouse** | Warehouse ELT | dlt + dbt | ClickHouse | **ClickHouse** |
 | **dlt_dbt_spark_iceberg** | Open-source lakehouse | dbt-spark | MinIO + Iceberg (Polaris) | **Trino on Iceberg** |
-| **3** | Databricks lakehouse | Databricks + Spark | Delta + Unity Catalog | **Delta / Databricks** |
-| **4** | AWS managed Spark | EMR + PySpark | S3 + Iceberg / Parquet | **S3 + optional Redshift** |
-| **5** | AWS serverless ETL | Glue + Spark | S3 + Iceberg / Parquet | **S3 + optional Redshift** |
 
 **dlt_dbt_clickhouse** — warehouse ELT: dlt → MinIO **raw archive** **and** ClickHouse `raw_{source}_{env}` → dbt `stg_{source}_{env}` → shared `int_{env}` / `gold_{env}` / marts. ClickHouse is the analytical destination. MinIO is not this capability’s Gold. Env: [environments.md](environments.md). Details: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Path: `branches/dlt_dbt_clickhouse/`.
 
 **dlt_dbt_spark_iceberg** — open lakehouse: dlt → MinIO JSONL archive **and** Iceberg Bronze via **Apache Polaris** (`nexus_{env}.raw_{source}`) → dbt-spark (**Thrift** for `.sql`; PySpark only for complex `.py`) → Iceberg gold/marts → **Trino**. ClickHouse is not this capability’s destination. Details: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). Path: `branches/dlt_dbt_spark_iceberg/`.
 
-**Branch 3** — Databricks: DLT → Spark → Delta → Unity Catalog gold. Compute = Databricks, storage = Delta, catalog = Unity Catalog. PostgreSQL/ClickHouse are not primary destinations.
-
-**Branch 4** — EMR: DLT → S3 → EMR/PySpark → Iceberg/Parquet on S3 → optional Redshift.
-
-**Branch 5** — Glue: DLT → S3 → Glue Spark → Iceberg/Parquet on S3 → optional Redshift. Serverless is a **compute characteristic**, not a sixth branch. Databricks serverless can be evaluated later.
-
-Each branch demonstrates a different pattern (warehouse vs open lakehouse vs Databricks vs EMR vs Glue). Do not force every branch to the same destination.
+Each capability demonstrates a different pattern (warehouse vs open lakehouse). Do not force every capability to the same destination.
 
 ---
 
@@ -235,16 +213,10 @@ branches:
   dlt_dbt_clickhouse:
     enabled: true
   dlt_dbt_spark_iceberg:
-    enabled: false
-  branch_3_databricks:
-    enabled: false
-  branch_4_emr:
-    enabled: false
-  branch_5_glue:
-    enabled: false
+    enabled: false   # enable when Milestone 2 starts
 ```
 
-Only enabled capabilities participate. Combinations can change over time (for example dlt_dbt_clickhouse + dlt_dbt_spark_iceberg). A disabled capability stays implemented. The LLM must treat enabled/disabled as the available set.
+Only enabled capabilities participate. Combinations can change over time (for example flip lakehouse to `true` after M1 is verified). A disabled capability stays implemented. The LLM must treat enabled/disabled as the available set.
 
 ---
 
@@ -253,12 +225,14 @@ Only enabled capabilities participate. Combinations can change over time (for ex
 **Airflow (Phase 1)** orchestrates enabled capabilities. It is not another processing backend. **dlt_dbt_clickhouse**: **one DAG per source**, endpoint dlt tasks, then dbt with selectors. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). Pipeline telemetry goes to the observability data lake (`nexus-telemetry-{env}`). See [observability.md](observability.md).
 
 ```text
-Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud jobs)
+Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 ```
 
-**Streaming (Phase 5)** — Kafka → Spark Structured Streaming → Iceberg / Delta / ClickHouse. Add only after batch is stable.
+**Observability producers (Phase 1)** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`.
 
-**Terraform (Phase 3)** — dev and prod environments; not the first Docker Compose setup.
+**Terraform, GitHub Actions, reader tools (Phase 2)** — env promotion (`dev`/`prd`), CI, and SigNoz / OpenMetadata / Elementary product setup so those tools ingest from the lake. Readers do not replace the lake write contract.
+
+**LLM / RAG / Streamlit (Phase 3)** — agents that select and generate against enabled capabilities.
 
 ---
 
@@ -274,13 +248,13 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg | Branch 3/4/5 (cloud job
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `airflow` | Airflow (on-demand) | Orchestration (Phase 1) |
-| `signoz` | SigNoz | Pipeline trace reader |
-| `openmetadata` | OpenMetadata | Data catalog reader |
+| `signoz` | SigNoz | Pipeline trace reader (Phase 2 product setup) |
+| `openmetadata` | OpenMetadata | Data catalog reader (Phase 2 product setup) |
 | `vault` | HashiCorp Vault + Agent | Secrets — [vault.md](vault.md) |
 
 Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, or comma-separated). Airflow is optional; start with `docker compose --profile airflow up -d` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
 
-**Production (later):** optional CI image for Python. Terraform in Phase 3. Not part of Phase 1.
+**Production (later):** optional CI image for Python. Terraform in Phase 2. Not part of Phase 1.
 
 ---
 
@@ -292,11 +266,8 @@ The root `pyproject.toml` / `uv.lock` currently include DLT, dbt-core, and dbt-c
 
 - **dlt_dbt_clickhouse**: DLT + dbt-clickhouse + ClickHouse
 - **dlt_dbt_spark_iceberg**: DLT Iceberg dest + dbt-spark (host); Spark cluster, Polaris, Trino in Docker
-- Branch 3: Databricks Spark + Delta
-- Branch 4: EMR Spark + libraries
-- Branch 5: Glue Spark + libraries
 
-dbt-clickhouse is required for **dlt_dbt_clickhouse** now. dbt-spark is added when Milestone 2 starts. Databricks, EMR, and Glue must **not** use the host `.venv` as their runtime. Spark **jobs** do not run inside `.venv`. For this capability, **Thrift is the dbt SQL client**; PySpark is only for complex dbt Python models (see [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md)).
+dbt-clickhouse is required for **dlt_dbt_clickhouse** now. dbt-spark is added when Milestone 2 starts. Spark **jobs** do not run inside `.venv`. For the lakehouse capability, **Thrift is the dbt SQL client**; PySpark is only for complex dbt Python models (see [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md)).
 
 ---
 
@@ -320,18 +291,13 @@ ai-nexusflow/
 │   └── dlt/pipelines/
 ├── branches/
 │   ├── dlt_dbt_clickhouse/
-│   ├── dlt_dbt_spark_iceberg/
-│   ├── branch_3_databricks/
-│   ├── branch_4_emr/
-│   └── branch_5_glue/
+│   └── dlt_dbt_spark_iceberg/
 ├── orchestration/airflow/dags/
 ├── agents/
 ├── ui/
 ├── docker/clickhouse/init/
 ├── infrastructure/
-│   ├── terraform/environments/{dev,prod}/
-│   ├── aws/{emr,glue,s3,redshift}/
-│   └── databricks/
+│   └── terraform/environments/{dev,prod}/
 ├── tests/
 └── docs/
 ```
@@ -344,9 +310,9 @@ ai-nexusflow/
 | `branches/dlt_dbt_clickhouse/` | Warehouse ELT (dlt + dbt-clickhouse) |
 | `branches/dlt_dbt_spark_iceberg/` | Lakehouse ELT (dlt + dbt-spark + Iceberg) |
 | `orchestration/airflow/` | DAGs for enabled branches |
-| `agents/` | Planner, router, generator, validator, executor |
-| `ui/` | Streamlit (Phase 2) |
+| `agents/` | Planner, router, generator, validator, executor (Phase 3) |
+| `ui/` | Streamlit (Phase 3) |
 | `docker/` | Init scripts; Compose file stays at root (profiles in that file) |
-| `infrastructure/` | Terraform, AWS, Databricks |
+| `infrastructure/` | Terraform (Phase 2) |
 | `config/` | Env and branch activation |
 | `docs/` | Platform architecture, warehouse, lakehouse, dlt, dbt, observability, environments, roadmap, setup |

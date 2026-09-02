@@ -164,7 +164,11 @@ Milestone 1 implements the lake + instrumentation for the ClickHouse branch; lak
 
 ---
 
-## Phase 2 UI and agents (future)
+## Reader tools (Phase 2)
+
+SigNoz, OpenMetadata, and Elementary Compose profiles may exist locally. **Product setup** (each tool’s native config, lake→index ingest, dashboards) is Phase 2. Phase 1 still requires full lake writes via `common/observability` whether or not those UIs are running.
+
+## Phase 3 UI and agents (future)
 
 - **Supabase** — user auth and session memory (not pipeline telemetry).
 - **Qdrant** — RAG over org standards in `docs/` (not pipeline telemetry).

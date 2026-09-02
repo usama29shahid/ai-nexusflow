@@ -258,11 +258,11 @@ Solo developer (no shared group): omit `NEXUS_SECRETS_GROUP`; bootstrap uses you
 
 ---
 
-## Phase 4 AWS (complementary)
+## AWS secrets (complementary, Phase 2+)
 
 When [Terraform](roadmap.md) lands on AWS:
 
-- **AWS Secrets Manager** is the natural choice for AWS-native resources (RDS, ECS, Lambda)
+- **AWS Secrets Manager** is a natural choice for AWS-native resources (RDS, ECS, Lambda)
 - **HashiCorp Vault** (self-hosted on VPS or **HCP Vault Dedicated**) remains valid for multi-cloud or matching local behavior
 - This project keeps **env injection** in dlt/dbt either way — migrating KV paths to AWS SM is an infra change, not a pipeline rewrite
 

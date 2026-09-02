@@ -10,7 +10,7 @@ This document captures enhancements discussed for enterprise-style dimensional m
 
 Phase 1 focuses on a runnable vertical slice: REST → dlt → archive + Bronze → dbt staging / Gold + tests + observability. Optional SCD2 and natural/hashed keys are already allowed by [dbt-modeling.md](dbt-modeling.md) when a requirement needs them.
 
-The YAML-style patterns below are a **future metadata contract** for consistent modeling (and later Phase 2 ELT generation). They are not required for the first Route catalog slice.
+The YAML-style patterns below are a **future metadata contract** for consistent modeling (and later Phase 3 ELT generation). They are not required for the first Route catalog slice.
 
 ## Keys, hashing, and audit (proposal)
 
@@ -119,5 +119,5 @@ This restates existing AGENTS / dbt-modeling guidance: Gold is shared by default
 
 - [dbt modeling](dbt-modeling.md) — current contract
 - [route-ingestion.md](route-ingestion.md) — primary source
-- [architecture.md](architecture.md) — Phase 2 LLM/RAG consumes accepted standards
+- [architecture.md](architecture.md) — Phase 3 LLM/RAG consumes accepted standards
 - [roadmap.md](roadmap.md)

@@ -241,4 +241,4 @@ uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
 
 ## First pipeline (implementation later)
 
-Working path: the example above (or one similar REST source) → dlt → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_{source}_dev` → dbt `--target dev`. Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark, Databricks, Airflow, or LLM in that slice.
+Working path: the example above (or one similar REST source) → dlt → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_{source}_dev` → dbt `--target dev`. Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark or LLM in that slice.

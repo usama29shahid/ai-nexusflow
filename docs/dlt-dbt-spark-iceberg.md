@@ -136,9 +136,9 @@ Thrift is the **dbt client protocol**, not a replacement for PySpark. Both talk 
 | Model | Connection | Why |
 | --- | --- | --- |
 | `.sql` (default) | `dbt-spark` **`method: thrift`** → Spark Thrift / HiveServer2 in Docker | dbt prefers SQL; Airflow later runs `dbt run` against this endpoint |
-| `.py` (exception) | PySpark **SparkSession** (`method: session`, or later Databricks) | Thrift accepts SQL only, not DataFrame programs |
+| `.py` (exception) | PySpark **SparkSession** (`method: session`) | Thrift accepts SQL only, not DataFrame programs |
 
-`spark.sql(...)` in PySpark is the same Spark SQL as Thrift. Do not put the Spark driver in `.venv` or use PySpark for every model on this branch. Standalone PySpark **jobs** belong to Branch 4 (EMR), not this default path.
+`spark.sql(...)` in PySpark is the same Spark SQL as Thrift. Do not put the Spark driver in `.venv` or use PySpark for every model on this branch.
 
 Pass `var('run_id')` on every run (same value as dlt).
 

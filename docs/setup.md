@@ -26,7 +26,6 @@ cp .env.example .env          # or paste your .env
 | CloudBeaver | Web database IDE (`profile: cloudbeaver`) | Docker |
 | Airflow | Orchestration (`profile: airflow`, Phase 1) | Docker |
 | HashiCorp Vault | Secrets (`profile: vault` when `NEXUS_SECRETS_BACKEND=vault`) | Docker |
-| Kafka (later) | Streaming (`kafka` profile) | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).
 
