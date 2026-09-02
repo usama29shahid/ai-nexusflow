@@ -251,10 +251,12 @@ For a **solo admin** plus a **dev user** without full root:
 2. Set `NEXUS_SECRETS_GROUP=nexusflow` in `.env`.
 3. Run Vault bootstrap as **admin** (`./scripts/setup.sh` or `./scripts/start.sh vault`). Bootstrap sets:
    - `.nexusflow/secrets.env` → **`640`** (`admin:nexusflow`) — dev can `source scripts/load-secrets.sh` and run smoke/dbt
-   - `.nexusflow/approle/`, `vault-init.json`, `agent-autoauth.hcl` → **admin-only** (`700` / `600`) — dev does not get Vault Agent or root credentials
+   - `.nexusflow/` → **`770`**, `approle/` → **`750`**, `agent-autoauth.hcl` / AppRole ids → **`640`** — group-readable so the Agent container (official image runs as uid 100 / **gid 1000**) can authenticate and render secrets; `vault-init.json` stays **`600`**
 4. If Agent wrote `secrets.env` as root, admin runs once: `sudo chown admin:nexusflow .nexusflow/secrets.env && chmod 640 .nexusflow/secrets.env`
 
-Solo developer (no shared group): omit `NEXUS_SECRETS_GROUP`; bootstrap uses your primary group and **`640`** on `secrets.env` (you remain owner).
+If `vault-agent` logs `permission denied` on `agent-autoauth.hcl`, the file is still mode `600`. Re-run `./scripts/vault-bootstrap.sh` (or `chmod 640 .nexusflow/agent-autoauth.hcl .nexusflow/approle/*` and `chmod 770 .nexusflow && chmod 750 .nexusflow/approle`), then `docker compose --profile vault up -d vault-agent`.
+
+Solo developer (no shared group): omit `NEXUS_SECRETS_GROUP`; bootstrap uses your primary group (typically GID **1000**, matching the Vault image) and **`640`** / **`770`** as above.
 
 ---
 

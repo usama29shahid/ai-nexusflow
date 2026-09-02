@@ -15,7 +15,10 @@ VAULT_CONTAINER="${VAULT_CONTAINER:-vault}"
 
 mkdir -p "${NEXUS_DIR}" "${APPROLE_DIR}"
 
-# secrets.env: 640 (owner + group read). AppRole / init: admin-only (600 / 700).
+# secrets.env + Agent-readable AppRole files: 640 (owner + group).
+# Official vault image Agent runs as uid 100 / gid 1000 (group "vault"); host
+# primary group is usually also 1000, so group-readable bits let Agent read.
+# vault-init.json stays 600 (root token; Agent does not need it).
 fix_nexusflow_permissions() {
   local secrets_file="${1:-${NEXUS_SECRETS_FILE:-${NEXUS_DIR}/secrets.env}}"
   local owner_user owner_group
@@ -26,12 +29,24 @@ fix_nexusflow_permissions() {
     owner_group="$(id -gn)"
   fi
 
-  chmod 750 "${NEXUS_DIR}"
+  # Group write so Agent (gid 1000) can render secrets.env into this directory.
+  chmod 770 "${NEXUS_DIR}"
   chown "${owner_user}:${owner_group}" "${NEXUS_DIR}" 2>/dev/null || true
 
-  chmod 700 "${APPROLE_DIR}"
+  chmod 750 "${APPROLE_DIR}"
   chown "${owner_user}:${owner_group}" "${APPROLE_DIR}" 2>/dev/null || true
-  [[ -f "${NEXUS_DIR}/agent-autoauth.hcl" ]] && chmod 600 "${NEXUS_DIR}/agent-autoauth.hcl"
+  if [[ -f "${NEXUS_DIR}/agent-autoauth.hcl" ]]; then
+    chmod 640 "${NEXUS_DIR}/agent-autoauth.hcl"
+    chown "${owner_user}:${owner_group}" "${NEXUS_DIR}/agent-autoauth.hcl" 2>/dev/null || true
+  fi
+  if [[ -f "${APPROLE_DIR}/role_id" ]]; then
+    chmod 640 "${APPROLE_DIR}/role_id"
+    chown "${owner_user}:${owner_group}" "${APPROLE_DIR}/role_id" 2>/dev/null || true
+  fi
+  if [[ -f "${APPROLE_DIR}/secret_id" ]]; then
+    chmod 640 "${APPROLE_DIR}/secret_id"
+    chown "${owner_user}:${owner_group}" "${APPROLE_DIR}/secret_id" 2>/dev/null || true
+  fi
   [[ -f "${INIT_FILE}" ]] && chmod 600 "${INIT_FILE}"
 
   if [[ ! -f "${secrets_file}" ]]; then
@@ -182,13 +197,13 @@ fi
 
 if [[ ! -f "${APPROLE_DIR}/role_id" ]]; then
   vault_exec read -field=role_id "auth/approle/role/${APPROLE_NAME}/role-id" > "${APPROLE_DIR}/role_id"
-  chmod 600 "${APPROLE_DIR}/role_id"
+  chmod 640 "${APPROLE_DIR}/role_id"
 fi
 
 if [[ ! -f "${APPROLE_DIR}/secret_id" ]]; then
   vault_exec write -field=secret_id -force "auth/approle/role/${APPROLE_NAME}/secret-id" \
     > "${APPROLE_DIR}/secret_id"
-  chmod 600 "${APPROLE_DIR}/secret_id"
+  chmod 640 "${APPROLE_DIR}/secret_id"
 fi
 
 cat > "${NEXUS_DIR}/agent-autoauth.hcl" <<EOF
@@ -210,9 +225,9 @@ auto_auth {
   }
 }
 EOF
-chmod 600 "${NEXUS_DIR}/agent-autoauth.hcl"
-chmod 700 "${APPROLE_DIR}"
-chmod 600 "${APPROLE_DIR}/role_id" "${APPROLE_DIR}/secret_id"
+chmod 640 "${NEXUS_DIR}/agent-autoauth.hcl"
+chmod 750 "${APPROLE_DIR}"
+chmod 640 "${APPROLE_DIR}/role_id" "${APPROLE_DIR}/secret_id"
 
 kv_base="secret/nexusflow/${NEXUS_ENV}"
 echo "Checking KV paths for NEXUS_ENV=${NEXUS_ENV}..."
