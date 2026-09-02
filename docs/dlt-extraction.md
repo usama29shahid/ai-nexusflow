@@ -4,7 +4,7 @@ dlt is the **REST extraction and load** layer. It is not the dimensional model.
 
 For **dlt_dbt_clickhouse**, runnable pipelines live under `branches/dlt_dbt_clickhouse/dlt/{source}/`. Repo `ingestion/sources/` stays a stub until another backend needs the same REST client. They run on the **host** with `uv run`, not inside Docker.
 
-This document is the org standard for RAG and for future generated pipelines. Pipelines are **not implemented yet**. GitHub source semantics: [github-ingestion.md](github-ingestion.md).
+This document is the org standard for RAG and for future generated pipelines. Pipelines are **not implemented yet**. Primary source (Route API): [route-ingestion.md](route-ingestion.md).
 
 ---
 
@@ -15,7 +15,7 @@ This document is the org standard for RAG and for future generated pipelines. Pi
 3. Stamp rows with a shared **`run_id`** (see [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md): local generator until Airflow, then DAG run_id).
 4. Write **once** to two destinations:
    - MinIO: immutable JSONL archive (replay) in `nexus-dlt-dbt-clickhouse-{env}`.
-   - ClickHouse `raw_{source}_{env}` (e.g. `raw_github_dev`): append-only Bronze.
+   - ClickHouse `raw_{source}_{env}` (e.g. `raw_route_dev`): append-only Bronze.
 5. Keep **pipeline state** (incremental cursors, schema) in dlt — not a custom watermark table.
 
 **dlt stops at archive + Bronze.** Staging, intermediate, Gold, marts, and tests are dbt-only. dlt may create nested/child tables from JSON; leave them in Bronze and flatten in dbt `stg_*`.
@@ -26,15 +26,15 @@ This document is the org standard for RAG and for future generated pipelines. Pi
 
 | Grain | Rule |
 | --- | --- |
-| **Source** | pokeapi, dataforseo, github, … — Airflow DAG grain later |
-| **Endpoint pipeline** | One dlt script (or REST resource) per endpoint; name the script after the resource (`pull_requests.py`, not `pipe_one.py`) |
+| **Source** | `route` (primary), later secondary REST sources — Airflow DAG grain |
+| **Endpoint pipeline** | One dlt script (or REST resource) per endpoint; name the script after the resource (`products.py`, not `pipe_one.py`) |
 | **Param variant** | Separate pipeline/table only if payload **contract** differs (schema, grain, auth, incremental). Same schema, different URL id → parameters on one pipeline; later Airflow may run multiple jobs with different params |
 
 Code layout (when implemented):
 
 ```text
 branches/dlt_dbt_clickhouse/dlt/{source}/   # endpoint pipelines → raw_{source}_{env}
-  # e.g. github/commits.py, github/pull_requests.py, github/issues.py
+  # e.g. route/products.py, route/categories.py, route/brands.py
 ingestion/sources/                          # stub until a second backend shares REST defs
 ```
 
@@ -46,7 +46,7 @@ Configure per source. Secrets from the environment — injected by [HashiCorp Va
 
 | Pattern | When |
 | --- | --- |
-| None / public | e.g. pokeapi |
+| None / public | e.g. Route catalog (`products`, `categories`, `brands`) |
 | API key header or query | Many SaaS REST APIs |
 | Bearer token | `Authorization: Bearer …` |
 | HTTP Basic | Rare; still supported |
@@ -102,7 +102,7 @@ When the API is full-refresh only: extract the snapshot, archive it, append Bron
 Extract once in memory (or one normalize pass), then:
 
 1. **Filesystem / S3 destination** → MinIO bucket `nexus-dlt-dbt-clickhouse-{env}` from `NEXUS_ENV` (default `dev` → `nexus-dlt-dbt-clickhouse-dev`; see [environments.md](environments.md)). The dlt **job name** is not the bucket.
-2. **ClickHouse destination** → database `raw_{source}_{env}` (e.g. `raw_github_dev`), MergeTree-style append.
+2. **ClickHouse destination** → database `raw_{source}_{env}` (e.g. `raw_route_dev`), MergeTree-style append.
 
 Replay mode (later): **do not call the API**. Read JSONL from the prefix, load Bronze with a **new** `run_id`, run dbt.
 
@@ -117,7 +117,7 @@ Every load should carry at least:
 | `run_id` / `_ingest_run_id` | Shared run id (local generator until Airflow; then DAG run_id) |
 | `_extracted_at` | Extract timestamp (UTC) |
 | `_dlt_load_id` | dlt package id (telemetry; may differ from `run_id`) |
-| source + resource names | pokeapi / pokemon, etc. |
+| source + resource names | route / products, etc. |
 
 dlt also writes `_dlt_*` system tables (loads, version, pipeline state). Keep them. They are ingestion telemetry, not a logging product.
 

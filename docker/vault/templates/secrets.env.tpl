@@ -15,6 +15,3 @@ AIRFLOW__CORE__FERNET_KEY={{ .Data.data.fernet_key }}
 AIRFLOW__WEBSERVER__SECRET_KEY={{ .Data.data.web_secret }}
 AIRFLOW_ADMIN_PASSWORD={{ .Data.data.admin_password }}
 {{- end }}
-{{- with secret (printf "secret/data/nexusflow/%s/github" $env) }}
-GITHUB_TOKEN={{ .Data.data.token }}
-{{- end }}

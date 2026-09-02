@@ -4,6 +4,8 @@ dbt is the **transformation** layer. It reads Bronze via `source()`. It does not
 
 The **DAG, prefixes, SCD, and folder grain** below apply to both warehouse and lakehouse capabilities. Physical names differ because ClickHouse is two-level and Iceberg is three-level.
 
+Enhanced keys / soft-delete / SCD metadata patterns: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md) (**proposal only** — not active until accepted).
+
 | | `dlt_dbt_clickhouse` | `dlt_dbt_spark_iceberg` |
 | --- | --- | --- |
 | Project | `branches/dlt_dbt_clickhouse` (`nexus_clickhouse`) | `branches/dlt_dbt_spark_iceberg` (`nexus_lakehouse`) |
@@ -18,7 +20,7 @@ Profile **target** = env (`NEXUS_ENV`, default `dev` until Terraform, later `prd
 
 **Where `{{ target.name }}` goes:**
 
-- **ClickHouse:** into **database** names (`raw_github_{{ target.name }}`, `stg_github_{{ target.name }}`, `gold_{{ target.name }}`). `sources.yml` and `+schema` (ClickHouse database) use that suffix. If `dbt_project.yml` cannot interpolate, use `generate_schema_name`.
+- **ClickHouse:** into **database** names (`raw_route_dev`, `stg_route_dev`, `gold_dev`, …). In `sources.yml`, write the suffix with Jinja (`raw_route_{{ target.name }}`). In `dbt_project.yml`, set `+schema` to the **unsuffixed** name (`stg_route`, `gold`, …); `generate_schema_name` appends `_{{ target.name }}`. Do not put `_{{ target.name }}` in both places.
 - **Iceberg / dbt-spark:** into the Polaris **catalog** only (`nexus_{{ target.name }}`). `+schema` stays `raw_{source}`, `stg_{source}`, `gold`, … — never `gold_{{ target.name }}`.
 
 `source()` examples: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
@@ -57,17 +59,21 @@ That forces empty models and forbids a mart from reading a dimension directly.
 ### DAG (required)
 
 ```text
-stg_pokeapi_pokemon ──► int_pokemon_keys ──► dim_pokemon
-stg_github_repo     ──► int_repo_keys    ──► dim_repo
-dim_pokemon ──► fct_pokemon_stat
-dim_pokemon ──► mart_pokedex
-int_pokemon_keys ──► int_pokedex_enrich ──► mart_pokedex
-evt_github_push ──► mart_engineering
+stg_route_products   ──► int_product_keys ──► dim_product
+stg_route_categories ──► int_category_keys ──► dim_category
+stg_route_brands     ──► int_brand_keys ──► dim_brand
+dim_product ──► fct_product_snapshot
+dim_product ──► mart_product_performance
+int_product_keys ──► int_catalog_enrich ──► mart_product_performance
+# Later secondary source (example) can also feed shared Gold without touching Route staging:
+# stg_dataforseo_* ──► … ──► same gold_{env} / marts_{env}
 ```
 
 A domain mart may depend on a conformed dim, a fact, an event, or another `int_*`. An event does not have to become a periodic fact first.
 
 **Do not skip ownership:** API JSON does not land in a mart. Domain fields do not get bolted onto a **shared** dim unless the requirement **names a separate dim**.
+
+Enhanced SCD / soft-delete / hash-key patterns: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md) (proposal only).
 
 ---
 
@@ -75,7 +81,7 @@ A domain mart may depend on a conformed dim, a fact, an event, or another `int_*
 
 ### Bronze (`raw_{source}_{env}`, not dbt models)
 
-dlt output e.g. `raw_github_dev` (until Terraform). Append-only **history of loads**. Shared `run_id` on every row. dbt `source()` these tables.
+dlt output e.g. `raw_route_dev` (until Terraform). Append-only **history of loads**. Shared `run_id` on every row. dbt `source()` these tables.
 
 ### Silver staging — `stg_*`
 
@@ -166,4 +172,4 @@ models/
   published/                 CH: pub_{env} optional     Iceberg: nexus_{env}.pub
 ```
 
-Staging subfolders are REST **sources**. Gold subfolders are **grain** (not github/pokeapi). Leave `models/example/` on the warehouse project until the first real source.
+Staging subfolders are REST **sources**. Gold subfolders are **grain** (not route/dataforseo). Leave `models/example/` on the warehouse project until the first real source.

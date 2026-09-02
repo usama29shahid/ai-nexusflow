@@ -33,9 +33,9 @@ The following is an example of the kind of request the future system may
 accept:
 
 ```text
-Deploy the PokeAPI REST endpoint into ClickHouse. Keep the raw response in the
+Deploy the Route API products endpoint into ClickHouse. Keep the raw response in the
 MinIO archive and ClickHouse Bronze, create staging and Gold models, and make
-the Gold entity an SCD Type 2 dimension using pokemon_id as its natural key.
+the Gold entity an SCD Type 2 dimension using product_id as its natural key.
 ```
 
 This example does not establish a default modeling policy. Bronze, staging,
@@ -95,9 +95,9 @@ future shape may include:
 
 ```yaml
 pipeline:
-  name: pokeapi_to_clickhouse
-  source: pokeapi
-  endpoints: [pokemon]
+  name: route_to_clickhouse
+  source: route
+  endpoints: [products]
   branch: dlt_dbt_clickhouse
   destination: clickhouse
 
@@ -106,12 +106,12 @@ ingestion:
   write_disposition: append
 
 models:
-  staging: [stg_pokemon]
+  staging: [stg_route_products]
   gold:
-    - name: dim_pokemon
-      grain: one row per pokemon version
+    - name: dim_product
+      grain: one row per product version
       scd_type: 2
-      natural_key: pokemon_id
+      natural_key: product_id
 
 orchestration:
   dag_grain: source

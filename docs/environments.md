@@ -23,15 +23,15 @@ These are three different names. Do not reuse the dlt job name as the MinIO buck
 
 | Name | Question it answers | Example (`dev`) |
 | --- | --- | --- |
-| **Job** (dlt script / later Airflow task) | Which extract ran? | `pull_requests.py` / `github_pull_requests` |
-| **Table** (REST resource) | What entity is stored? | `pull_requests` |
+| **Job** (dlt script / later Airflow task) | Which extract ran? | `products.py` / `route_products` |
+| **Table** (REST resource) | What entity is stored? | `products` |
 | **Bucket** (capability + env) | Which archive owns the JSONL? | warehouse: `nexus-dlt-dbt-clickhouse-dev`; lakehouse: `nexus-dlt-dbt-spark-iceberg-archive-dev` |
 
 Override dlt’s default “pipeline name = dataset.” Dataset/database (warehouse) or catalog.schema (lakehouse) stay env/layer names. The table stays the resource. The job stays the task id and should match the resource when practical.
 
-A second GitHub endpoint (`issues`) is a new job and a new table. It still uses the **same** archive bucket for that capability+env. Prefixes inside the bucket are `{source}/{endpoint}/...`.
+A second Route endpoint (`categories`) is a new job and a new table. It still uses the **same** archive bucket for that capability+env. Prefixes inside the bucket are `{source}/{endpoint}/...`.
 
-Same-contract URL parameters (for example GitHub `owner` / `repo`) do not create a new table; they become job parameters. A new table is required only when the payload contract differs. GitHub source contract: [github-ingestion.md](github-ingestion.md).
+Same-contract URL parameters do not create a new table; they become job parameters. A new table is required only when the payload contract differs. Route source contract: [route-ingestion.md](route-ingestion.md).
 
 Worked example (same API, both capabilities): [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 

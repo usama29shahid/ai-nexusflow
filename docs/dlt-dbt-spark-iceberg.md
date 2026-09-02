@@ -2,11 +2,11 @@
 
 Public name: **dlt_dbt_spark_iceberg** (dlt → dbt on Spark → Iceberg). This is the open lakehouse **capability**, not a git branch. Trino is serving/BI. Apache Polaris is the Iceberg REST catalog. ClickHouse is not on this path (a later optional feature may query Iceberg; it is not required here).
 
-The five-backend platform story lives in [architecture.md](architecture.md). Extraction policy: [dlt-extraction.md](dlt-extraction.md). GitHub source contract: [github-ingestion.md](github-ingestion.md). Modeling DAG: [dbt-modeling.md](dbt-modeling.md). Env: [environments.md](environments.md). Warehouse peer: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
+The five-backend platform story lives in [architecture.md](architecture.md). Extraction policy: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling DAG: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Env: [environments.md](environments.md). Warehouse peer: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
 
 dbt project: `branches/dlt_dbt_spark_iceberg` (`nexus_lakehouse`). Config key: `dlt_dbt_spark_iceberg` in [`config/branches.yaml`](../config/branches.yaml).
 
-**Independent of `dlt_dbt_clickhouse`.** Same first APIs (github, dataforseo, pokeapi), separate Python/dlt/dbt code. Shared infrastructure only (Compose, MinIO **service**, later Polaris / Spark / Trino). Isolation is buckets and catalogs, not shared pipeline modules. Docker profile for this stack is **`lakehouse`** (not `spark`); MinIO is unprofiled. See [setup.md](setup.md).
+**Independent of `dlt_dbt_clickhouse`.** Same primary API (`route`), separate Python/dlt/dbt code. Shared infrastructure only (Compose, MinIO **service**, later Polaris / Spark / Trino). Isolation is buckets and catalogs, not shared pipeline modules. Docker profile for this stack is **`lakehouse`** (not `spark`); MinIO is unprofiled. See [setup.md](setup.md).
 
 ```text
 REST API
@@ -102,14 +102,14 @@ Do **not** encode env in schema or table (`gold_dev`). Do **not** nest namespace
 
 | Schema | Layer | Writer | Example |
 | --- | --- | --- | --- |
-| `raw_{source}` | Bronze | dlt | `nexus_dev.raw_github.repos` |
-| `stg_{source}` | Silver staging | dbt-spark | `nexus_dev.stg_github.stg_github_repos` |
-| `int` | Shared + domain int | dbt-spark | `nexus_dev.int.int_repo_keys` |
-| `gold` | Conformed gold | dbt-spark | `nexus_dev.gold.dim_repo` |
-| `marts` | Domain marts | dbt-spark | `nexus_dev.marts.mart_engineering` |
-| `pub` | Published (optional) | dbt-spark | `nexus_dev.pub.pub_pokedex` |
+| `raw_{source}` | Bronze | dlt | `nexus_dev.raw_route.products` |
+| `stg_{source}` | Silver staging | dbt-spark | `nexus_dev.stg_route.stg_route_products` |
+| `int` | Shared + domain int | dbt-spark | `nexus_dev.int.int_product_keys` |
+| `gold` | Conformed gold | dbt-spark | `nexus_dev.gold.dim_product` |
+| `marts` | Domain marts | dbt-spark | `nexus_dev.marts.mart_product_performance` |
+| `pub` | Published (optional) | dbt-spark | `nexus_dev.pub.pub_catalog` |
 
-Do **not** create `gold_github`. Shared Gold cannot live in a source schema.
+Do **not** create `gold_route`. Shared Gold cannot live in a source schema.
 
 Table prefixes: `stg_*`, `int_*`, `dim_*`, `fct_*`, `evt_*`, `mart_*`, `pub_*`. Same DAG as [dbt-modeling.md](dbt-modeling.md). Gold is already queryable in Trino; add `pub` when a BI/app contract exists.
 
@@ -117,9 +117,9 @@ Same logical table vs ClickHouse:
 
 | `dlt_dbt_clickhouse` | `dlt_dbt_spark_iceberg` |
 | --- | --- |
-| `gold_dev.dim_repo` | `nexus_dev.gold.dim_repo` |
-| `raw_github_dev.repos` | `nexus_dev.raw_github.repos` |
-| `stg_github_dev.stg_github_repos` | `nexus_dev.stg_github.stg_github_repos` |
+| `gold_dev.dim_product` | `nexus_dev.gold.dim_product` |
+| `raw_route_dev.products` | `nexus_dev.raw_route.products` |
+| `stg_route_dev.stg_route_products` | `nexus_dev.stg_route.stg_route_products` |
 
 ---
 
@@ -142,48 +142,48 @@ Thrift is the **dbt client protocol**, not a replacement for PySpark. Both talk 
 
 Pass `var('run_id')` on every run (same value as dlt).
 
-`{{ target.name }}` is the Polaris **catalog** (`nexus_{{ target.name }}`). Model `+schema` stays `stg_github`, `int`, `gold`, … — **do not** copy ClickHouse `stg_github_{{ target.name }}` / `gold_{{ target.name }}`.
+`{{ target.name }}` is the Polaris **catalog** (`nexus_{{ target.name }}`). Model `+schema` stays `stg_route`, `int`, `gold`, … — **do not** copy ClickHouse `stg_route_{{ target.name }}` / `gold_{{ target.name }}`.
 
 ---
 
-## Worked example: GitHub `pull_requests`
+## Worked example: Route `products`
 
-Same job and table as the warehouse example. **Separate code** under `branches/dlt_dbt_spark_iceberg`. Do not write the ClickHouse archive bucket or `raw_github_dev`. Warehouse peer: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Source contract: [github-ingestion.md](github-ingestion.md). Pipelines are **not implemented yet**.
+Same job and table as the warehouse example. **Separate code** under `branches/dlt_dbt_spark_iceberg`. Do not write the ClickHouse archive bucket or `raw_route_dev`. Warehouse peer: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Source contract: [route-ingestion.md](route-ingestion.md). Pipelines are **not implemented yet**.
 
-`owner` / `repo` are URL parameters with the same payload contract → one parameterized script and one Bronze table. Opaque job names such as `pipe_one` are not used.
+Public catalog endpoint — no JWT. Opaque job names such as `pipe_one` are not used.
 
 **Three names** ([environments.md](environments.md)):
 
 ```text
-Job           pull_requests.py / github_pull_requests
-Table         pull_requests
+Job           products.py / route_products
+Table         products
 Archive       nexus-dlt-dbt-spark-iceberg-archive-{env}
 Warehouse S3  nexus-dlt-dbt-spark-iceberg-{env}     # Iceberg files; not JSONL; not per-job
-Prefix        github/pull_requests/dt=.../run_id=.../part-*.jsonl.gz
-Bronze        nexus_{env}.raw_github.pull_requests
+Prefix        route/products/dt=.../run_id=.../part-*.jsonl.gz
+Bronze        nexus_{env}.raw_route.products
 ```
 
-Do not name the catalog, schema, table, or either MinIO bucket after the job. Script name, Bronze table, and archive `{endpoint}` segment stay aligned (`pull_requests`).
+Do not name the catalog, schema, table, or either MinIO bucket after the job. Script name, Bronze table, and archive `{endpoint}` segment stay aligned (`products`).
 
 **Archive (`NEXUS_ENV=dev`):**
 
 ```text
 s3://nexus-dlt-dbt-spark-iceberg-archive-dev/
-  github/pull_requests/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
+  route/products/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
 ```
 
 **dbt** — `--target` = env. Catalog from target; schemas are layer names without env.
 
-`models/staging/github/sources.yml` (proposed):
+`models/staging/route/sources.yml` (proposed):
 
 ```yaml
 version: 2
 sources:
-  - name: github_raw
+  - name: route_raw
     database: nexus_{{ target.name }}
-    schema: raw_github
+    schema: raw_route
     tables:
-      - name: pull_requests
+      - name: products
 ```
 
 `dbt_project.yml` (proposed fragment; already the folder `+schema` intent):
@@ -192,8 +192,8 @@ sources:
 models:
   nexus_lakehouse:
     staging:
-      github:
-        +schema: stg_github
+      route:
+        +schema: stg_route
     intermediate:
       +schema: int
     gold:
@@ -204,14 +204,14 @@ models:
       +schema: pub
 ```
 
-Spark profile target `dev` / `prd` must attach catalog `nexus_dev` / `nexus_prd`. Staging: `nexus_dev.stg_github.stg_github_pull_requests`. dlt ends at archive + Bronze; post-Bronze work is dbt-only.
+Spark profile target `dev` / `prd` must attach catalog `nexus_dev` / `nexus_prd`. Staging: `nexus_dev.stg_route.stg_route_products`. dlt ends at archive + Bronze; post-Bronze work is dbt-only.
 
 From the repo root (when Spark Thrift and code exist):
 
 ```bash
 export NEXUS_ENV=dev
 export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
-uv run python branches/dlt_dbt_spark_iceberg/dlt/github/pull_requests.py
+uv run python branches/dlt_dbt_spark_iceberg/dlt/route/products.py
 uv run dbt run --project-dir branches/dlt_dbt_spark_iceberg --target "$NEXUS_ENV" \
   --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
 ```
@@ -232,7 +232,7 @@ Profiles: `clickhouse` (ClickHouse + MinIO), `lakehouse` (MinIO + Polaris + Spar
 
 ```text
 branches/dlt_dbt_spark_iceberg/
-  dlt/{github,dataforseo,pokeapi}/
+  dlt/route/                   # primary; other sources get their own folders later
   models/staging/{source}/     → schema stg_{source}
   models/intermediate/         → schema int
   models/gold/{dims,facts,events}/ → schema gold

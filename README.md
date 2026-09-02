@@ -105,10 +105,12 @@ Empty capability folders have short READMEs. Fill them when that phase has real 
 
 - [Architecture](docs/architecture.md) — branches, RAG, agents, on/off router
 - [Environments](docs/environments.md) — `NEXUS_ENV` (`dev` default); job vs table vs bucket; `prd` later
+- [Route ingestion](docs/route-ingestion.md) — primary REST source (ecommerce catalog-first)
 - [dlt_dbt_clickhouse](docs/dlt-dbt-clickhouse.md) — archive, Bronze, Gold, run ids
 - [dlt_dbt_spark_iceberg](docs/dlt-dbt-spark-iceberg.md) — Polaris, Iceberg, dbt-spark, Trino
 - [dlt extraction](docs/dlt-extraction.md) — REST auth, pagination, retries, dual load
 - [dbt modeling](docs/dbt-modeling.md) — medallion + dimensional DAG
+- [Enhanced modeling strategy](docs/enhanced-modeling-strategy.md) — proposal backlog (SCD / soft delete / keys)
 - [Observability](docs/observability.md) — observability data lake, Airflow Phase 1, dlt/dbt emit contract, swappable readers (SigNoz, OpenMetadata, Elementary)
 - [Roadmap](docs/roadmap.md) — phases, status, next milestone
 - [Setup](docs/setup.md) — WSL / VPS / EC2, Docker, uv, troubleshooting

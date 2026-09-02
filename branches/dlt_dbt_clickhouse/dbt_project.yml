@@ -24,3 +24,5 @@ models:
       dlt_smoke:
         +schema: stg_dlt_smoke
         +materialized: view
+      route:
+        +schema: stg_route

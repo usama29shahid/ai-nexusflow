@@ -65,7 +65,7 @@ App (secrets loaded):
   help          This help
 
   Any other args run with secrets loaded, e.g.:
-    ./scripts/start.sh uv run python branches/dlt_dbt_clickhouse/dlt/github/pull_requests.py
+    ./scripts/start.sh uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
 
 COMPOSE_PROFILES (.env) examples:
   clickhouse                  # warehouse branch only (+ MinIO + OTel always)

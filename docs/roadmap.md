@@ -50,13 +50,14 @@ Source → DLT → MinIO archive (JSONL) + ClickHouse raw (Bronze, append)
 Airflow → DAG per source (smoke, then first REST source) → same dlt/dbt on host
 ```
 
-- One stable REST (or similar) source
+- One stable REST source: **Route API** (`route`) — catalog-first (`products`, `categories`, `brands`); see [route-ingestion.md](route-ingestion.md)
 - DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_{source}_dev`
 - dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
 - Shared `NEXUS_RUN_ID` into dlt and dbt (`local-*` manual; Airflow DAG `run_id` when orchestrated)
 - Observability lake writes verified for manual and Airflow-triggered runs
 - Airflow: smoke DAG + first source DAG for enabled `dlt_dbt_clickhouse`; remote logs to MinIO
 - Verify row counts, dbt tests, and lake objects under `nexus-telemetry-dev/`
+- Enhanced modeling (SCD variants, soft delete, hash keys): backlog only — [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md)
 
 MinIO archive buckets are **raw API replay**, not the observability lake. See [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md) and [observability.md](observability.md).
 

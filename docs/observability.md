@@ -110,7 +110,7 @@ Pass the **same** `NEXUS_RUN_ID` into dlt (Bronze column), dbt `var('run_id')`, 
 
 ## Airflow DAG grain (Phase 1)
 
-**One DAG per source** per enabled branch (e.g. `nexus_github_clickhouse`, `nexus_github_lakehouse`):
+**One DAG per source** per enabled branch (e.g. `nexus_route_clickhouse`, `nexus_route_lakehouse`):
 
 1. Task(s) per endpoint dlt pipeline (archive + Bronze).
 2. One `dbt run` / `dbt test` with **selectors** for downstream models.

@@ -20,12 +20,8 @@ models:
       dlt_smoke:
         +schema: stg_dlt_smoke
         +materialized: view
-      github:
-        +schema: stg_github
-      dataforseo:
-        +schema: stg_dataforseo
-      pokeapi:
-        +schema: stg_pokeapi
+      route:
+        +schema: stg_route
     intermediate:
       +schema: int
     gold:

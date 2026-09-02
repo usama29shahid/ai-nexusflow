@@ -247,13 +247,6 @@ else
     web_secret="$(generate_if_blank AIRFLOW__WEBSERVER__SECRET_KEY "python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")" \
     admin_password="$(read_env_default AIRFLOW_ADMIN_PASSWORD change-me)"
 fi
-if kv_secret_exists "${kv_base}/github"; then
-  echo "  KV exists: ${kv_base}/github (skip seed)"
-else
-  echo "  Seeding: ${kv_base}/github"
-  vault_exec kv put "${kv_base}/github" \
-    token="$(read_env_default GITHUB_TOKEN placeholder-not-set)"
-fi
 
 echo "Starting Vault Agent..."
 docker compose --profile vault up -d vault-agent

@@ -5,7 +5,7 @@ Source → DLT → MinIO archive + Iceberg Bronze (Polaris nexus_dev.raw_{source
       → dbt-spark → Iceberg gold / marts → Trino
 ```
 
-Standards: [docs/dlt-dbt-spark-iceberg.md](../../docs/dlt-dbt-spark-iceberg.md) (includes GitHub `pull_requests` example), [docs/github-ingestion.md](../../docs/github-ingestion.md), [docs/environments.md](../../docs/environments.md). Env: `NEXUS_ENV` (default `dev`). Catalog is `nexus_{env}`; do not suffix Iceberg schemas with `_dev`.
+Standards: [docs/dlt-dbt-spark-iceberg.md](../../docs/dlt-dbt-spark-iceberg.md) (includes Route `products` example), [docs/route-ingestion.md](../../docs/route-ingestion.md), [docs/environments.md](../../docs/environments.md). Env: `NEXUS_ENV` (default `dev`). Catalog is `nexus_{env}`; do not suffix Iceberg schemas with `_dev`.
 
 - `dlt/{source}/` — extract pipelines (archive + Iceberg Bronze). Independent of `dlt_dbt_clickhouse`.
 - `models/` — dbt (`nexus_lakehouse`, adapter `dbt-spark`). SQL via Spark Thrift by default; PySpark only for complex `.py` models.

@@ -2,7 +2,7 @@
 
 Public name: **dlt_dbt_clickhouse** (dlt → dbt → ClickHouse). This is the warehouse ELT **capability**, not a git branch.
 
-The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). GitHub source contract: [github-ingestion.md](github-ingestion.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md).
+The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md).
 
 dbt project: `branches/dlt_dbt_clickhouse`. Config key: `dlt_dbt_clickhouse` in [`config/branches.yaml`](../config/branches.yaml). Docker profile: **`clickhouse`** (MinIO always on). See [setup.md](setup.md).
 
@@ -63,7 +63,7 @@ s3://nexus-dlt-dbt-clickhouse-dev/
             part-*.jsonl.gz
 ```
 
-Examples of `{source}`: `pokeapi`, `dataforseo`, `github`. `{endpoint}` is the REST resource. `{param_variant}` is used only when the **payload contract** differs, not for every id in a URL.
+Examples of `{source}`: `route` (primary), later secondary sources such as `dataforseo`. `{endpoint}` is the REST resource. `{param_variant}` is used only when the **payload contract** differs, not for every id in a URL.
 
 Archive objects are **immutable**. Format: **JSONL** (compressed). Do not put Iceberg on this archive.
 
@@ -75,16 +75,16 @@ Archive objects are **immutable**. Format: **JSONL** (compressed). Do not put Ic
 
 ClickHouse has **no schemas** (only `database.table`). **Hybrid:** per-source databases for landing (raw/stg); **shared** databases for int, gold, marts, pub.
 
-Do **not** create `gold_github_dev`. Shared Conformed Gold cannot live inside a source database.
+Do **not** create `gold_route_dev`. Shared Conformed Gold cannot live inside a source database.
 
 Until Terraform, `env=dev`.
 
 ```text
-raw_{source}_{env}     raw_github_dev.repos
-stg_{source}_{env}     stg_github_dev.stg_github_repos
-int_{env}              int_dev.int_repo_keys
-gold_{env}             gold_dev.dim_repo
-marts_{env}            marts_dev.mart_engineering
+raw_{source}_{env}     raw_route_dev.products
+stg_{source}_{env}     stg_route_dev.stg_route_products
+int_{env}              int_dev.int_product_keys
+gold_{env}             gold_dev.dim_product
+marts_{env}            marts_dev.mart_product_performance
 pub_{env}              pub_dev.pub_...              -- optional
 ```
 
@@ -97,7 +97,7 @@ pub_{env}              pub_dev.pub_...              -- optional
 | `marts_{env}` | domain marts | dbt |
 | `pub_{env}` | published | dbt, optional |
 
-Gold table names are **conformed** (`dim_repo`, not `github_dim_repo`) unless the requirement explicitly names a separate dim.
+Gold table names are **conformed** (`dim_product`, not `route_dim_product`) unless the requirement explicitly names a separate dim.
 
 Gold in ClickHouse is already queryable. Do not add `pub` on the first pipeline unless a BI/app contract exists.
 
@@ -113,7 +113,7 @@ branches/dlt_dbt_clickhouse/
   models/published/             → pub_{env}
 ```
 
-Staging splits by **API**. Gold splits by **grain** (dims/facts/events), not by github/pokeapi. See [dbt-modeling.md](dbt-modeling.md).
+Staging splits by **API**. Gold splits by **grain** (dims/facts/events), not by route/dataforseo. See [dbt-modeling.md](dbt-modeling.md).
 
 ---
 
@@ -121,7 +121,7 @@ Staging splits by **API**. Gold splits by **grain** (dims/facts/events), not by 
 
 A **dlt pipeline** is per REST **endpoint** (and per `{param}` only when schema/grain/auth/incremental **contract** differs). Same path, same schema, different id → one parameterized pipeline, not two Gold tables.
 
-A **source** (pokeapi, github, …) groups those endpoint pipelines. Airflow later: **one DAG per source**, tasks per endpoint, then **one dbt run with selectors**.
+A **source** (`route`, later others) groups those endpoint pipelines. Airflow later: **one DAG per source**, tasks per endpoint, then **one dbt run with selectors**.
 
 **Gold is requirement-driven, shared by default:**
 
@@ -163,71 +163,74 @@ Which models exist depends on the **requirement**. There is no mandatory full st
 
 ---
 
-## Worked example: GitHub `pull_requests`
+## Worked example: Route `products`
 
-Illustration of the rules above. Pipelines are **not implemented yet**. Full GitHub source contract: [github-ingestion.md](github-ingestion.md). Lakehouse copy of the same API: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+Illustration of the rules above. Pipelines are **not implemented yet**. Full Route source contract: [route-ingestion.md](route-ingestion.md). Lakehouse copy of the same API: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
-Assumptions: source GitHub, endpoint `GET /repos/{owner}/{repo}/pulls`, resource `pull_requests`. `owner` / `repo` are URL parameters with the **same** payload contract → one parameterized script and one Bronze table, not a `{param_variant}` archive prefix and not a new Gold table. Opaque job names such as `pipe_one` are not used.
+Assumptions: source Route API, endpoint `GET /api/v1/products`, resource `products`. Public catalog — no JWT. Opaque job names such as `pipe_one` are not used. First Milestone 1 slice is catalog-only (`products`, `categories`, `brands`).
 
 **Three names** ([environments.md](environments.md)):
 
 ```text
-Job     pull_requests.py / github_pull_requests   # script now; Airflow task id later
-Table   pull_requests
+Job     products.py / route_products   # script now; Airflow task id later
+Table   products
 Bucket  nexus-dlt-dbt-clickhouse-{env}            # all warehouse JSONL for this env
-Prefix  github/pull_requests/dt=.../run_id=.../part-*.jsonl.gz
-Bronze  raw_github_{env}.pull_requests
+Prefix  route/products/dt=.../run_id=.../part-*.jsonl.gz
+Bronze  raw_route_{env}.products
 ```
 
-Do not name the ClickHouse database or MinIO bucket after the job. dlt dataset = `raw_github_{env}`, not the script name. Script name, Bronze table, and archive `{endpoint}` segment stay aligned (`pull_requests`).
+Do not name the ClickHouse database or MinIO bucket after the job. dlt dataset = `raw_route_{env}`, not the script name. Script name, Bronze table, and archive `{endpoint}` segment stay aligned (`products`).
 
 **Archive (`NEXUS_ENV=dev`):** one MinIO service; dlt writes objects (prefixes, not mkdir):
 
 ```text
 s3://nexus-dlt-dbt-clickhouse-dev/
-  github/pull_requests/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
+  route/products/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
 ```
 
-**dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Interpolate env into database names. If `+schema` cannot use `target.name` in `dbt_project.yml`, a `generate_schema_name` macro does the same.
+**dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Physical names are `stg_route_dev`, `gold_dev`, etc.
 
-`models/staging/github/sources.yml` (proposed):
+- **`sources.yml`:** put `_{{ target.name }}` in `database` / `schema` explicitly.
+- **`dbt_project.yml` `+schema`:** use the **unsuffixed** layer name (`stg_route`, `gold`, …). This project’s `generate_schema_name` macro appends `_{{ target.name }}`. Do **not** also write `stg_route_{{ target.name }}` in `+schema` — that would become `stg_route_dev_dev`.
+
+`models/staging/route/sources.yml` (proposed):
 
 ```yaml
 version: 2
 sources:
-  - name: github_raw
-    database: raw_github_{{ target.name }}
-    schema: raw_github_{{ target.name }}
+  - name: route_raw
+    database: raw_route_{{ target.name }}
+    schema: raw_route_{{ target.name }}
     tables:
-      - name: pull_requests
+      - name: products
 ```
 
-`dbt_project.yml` (proposed fragment):
+`dbt_project.yml` (proposed fragment; matches the live macro):
 
 ```yaml
 models:
   nexus_clickhouse:
     staging:
-      github:
-        +schema: stg_github_{{ target.name }}
+      route:
+        +schema: stg_route          # → stg_route_{{ target.name }}
     intermediate:
-      +schema: int_{{ target.name }}
+      +schema: int                  # → int_{{ target.name }}
     gold:
-      +schema: gold_{{ target.name }}
+      +schema: gold                 # → gold_{{ target.name }}
     marts:
-      +schema: marts_{{ target.name }}
+      +schema: marts                # → marts_{{ target.name }}
     published:
-      +schema: pub_{{ target.name }}
+      +schema: pub                  # → pub_{{ target.name }}
 ```
 
-Staging: `stg_github_dev.stg_github_pull_requests` via `{{ source('github_raw', 'pull_requests') }}`. Gold only if a requirement **names** a model. dlt ends at MinIO + Bronze; all post-Bronze work is dbt-only.
+Staging: `stg_route_dev.stg_route_products` via `{{ source('route_raw', 'products') }}`. Gold only if a requirement **names** a model (for example `dim_product`). dlt ends at MinIO + Bronze; all post-Bronze work is dbt-only.
 
 From the repo root (when code exists):
 
 ```bash
 export NEXUS_ENV=dev
 export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
-uv run python branches/dlt_dbt_clickhouse/dlt/github/pull_requests.py
+uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
 uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
   --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
 ```

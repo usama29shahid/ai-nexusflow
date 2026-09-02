@@ -259,18 +259,18 @@ dbt-core        1.11.13
 dbt-clickhouse  1.10.2
 ```
 
-When ingestion exists (env = dbt `--target`; default `dev`). Warehouse vs lakehouse: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). GitHub endpoints: [github-ingestion.md](github-ingestion.md).
+When ingestion exists (env = dbt `--target`; default `dev`). Warehouse vs lakehouse: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). Route endpoints: [route-ingestion.md](route-ingestion.md).
 
 ```bash
 export NEXUS_ENV=dev
 export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
-uv run python branches/dlt_dbt_clickhouse/dlt/github/pull_requests.py
+uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
 uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
   --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
 uv run dbt test --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
 ```
 
-Lakehouse (Milestone 2, Spark Thrift required): `--project-dir branches/dlt_dbt_spark_iceberg` and `branches/dlt_dbt_spark_iceberg/dlt/github/pull_requests.py`.
+Lakehouse (Milestone 2, Spark Thrift required): `--project-dir branches/dlt_dbt_spark_iceberg` and `branches/dlt_dbt_spark_iceberg/dlt/route/products.py`.
 
 dbt uses `~/.dbt/profiles.yml` unless you pass `--profiles-dir`. Profile names match Compose stacks: **`nexus_clickhouse`**, **`nexus_lakehouse`**. Passwords and hosts come from **environment variables only** (never hardcode secrets in `profiles.yml`).
 

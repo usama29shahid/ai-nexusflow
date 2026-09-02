@@ -179,10 +179,10 @@ The five branches are **capabilities** (execution backends), not fixed pipelines
 
 ## Five independent branches
 
-All backends start from the **same REST APIs** (github, dataforseo, pokeapi first). Each capability owns **its own** dlt and dbt code. Branch 3, 4, and 5 are **not** children of dlt_dbt_clickhouse or dlt_dbt_spark_iceberg.
+All backends start from the **same REST APIs**. Primary source: **Route API** (`route` — ecommerce catalog and later transactional entities). Future secondary sources (for example DataForSEO) keep isolated Bronze/staging and may feed shared Gold. Each capability owns **its own** dlt and dbt code. Branch 3, 4, and 5 are **not** children of dlt_dbt_clickhouse or dlt_dbt_spark_iceberg. Source contract: [route-ingestion.md](route-ingestion.md).
 
 ```text
-                         Same REST APIs (github, dataforseo, pokeapi)
+                         Same REST APIs (route primary; others later)
                                            │
         ┌──────────────┬───────────────────┼────────────┬──────────────┐
         │              │                   │            │              │

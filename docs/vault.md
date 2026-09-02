@@ -30,7 +30,7 @@ HashiCorp Vault (Docker)
   → docker compose | uv run dlt | dbt
 ```
 
-**dlt and dbt never import a Vault SDK.** They read the same environment variable names as today (`CLICKHOUSE_PASSWORD`, `GITHUB_TOKEN`, …).
+**dlt and dbt never import a Vault SDK.** They read the same environment variable names as today (`CLICKHOUSE_PASSWORD`, `MINIO_ROOT_PASSWORD`, …).
 
 ---
 
@@ -107,7 +107,6 @@ Vault API listens on **`127.0.0.1:8200`** only — not exposed to the public int
 | `VAULT_ADDR` | e.g. `http://127.0.0.1:8200` |
 | `COMPOSE_PROFILES` | Which Docker stacks start |
 | Hosts and ports | `CLICKHOUSE_HOST`, `MINIO_API_PORT`, … |
-| `GITHUB_OWNER`, `GITHUB_REPO` | Repository identity (not secrets) |
 | `POLARIS_CLIENT_ID` | OAuth client id (secret is `POLARIS_CLIENT_SECRET` in Vault) |
 
 ### Vault KV v2 (secrets — never commit)
@@ -120,14 +119,15 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 | `minio` | `root_user`, `root_password` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Compose, dlt archive |
 | `polaris` | `client_secret` | `POLARIS_CLIENT_SECRET` | lakehouse profile |
 | `airflow` | `fernet_key`, `web_secret`, `admin_password` | `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY`, `AIRFLOW_ADMIN_PASSWORD` | airflow profile |
-| `github` | `token` | `GITHUB_TOKEN` | dlt GitHub scripts (when implemented) |
+| *(future)* `route` | JWT / demo-user secrets when authenticated entities are implemented | TBD | dlt Route user entities — **not required for catalog-only** |
+
+Catalog-first Route ingestion needs no Vault path. Do not seed unused source secrets.
 
 Example write (after bootstrap — operator shell only):
 
 ```bash
 vault kv put secret/nexusflow/dev/clickhouse password='strong-random-password'
 vault kv put secret/nexusflow/dev/minio root_user='minioadmin' root_password='strong-random-password'
-vault kv put secret/nexusflow/dev/github token='ghp_…'
 ```
 
 ---
@@ -162,7 +162,6 @@ Example template shape:
 ```text
 CLICKHOUSE_PASSWORD={{ with secret "secret/data/nexusflow/dev/clickhouse" }}{{ .Data.data.password }}{{ end }}
 MINIO_ROOT_PASSWORD={{ with secret "secret/data/nexusflow/dev/minio" }}{{ .Data.data.root_password }}{{ end }}
-GITHUB_TOKEN={{ with secret "secret/data/nexusflow/dev/github" }}{{ .Data.data.token }}{{ end }}
 ```
 
 Note: KV v2 read paths use `secret/data/…`; write paths use `secret/nexusflow/…`.
@@ -241,7 +240,7 @@ To run Vault only:
 | Firewall | Allow SSH and required app ports; **deny inbound 8200** from the internet |
 | Root token | Use only for bootstrap; prefer limited policies + AppRole for Agent |
 | `.env` on VPS | No real passwords after cutover — config only |
-| GitHub PAT | Fine-grained, read-only, repo-scoped, with expiry |
+| Source API tokens | Only when a source needs them (Route catalog needs none; JWT later) |
 | Default passwords | Replace dev defaults (`clickhouse123`, `minioadmin123`, …) when seeding Vault |
 
 ### Admin + dev user (optional)
@@ -277,7 +276,7 @@ When [Terraform](roadmap.md) lands on AWS:
 - Do **not** use `vault server -dev` on the VPS (in-memory, insecure)
 - Do **not** expose Vault UI/API on the public internet
 
-Fail clearly in dlt when a required secret env var is missing (e.g. `GITHUB_TOKEN` for GitHub ingestion).
+Fail clearly in dlt when a required secret env var is missing (for example a future Route JWT env var for authenticated entities).
 
 ---
 
@@ -290,6 +289,6 @@ Fail clearly in dlt when a required secret env var is missing (e.g. `GITHUB_TOKE
 | Done | Vault + vault-agent services in `docker-compose.yml` (`profile: vault`) |
 | Done | `scripts/vault-ensure.sh`, `scripts/vault-bootstrap.sh`, `scripts/load-secrets.sh` |
 | Done | Verified: `dlt_clickhouse_smoke` with Vault-injected secrets |
-| Planned | GitHub ingestion using Vault-injected `GITHUB_TOKEN` |
+| Planned | Route catalog ingestion (no secrets); JWT secrets only when authenticated entities are added |
 
 Read this document before changing secrets layout, bootstrap scripts, or Compose Vault services.

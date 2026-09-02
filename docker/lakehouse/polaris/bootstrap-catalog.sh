@@ -68,7 +68,7 @@ curl --fail-with-body -s \
 
 # Spark Thrift sessions need nexus_dev.default; dbt uses schema gold (and layers below).
 echo "Creating Iceberg namespaces in ${CATALOG_NAME}..."
-for ns in default gold int marts pub raw_dlt_smoke stg_dlt_smoke raw_github stg_github; do
+for ns in default gold int marts pub raw_dlt_smoke stg_dlt_smoke raw_route stg_route; do
   if curl --fail-with-body -s \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
