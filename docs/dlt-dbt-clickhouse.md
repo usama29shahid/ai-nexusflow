@@ -2,7 +2,7 @@
 
 Public name: **dlt_dbt_clickhouse** (dlt → dbt → ClickHouse). This is the warehouse ELT **capability**, not a git branch.
 
-The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md).
+The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md). Secrets: [vault.md](vault.md). Warehouse engine RBAC: **held** — [rbac.md](rbac.md).
 
 dbt project: `branches/dlt_dbt_clickhouse`. Config key: `dlt_dbt_clickhouse` in [`config/branches.yaml`](../config/branches.yaml). Docker profile: **`clickhouse`** (MinIO always on). See [setup.md](setup.md).
 

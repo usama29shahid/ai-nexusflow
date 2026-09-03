@@ -11,6 +11,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 - `docs/setup.md` — local development and service topology.
 - `docs/operations.md` — daily start/stop, all services, lakehouse restore.
 - `docs/vault.md` — HashiCorp Vault secrets (KV paths, Agent injection, VPS ops). Read before changing secrets or bootstrap scripts.
+- `docs/rbac.md` — Engine RBAC **held** (intent only). Secrets ≠ privileges. Do not implement ClickHouse/MinIO roles; Vault is the live security standard.
 - `docs/dlt-dbt-clickhouse.md` and `docs/dlt-extraction.md` — warehouse ingestion rules.
 - `docs/dlt-dbt-spark-iceberg.md` — lakehouse rules.
 - `docs/dbt-modeling.md` — shared transformation and modeling rules.
@@ -26,7 +27,7 @@ REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging 
 Airflow DAG → same dlt/dbt on host (DAG run_id = NEXUS_RUN_ID)
 ```
 
-Implement and verify `dlt_dbt_clickhouse` with full observability producers (lake writes on every run) before starting Spark/Iceberg, Terraform/CI, reader-tool dashboards, or LLM/RAG. Airflow smoke/source DAGs are part of Milestone 1, not a later phase. Do not fill future-phase folders with speculative implementations.
+Implement and verify `dlt_dbt_clickhouse` with full observability producers (lake writes on every run) before starting Spark/Iceberg, Terraform/CI, reader-tool dashboards, LLM/RAG, or engine RBAC. Airflow smoke/source DAGs are part of Milestone 1, not a later phase. Do not fill future-phase folders with speculative implementations. Do not implement [docs/rbac.md](docs/rbac.md) while it is held.
 
 ## Capability boundaries
 

@@ -2,7 +2,7 @@
 
 Public name: **dlt_dbt_spark_iceberg** (dlt → dbt on Spark → Iceberg). This is the open lakehouse **capability**, not a git branch. Trino is serving/BI. Apache Polaris is the Iceberg REST catalog. ClickHouse is not on this path (a later optional feature may query Iceberg; it is not required here).
 
-The five-backend platform story lives in [architecture.md](architecture.md). Extraction policy: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling DAG: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Env: [environments.md](environments.md). Warehouse peer: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
+The five-backend platform story lives in [architecture.md](architecture.md). Extraction policy: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling DAG: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Env: [environments.md](environments.md). Secrets: [vault.md](vault.md). Lakehouse engine RBAC: **held** — [rbac.md](rbac.md). Warehouse peer: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
 
 dbt project: `branches/dlt_dbt_spark_iceberg` (`nexus_lakehouse`). Config key: `dlt_dbt_spark_iceberg` in [`config/branches.yaml`](../config/branches.yaml).
 

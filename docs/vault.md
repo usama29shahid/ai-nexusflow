@@ -8,6 +8,7 @@ Related:
 - [dlt extraction](dlt-extraction.md) — dlt reads secrets from the environment
 - [Environments](environments.md) — `NEXUS_ENV` and naming
 - [Architecture](architecture.md) — infra on host vs Docker
+- [Role-based access (RBAC)](rbac.md) — engine privileges **held**; not the live Vault contract
 
 Official HashiCorp references:
 
@@ -145,6 +146,8 @@ If you have used AWS Secrets Manager, the mapping is:
 | App reads env vars | Same — dlt/dbt read `os.environ` |
 
 **Platform injects secrets; applications never fetch them directly.**
+
+Authorization (who may `SELECT` / `INSERT` / write a bucket) is **not** defined here — engine RBAC is **held**; see [rbac.md](rbac.md). Keep the single shared `clickhouse` and `minio` KV secrets. Do not add nested role paths (`clickhouse/loader`) unless RBAC is un-held and the KV table in this document is updated in the same change.
 
 ---
 
@@ -292,5 +295,6 @@ Fail clearly in dlt when a required secret env var is missing (for example a fut
 | Done | `scripts/vault-ensure.sh`, `scripts/vault-bootstrap.sh`, `scripts/load-secrets.sh` |
 | Done | Verified: `dlt_clickhouse_smoke` with Vault-injected secrets |
 | Planned | Route catalog ingestion (no secrets); JWT secrets only when authenticated entities are added |
+| Held | Per-role ClickHouse / MinIO credentials in KV — not in progress; [rbac.md](rbac.md) |
 
 Read this document before changing secrets layout, bootstrap scripts, or Compose Vault services.

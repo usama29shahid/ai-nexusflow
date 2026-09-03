@@ -238,7 +238,7 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 
 ## Development vs production
 
-**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. **Secrets on the VPS:** HashiCorp Vault (KV v2) + Vault Agent → env injection — see [vault.md](vault.md). See [setup.md](setup.md).
+**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. **Secrets on the VPS:** HashiCorp Vault (KV v2) + Vault Agent → env injection — see [vault.md](vault.md). Engine RBAC (ClickHouse / MinIO / Polaris) is **held** — see [rbac.md](rbac.md). See [setup.md](setup.md).
 
 **Compose profiles** (one file at the repo root). Name profiles after **stacks**, not every container. MinIO has **no** profile so it always starts. Isolation between capabilities is buckets and catalogs on that MinIO, not a second Compose project.
 

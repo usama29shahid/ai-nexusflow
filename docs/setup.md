@@ -4,7 +4,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 > **Infrastructure is containerized. Python stays on the host.**
 
-Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running.
+Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running. Engine RBAC is **held** (shared ClickHouse/MinIO users for now) — see [rbac.md](rbac.md).
 
 Docker Compose runs **MinIO and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
 

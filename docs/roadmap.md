@@ -141,6 +141,7 @@ dbt-clickhouse  1.10.2
 - [ ] ClickHouse bronze / dbt silver + tests — Phase 1
 - [ ] MinIO archive + Iceberg / Polaris / dbt-spark / Trino (dlt_dbt_spark_iceberg) — Phase 1
 - [ ] Airflow source/ELT DAGs beyond smoke (profile + smoke DAG exist) — Phase 1
+- [ ] Engine RBAC cutover — **held** (not Milestone 1); intent only in [rbac.md](rbac.md)
 - [ ] Terraform dev/prod — Phase 2
 - [ ] GitHub Actions — Phase 2
 - [ ] SigNoz / OpenMetadata / Elementary lake ingest and dashboards — Phase 2
