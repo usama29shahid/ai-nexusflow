@@ -21,7 +21,9 @@ exporters:
     s3uploader:
       region: ${env:AWS_REGION}
       s3_bucket: nexus-telemetry-${env:NEXUS_ENV}
-      s3_prefix: otel/
+      s3_prefix: otel
+      # Avoid default year=%Y/... keys — MinIO rejects some generated object names.
+      s3_partition_format: "%Y/%m/%d/%H/%M"
       s3_force_path_style: true
     marshaler: otlp_json
 

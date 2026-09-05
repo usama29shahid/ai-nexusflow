@@ -163,11 +163,11 @@ Which models exist depends on the **requirement**. There is no mandatory full st
 
 ---
 
-## Worked example: Route `products`
+## Worked example: Route `products` (implemented)
 
-Illustration of the rules above. Pipelines are **not implemented yet**. Full Route source contract: [route-ingestion.md](route-ingestion.md). Lakehouse copy of the same API: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+**Live reference:** [`dlt/route/products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py). Org extraction norms (mandatory for the next endpoint): [dlt-extraction.md](dlt-extraction.md). Full Route source contract: [route-ingestion.md](route-ingestion.md). Lakehouse copy of the same API (Milestone 2): [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
-Assumptions: source Route API, endpoint `GET /api/v1/products`, resource `products`. Public catalog — no JWT. Opaque job names such as `pipe_one` are not used. First Milestone 1 slice is catalog-only (`products`, `categories`, `brands`).
+Assumptions: source Route API, endpoint `GET /api/v1/products`, resource `products`. Public catalog — no JWT. Full-refresh paginated extract → MinIO JSONL + ClickHouse Bronze + lake/OTLP. Opaque job names such as `pipe_one` are not used. Catalog follow-ons (`categories`, `brands`) must mirror this script’s norms.
 
 **Three names** ([environments.md](environments.md)):
 
@@ -176,7 +176,7 @@ Job     products.py / route_products   # script now; Airflow task id later
 Table   products
 Bucket  nexus-dlt-dbt-clickhouse-{env}            # all warehouse JSONL for this env
 Prefix  route/products/dt=.../run_id=.../part-*.jsonl.gz
-Bronze  raw_route_{env}.products
+Bronze  raw_route_{env} (dataset); physical table often raw_route_{env}___products under CLICKHOUSE_DB
 ```
 
 Do not name the ClickHouse database or MinIO bucket after the job. dlt dataset = `raw_route_{env}`, not the script name. Script name, Bronze table, and archive `{endpoint}` segment stay aligned (`products`).
@@ -188,24 +188,12 @@ s3://nexus-dlt-dbt-clickhouse-dev/
   route/products/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
 ```
 
-**dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Physical names are `stg_route_dev`, `gold_dev`, etc.
+**dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Physical names are `stg_route_dev`, `gold_dev`, etc. Staging / Gold for Route products are the next Milestone 1 step after this dlt slice.
 
-- **`sources.yml`:** put `_{{ target.name }}` in `database` / `schema` explicitly.
+- **`sources.yml`:** put `_{{ target.name }}` in identifiers; under current dlt ClickHouse naming use `identifier: raw_route_{{ target.name }}___products` inside `CLICKHOUSE_DB` (same pattern as `dlt_smoke`).
 - **`dbt_project.yml` `+schema`:** use the **unsuffixed** layer name (`stg_route`, `gold`, …). This project’s `generate_schema_name` macro appends `_{{ target.name }}`. Do **not** also write `stg_route_{{ target.name }}` in `+schema` — that would become `stg_route_dev_dev`.
 
-`models/staging/route/sources.yml` (proposed):
-
-```yaml
-version: 2
-sources:
-  - name: route_raw
-    database: raw_route_{{ target.name }}
-    schema: raw_route_{{ target.name }}
-    tables:
-      - name: products
-```
-
-`dbt_project.yml` (proposed fragment; matches the live macro):
+`dbt_project.yml` (fragment already in tree for route staging):
 
 ```yaml
 models:
@@ -223,22 +211,31 @@ models:
       +schema: pub                  # → pub_{{ target.name }}
 ```
 
-Staging: `stg_route_dev.stg_route_products` via `{{ source('route_raw', 'products') }}`. Gold only if a requirement **names** a model (for example `dim_product`). dlt ends at MinIO + Bronze; all post-Bronze work is dbt-only.
+Staging (when modeled): `stg_route_dev.stg_route_products` via `{{ source('route_raw', 'products') }}`. Gold only if a requirement **names** a model (for example `dim_product`). dlt ends at MinIO + Bronze; all post-Bronze work is dbt-only.
 
-From the repo root (when code exists):
+From the repo root (dlt only today):
 
 ```bash
+set -a && source .env && set +a
 export NEXUS_ENV=dev
-export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
+unset NEXUS_RUN_ID   # leftover export overrides minting
+export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4317}"
 uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
-uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
-  --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
+# Optional: --run-id <id> for Airflow / replay / intentional dlt→dbt chain
 ```
+
+After dbt models exist, pass the **same** `NEXUS_RUN_ID` (printed by the script, or `--run-id`) as `var('run_id')`.
 
 `prd` later: same files, `NEXUS_ENV=prd` and `--target prd` → bucket `-prd`, databases `*_prd`.
 
 ---
 
-## First pipeline (implementation later)
+## First pipeline status
 
-Working path: the example above (or one similar REST source) → dlt → MinIO `nexus-dlt-dbt-clickhouse-dev` + ClickHouse `raw_{source}_dev` → dbt `--target dev`. Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark or LLM in that slice.
+| Layer | Status |
+| --- | --- |
+| dlt Route `products` (archive + Bronze + telemetry) | **Implemented** — reference for follow-on endpoints |
+| dbt `stg_route_products` / Gold | Not yet |
+| Airflow source DAG | Not yet (smoke DAG only) |
+
+Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark or LLM in this slice.

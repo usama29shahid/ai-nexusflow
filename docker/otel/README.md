@@ -1,6 +1,6 @@
 # OTel Collector
 
-Always-on with MinIO (no Compose profile). Receives OTLP on gRPC `:4317` and HTTP `:4318`; exports batches to `nexus-telemetry-{env}/otel/` via the S3-compatible MinIO endpoint.
+Always-on with MinIO (no Compose profile). Image: `otel/opentelemetry-collector-contrib:0.128.0`. Receives OTLP on gRPC `:4317` and HTTP `:4318`; exports batches to `nexus-telemetry-{env}/otel/` via the S3-compatible MinIO endpoint.
 
 ## Config variants
 
@@ -23,4 +23,4 @@ Host pipelines:
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317
 ```
 
-Use `common.observability.get_tracer()` or `emit_event()` from Python.
+Use `common.observability.get_tracer()`, `record_dlt_load()`, or `publish_dlt_load()` (which calls `record_dlt_load`). Lake path uses `s3_partition_format: %Y/%m/%d/%H/%M` under `otel/` (MinIO-safe; avoids default `year=%Y/...` keys).

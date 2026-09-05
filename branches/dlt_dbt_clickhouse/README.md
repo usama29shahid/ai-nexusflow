@@ -8,6 +8,7 @@ Standards: [docs/dlt-dbt-clickhouse.md](../../docs/dlt-dbt-clickhouse.md) (inclu
 
 - `dlt/{source}/` — extract pipelines
 - `models/` — dbt (`nexus_clickhouse`; profile matches Compose stack `clickhouse`)
+- `tests/` — `dlt/{source}/unit|regression` (Python) + `dbt/` mirroring models (see [tests/README.md](tests/README.md))
 
 dbt does **not** load the repo `.env`. Source it first, then debug:
 

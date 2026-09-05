@@ -58,21 +58,25 @@ Credentials must never be hardcoded or committed. Catalog-only work needs no Vau
 
 **One script per endpoint.** Parameter variants are separate resources only when payload schema, grain, auth, or incremental behavior differs.
 
-#### Canonical naming (planned)
+#### Canonical naming
 
 Script name, dlt resource name, Bronze table name, archive `{endpoint}` segment, and dbt `source()` table name use the **same** resource identifier.
 
-| Resource | Script (when implemented) | Bronze table | Archive segment | Notes |
+| Resource | Script | Bronze table | Archive segment | Notes |
 |---|---|---|---|---|
-| `products` | `products.py` | `products` | `products` | Public catalog |
-| `categories` | `categories.py` | `categories` | `categories` | Public catalog |
-| `brands` | `brands.py` | `brands` | `brands` | Public catalog |
+| `products` | [`products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py) | `products` | `products` | **Implemented** (ClickHouse branch) — reference pipeline |
+| `categories` | `categories.py` | `categories` | `categories` | Public catalog — must mirror products norms |
+| `brands` | `brands.py` | `brands` | `brands` | Public catalog — must mirror products norms |
 | `subcategories` | `subcategories.py` | `subcategories` | `subcategories` | Optional catalog follow-on |
 | `orders` / cart / wishlist / addresses | TBD | TBD | TBD | JWT — after catalog verified |
 
+Mandatory patterns for every new Route (and other source) endpoint script: [dlt-extraction.md](dlt-extraction.md) **Reference pipeline**.
+
 ### Catalog-first sequencing
 
-**First verified slice (Milestone 1 intent):** public catalog only — `products`, `categories`, `brands`.
+**First verified dlt slice:** Route `products` → MinIO archive + ClickHouse Bronze + observability lake/OTLP.
+
+**Next catalog endpoints:** `categories`, `brands` — copy `products.py` norms (do not invent a second style).
 
 **Follow-on:** authenticated entities (cart, wishlist, orders, addresses, customer profile) once catalog → Bronze → staging → basic Gold is solid.
 
@@ -85,20 +89,20 @@ Do not block the first green path on JWT signup, demo-user strategy, or payment/
 - Adding a second source **must not** modify Route pipelines or `stg_route_*` models.
 - Shared Gold / marts may combine sources. Dims stay entity-grained (`dim_product`), not `route_dim_product`. See [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md).
 
-## 2. Common dlt rules (unchanged)
+## 2. Common dlt rules
 
-Route follows the org extraction standard in [dlt-extraction.md](dlt-extraction.md):
+Route follows the org extraction standard in [dlt-extraction.md](dlt-extraction.md) (including the **Reference pipeline** checklist derived from `products.py`):
 
 - dlt owns REST auth (when needed), pagination, retries, rate limits, incremental state, raw archival, and Bronze loads
-- Extract once; dual-write archive + Bronze
-- Stamp every load with a new shared `NEXUS_RUN_ID`
+- Extract once; dual-write **archive first**, then Bronze; assert `LoadInfo` on each destination
+- Shared `run_id` via `--run-id` / `NEXUS_RUN_ID` / mint; stamp audit columns; publish lake on ok and fail
 - Archive objects and historical Bronze rows are immutable / append-only
 
 Do not invent a custom watermark system. Do not put business dimensional logic in dlt.
 
-### Pagination and response shape (expected)
+### Pagination and response shape
 
-Route list endpoints typically return JSON shaped like `{ results, metadata, data: [...] }` with pagination metadata. Exact pager fields must be confirmed against live responses when pipelines are implemented; use dlt REST Client pagination helpers accordingly.
+Route list endpoints return JSON shaped like `{ results, metadata, data: [...] }` with page-number metadata (`numberOfPages`, etc.). `products.py` uses dlt `PageNumberPaginator` + `data_selector="data"`. Confirm live metadata fields when adding `categories` / `brands`.
 
 ## 3. Branch destinations
 

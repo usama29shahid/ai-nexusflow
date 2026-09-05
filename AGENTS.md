@@ -19,7 +19,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 
 ## Current implementation priority
 
-The repository is a documented skeleton. The immediate task is Phase 1, Milestone 1:
+Phase 1, Milestone 1 — warehouse branch first. Route **`products`** dlt (archive + Bronze + observability producers) is the **reference endpoint pipeline**; document and copy its norms for the next scripts. Still ahead in this milestone: dbt staging / Gold for products, Airflow source DAG, then catalog follow-ons.
 
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
@@ -46,13 +46,15 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 
 ## Ingestion rules
 
+- **Reference implementation:** `branches/dlt_dbt_clickhouse/dlt/route/products.py`. Every new warehouse endpoint script must follow the same norms in [docs/dlt-extraction.md](docs/dlt-extraction.md) (Reference pipeline section). Do not invent a second style for `categories` / `brands` / other sources.
 - dlt owns REST auth, pagination, retries, rate limits, incremental state, raw archival, and Bronze loads. dbt must not call APIs.
-- Extract a source once, then write to both destinations; never scrape an API separately for archive and Bronze.
+- Extract a source once, then write to both destinations (archive **first**, then Bronze); never scrape an API separately for archive and Bronze. Assert `LoadInfo` after each destination run.
 - In the warehouse branch, archive immutable compressed JSONL to `nexus-dlt-dbt-clickhouse-{env}` and append Bronze rows to `raw_{source}_{env}`.
 - Use one endpoint pipeline per REST endpoint. Parameter variants are separate only if their payload contract (schema, grain, auth, or incremental behavior) differs.
 - Keep dlt state for cursors and schema; do not introduce a custom watermark system.
-- Every load receives a new shared `NEXUS_RUN_ID`. Stamp it on Bronze rows and pass the same ID to dbt as `var('run_id')`. Do not use a permanent default run ID.
+- Every load receives a shared `NEXUS_RUN_ID` (`--run-id` > env > mint `local-{UTC}`). Stamp it on Bronze rows and pass the same ID to dbt as `var('run_id')`. Do not use a permanent default run ID.
 - Archive objects and historical Bronze rows are immutable/append-only. Replay reads an archive prefix, loads with a new run ID, then runs dbt.
+- Every dlt run publishes lake events via `publish_dlt_load` on success and failure; OTLP is best-effort and must not abort ingest.
 
 ## dbt and data-modeling rules
 

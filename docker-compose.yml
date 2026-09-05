@@ -223,7 +223,7 @@ services:
   # OTel Collector — observability gateway (always on; no profile)
   # ============================================================
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.120.0
+    image: otel/opentelemetry-collector-contrib:0.128.0
     container_name: otel-collector
     restart: unless-stopped
 

@@ -10,7 +10,7 @@ from common.observability.lake import (
     publish_run_summary,
     write_json_object,
 )
-from common.observability.otel import emit_event, get_tracer
+from common.observability.otel import emit_event, get_tracer, record_dlt_load
 
 __all__ = [
     "copy_dbt_artifacts",
@@ -19,6 +19,7 @@ __all__ = [
     "otlp_endpoint",
     "publish_pipeline_event",
     "publish_run_summary",
+    "record_dlt_load",
     "telemetry_bucket",
     "write_json_object",
 ]

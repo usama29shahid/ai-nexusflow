@@ -62,9 +62,13 @@ Run each product’s Compose profile as upstream documents intend. Use batch ing
 
 ### dlt
 
+Every endpoint pipeline must emit on **success and failure** via `common.observability.publish.publish_dlt_load` (see reference [`products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py) and [dlt-extraction.md](dlt-extraction.md)):
+
 | Output | Destination |
 | --- | --- |
-| Spans + `dlt.load.*` events (row counts, pipeline name, status) | OTLP → OTel Collector → `nexus-telemetry-{env}/otel/` and `events/` |
+| Lake events `dlt.load.completed` / `dlt.load.failed` + `summaries/runs/{run_id}.json` | Direct MinIO via `common/observability` (required path) |
+| Best-effort OTLP span `dlt.load` + counter `nexus.dlt.rows_loaded` | OTLP → OTel Collector → `nexus-telemetry-{env}/otel/` (must not fail the pipeline if the collector is down) |
+| Optional parent span (e.g. `route.products.load`) | Same OTLP path; setup must be best-effort; nest `publish_dlt_load` under the parent when present |
 | `_dlt_loads`, `_dlt_version`, pipeline state | Warehouse `_dlt_*` tables (ingestion metadata, not the observability lake) |
 | Console stdout | Airflow remote log when task is orchestrated → `nexus-airflow-logs-{env}` |
 
