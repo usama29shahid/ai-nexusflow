@@ -15,6 +15,16 @@ dependencies = [
     "opentelemetry-sdk>=1.30.0",
 ]
 
+[project.optional-dependencies]
+# `dlt pipeline … show` / `dlt dashboard` (Workspace Dashboard)
+dlt-dashboard = [
+    "dlt[hub]>=1.30.0",
+    "marimo",
+    "pyarrow",
+    "ibis-framework",
+    "numpy",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

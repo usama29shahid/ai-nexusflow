@@ -47,6 +47,36 @@ Unit guards (no Compose):
 uv run python branches/dlt_dbt_clickhouse/tests/dlt/route/unit/test_products_guards.py
 ```
 
+### dlt schema / dashboard (pipeline metrics only — not Bronze SQL)
+
+Use the Workspace Dashboard for **dlt** loads, inferred schema, and local pipeline state. It is **not** wired for ClickHouse; do not use its SQL / dataset browser for data. Query Bronze with CloudBeaver or `clickhouse-client`.
+
+```bash
+# Inferred schema YAML (local pipeline state; no destination reconnect)
+uv run dlt pipeline --pipelines-dir ~/.dlt/pipelines route_products schema --format yaml
+
+# Workspace UI — metrics / schema / loads only (no CH credentials)
+uv sync --extra dlt-dashboard   # once (pulls dlt[hub] + marimo/…)
+./scripts/dlt-dashboard-route-products.sh
+# → http://localhost:2718 (script stops prior marimo instances first)
+# If the UI shows a skew-protection warning: close old tabs and open the new URL.
+```
+
+### ClickHouse Bronze table names (CloudBeaver / clickhouse-client)
+
+ClickHouse has **no schemas**. dlt stores the dataset as a **table name prefix** with `___`, inside `CLICKHOUSE_DB` (usually `warehouse`). Logical resource names (`products`) ≠ physical tables (`NEXUS_ENV=dev` → `raw_route_dev`):
+
+```sql
+-- works (physical tables in warehouse)
+SELECT * FROM raw_route_dev___products LIMIT 1000;
+SELECT * FROM raw_route_dev___products__images LIMIT 100;
+SELECT * FROM raw_route_dev___products__subcategory LIMIT 100;
+SELECT * FROM raw_route_dev____dlt_loads ORDER BY inserted_at DESC LIMIT 20;
+
+-- fails (no table literally named products)
+-- SELECT * FROM products;
+```
+
 ## Not yet implemented
 
 `categories`, `brands` (catalog follow-ons — **same norms as products**). Authenticated cart / wishlist / orders / addresses come after catalog is solid.
