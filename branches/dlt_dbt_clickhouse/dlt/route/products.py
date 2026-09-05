@@ -124,9 +124,15 @@ def _clickhouse_destination():
     )
 
 
+def _minio_endpoint() -> str:
+    """Host default localhost; override for Compose/Airflow (e.g. http://minio:9000)."""
+    from common.observability.config import minio_endpoint
+
+    return minio_endpoint()
+
+
 def _filesystem_destination(*, env: str, run_id: str, dt: str):
-    minio_port = os.environ.get("MINIO_API_PORT", "9002")
-    minio_endpoint = f"http://localhost:{minio_port}"
+    endpoint = _minio_endpoint()
     bucket = f"s3://nexus-dlt-dbt-clickhouse-{env}"
     return filesystem(
         bucket_url=bucket,
@@ -136,10 +142,10 @@ def _filesystem_destination(*, env: str, run_id: str, dt: str):
         credentials={
             "aws_access_key_id": _required("MINIO_ROOT_USER"),
             "aws_secret_access_key": _required("MINIO_ROOT_PASSWORD"),
-            "endpoint_url": minio_endpoint,
+            "endpoint_url": endpoint,
             "region_name": os.environ.get("AWS_REGION", "us-east-1"),
         },
-    ), bucket, minio_endpoint
+    ), bucket, endpoint
 
 
 def _products_resource(rows: list[dict[str, Any]]):
@@ -181,6 +187,25 @@ def _products_load_span_cm(*, run_id: str, env: str):
             file=sys.stderr,
         )
         return nullcontext()
+
+
+def _set_load_span_status(load_span: Any, *, status: str, description: str | None = None) -> None:
+    """Set status attribute + OTel StatusCode. Best-effort (SystemExit would skip ERROR otherwise)."""
+    if load_span is None:
+        return
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        load_span.set_attribute("status", status)
+        if status == "ok":
+            load_span.set_status(Status(StatusCode.OK))
+        else:
+            load_span.set_status(Status(StatusCode.ERROR, description or status))
+    except Exception as otel_exc:  # noqa: BLE001 — never block ingest on OTel status
+        print(
+            f"WARNING: OTel parent span status not set: {otel_exc}",
+            file=sys.stderr,
+        )
 
 
 def _mint_local_run_id(now: datetime | None = None) -> str:
@@ -332,12 +357,15 @@ def main(argv: list[str] | None = None) -> None:
                 endpoint=ENDPOINT,
             )
             if load_span is not None:
-                load_span.set_attribute("status", "ok")
+                _set_load_span_status(load_span, status="ok")
         except Exception as exc:
             status = "failed"
             print(f"ERROR: {exc}", file=sys.stderr)
-            if load_span is not None:
-                load_span.set_attribute("status", "failed")
+            _set_load_span_status(
+                load_span,
+                status="failed",
+                description=str(exc),
+            )
             publish_dlt_load(
                 branch="dlt_dbt_clickhouse",
                 component="dlt",

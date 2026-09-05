@@ -15,8 +15,9 @@ Copy these from `products.py` / the docs (do not invent a parallel pattern):
 3. Assert `LoadInfo.has_failed_jobs` / `raise_on_failed_jobs()` on each destination; treat 0 rows as failure.
 4. `--run-id` > `NEXUS_RUN_ID` > mint `local-{UTC}`; validate allowlist; set `NEXUS_RUN_ID` for lake / dbt.
 5. Explicit HTTP timeouts + retries + `Retry-After`; `_required` raises `RuntimeError` (not bare `sys.exit`).
-6. `publish_dlt_load` on ok **and** fail; OTel parent span best-effort only if used.
-7. Unit guards under `tests/dlt/route/unit/` (not root `tests/`, not dbt `test-paths`).
+6. MinIO via `MINIO_ENDPOINT_URL` (host default `http://localhost:$MINIO_API_PORT`; Compose/Airflow often `http://minio:9000`).
+7. `publish_dlt_load` on ok **and** fail; OTel parent span best-effort only if used.
+8. Unit guards under `tests/dlt/route/unit/` (not root `tests/`, not dbt `test-paths`).
 
 ## Implemented
 

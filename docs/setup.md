@@ -258,15 +258,21 @@ dbt-core        1.11.13
 dbt-clickhouse  1.10.2
 ```
 
-When ingestion exists (env = dbt `--target`; default `dev`). Warehouse vs lakehouse: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). Route endpoints: [route-ingestion.md](route-ingestion.md).
+Warehouse Route `products` dlt is live (env = dbt `--target`; default `dev`). Warehouse vs lakehouse: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). Route endpoints: [route-ingestion.md](route-ingestion.md). Prefer `unset NEXUS_RUN_ID` so the script mints a fresh id (leftover shell exports override minting).
 
 ```bash
+set -a && source .env && set +a
 export NEXUS_ENV=dev
-export NEXUS_RUN_ID=local-$(date -u +%Y%m%dT%H%M%SZ)
+unset NEXUS_RUN_ID
+export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4317}"
 uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
-uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
-  --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
-uv run dbt test --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
+# Optional explicit id (Airflow / replay / dlt→dbt chain):
+# uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py --run-id local-20260905T120000Z
+# After dbt models exist, pass the same run_id as var('run_id'):
+# export NEXUS_RUN_ID=…   # from the products.py print line, or --run-id
+# uv run dbt run --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV" \
+#   --vars "{\"run_id\": \"$NEXUS_RUN_ID\"}"
+# uv run dbt test --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
 ```
 
 Lakehouse (Milestone 2, Spark Thrift required): `--project-dir branches/dlt_dbt_spark_iceberg` and `branches/dlt_dbt_spark_iceberg/dlt/route/products.py`.

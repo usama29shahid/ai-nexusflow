@@ -24,8 +24,9 @@ That script is the first real warehouse dlt pipeline. The next endpoint (`catego
 | **Shared `run_id`** | Resolve `--run-id` > `NEXUS_RUN_ID` env > mint `local-{UTC}`. Set `os.environ["NEXUS_RUN_ID"]` for lake / later dbt. Validate allowlist `[A-Za-z0-9][A-Za-z0-9._:+-]*` (no `/`, spaces, or empty). Warn on env reuse (append-only Bronze + lake summary overwrite). |
 | **Audit / lineage columns** | Stamp every row: `run_id`, `_extracted_at`, `_source`, `_endpoint`, `_nexus_env`. No business casts in dlt — typing and flatten belong in `stg_*`. |
 | **HTTP client** | Explicit connect/read timeouts, retries on 429/5xx, honor `Retry-After`. |
+| **MinIO endpoint** | Use `MINIO_ENDPOINT_URL` (default `http://localhost:{MINIO_API_PORT}`). Inside Compose/Airflow set e.g. `http://minio:9000`. |
 | **Missing secrets** | Raise `RuntimeError` (not bare `sys.exit`) so the failure path can still publish lake `status=failed`. |
-| **Observability every run** | Call `publish_dlt_load` on success **and** failure (`dlt.load.completed` / `dlt.load.failed`). OTLP via that helper is best-effort. If you wrap a parent span, setup must not abort ingest when OTel is down; nest `publish_dlt_load` under the parent when present. |
+| **Observability every run** | Call `publish_dlt_load` on success **and** failure (`dlt.load.completed` / `dlt.load.failed`). OTLP via that helper is best-effort. If you wrap a parent span, setup must not abort ingest when OTel is down; nest `publish_dlt_load` under the parent when present; set parent `StatusCode.OK` / `ERROR` explicitly (do not rely on `SystemExit` for ERROR). |
 | **Unit tests** | Branch guards under `branches/dlt_dbt_clickhouse/tests/dlt/{source}/unit/` (not root `tests/`, not dbt `test-paths`). Cover run_id, LoadInfo, HTTP session, and OTel fallback as applicable. |
 
 Checklist + runbook for Route: [`branches/dlt_dbt_clickhouse/dlt/route/README.md`](../branches/dlt_dbt_clickhouse/dlt/route/README.md).

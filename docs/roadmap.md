@@ -49,10 +49,12 @@ Airflow → DAG per source (smoke, then first REST source) → same dlt/dbt on h
 
 - One stable REST source: **Route API** (`route`) — catalog-first (`products`, `categories`, `brands`); see [route-ingestion.md](route-ingestion.md)
 - DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_{source}_dev`
+- **Done:** Route `products` full-refresh dlt → archive + Bronze + lake events/OTLP (reference pipeline in [dlt-extraction.md](dlt-extraction.md))
+- **Next:** dbt `stg_*` / Gold for products, then Airflow source DAG; then `categories` / `brands` (same dlt norms)
 - dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
 - Shared `NEXUS_RUN_ID` into dlt and dbt (`local-*` manual; Airflow DAG `run_id` when orchestrated)
-- Observability lake writes verified for manual and Airflow-triggered runs
-- Airflow: smoke DAG + first source DAG for enabled `dlt_dbt_clickhouse`; remote logs to MinIO
+- Observability lake writes verified for manual host dlt runs; Airflow-triggered runs when the source DAG lands
+- Airflow: smoke DAG exists; first source DAG for enabled `dlt_dbt_clickhouse` still open; remote logs to MinIO
 - Verify row counts, dbt tests, and lake objects under `nexus-telemetry-dev/`
 - Enhanced modeling (SCD variants, soft delete, hash keys): backlog only — [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md)
 
@@ -137,8 +139,9 @@ dbt-clickhouse  1.10.2
 - [x] Observability foundation: `nexus-telemetry-{env}` bucket, OTel Collector, `common/observability` SDK
 - [x] SigNoz / OpenMetadata reader Compose profiles (`signoz`, `openmetadata`) — containers only; product setup is Phase 2
 - [ ] Pipeline instrumentation (dlt/dbt/Airflow wired to lake on every run) — Phase 1
-- [ ] DLT ingestion pipeline (dlt_dbt_clickhouse) — Phase 1
-- [ ] ClickHouse bronze / dbt silver + tests — Phase 1
+- [x] Route `products` dlt → MinIO archive + ClickHouse Bronze + lake/OTLP producers (`dlt_dbt_clickhouse`) — Phase 1
+- [ ] dbt silver / Gold + tests for Route products — Phase 1
+- [ ] Catalog follow-on dlt endpoints (`categories`, `brands`) — Phase 1
 - [ ] MinIO archive + Iceberg / Polaris / dbt-spark / Trino (dlt_dbt_spark_iceberg) — Phase 1
 - [ ] Airflow source/ELT DAGs beyond smoke (profile + smoke DAG exist) — Phase 1
 - [ ] Engine RBAC cutover — **held** (not Milestone 1); intent only in [rbac.md](rbac.md)
@@ -151,11 +154,11 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**Phase 1 Milestone 1:** implement and verify **dlt_dbt_clickhouse** with the **observability data lake contract** and **Airflow** source DAGs:
+**Phase 1 Milestone 1 (in progress):** Route `products` dlt + observability producers are live. Next: **dbt staging / Gold** for products, then **Airflow** source DAG (`nexus_route_clickhouse`), then other catalog endpoints.
 
 ```text
-REST → dlt → MinIO archive + ClickHouse Bronze → dbt → lake telemetry
-Airflow DAG (same scripts, DAG run_id = NEXUS_RUN_ID)
+REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt (next) → lake telemetry ✓
+Airflow DAG (next; same scripts, DAG run_id = NEXUS_RUN_ID)
 ```
 
 No Spark or LLM in that slice. Reader tool dashboards (SigNoz, OpenMetadata, Elementary) are Phase 2 after lake writes are proven.

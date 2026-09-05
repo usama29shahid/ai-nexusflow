@@ -14,4 +14,5 @@ Shared `common/` SDK:
 
 ```bash
 uv run python tests/unit/common/test_observability_publish.py
+uv run python tests/unit/common/test_observability_otel.py
 ```

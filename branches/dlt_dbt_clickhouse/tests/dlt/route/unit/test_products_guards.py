@@ -8,6 +8,7 @@ Run from repo root:
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import unittest
 from datetime import datetime, timezone
@@ -103,6 +104,70 @@ class RouteProductsGuardsTest(unittest.TestCase):
             tracer.start_as_current_span.call_args.args[0],
             "route.products.load",
         )
+
+    def test_filesystem_uses_minio_endpoint_url_override(self) -> None:
+        env = {
+            "MINIO_ENDPOINT_URL": "http://minio:9000",
+            "MINIO_ROOT_USER": "minioadmin",
+            "MINIO_ROOT_PASSWORD": "minioadmin123",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch.object(self.products, "filesystem", return_value=MagicMock()) as fs:
+                _dest, _bucket, endpoint = self.products._filesystem_destination(
+                    env="dev",
+                    run_id="local-test",
+                    dt="2026-09-05",
+                )
+        self.assertEqual(endpoint, "http://minio:9000")
+        self.assertEqual(
+            fs.call_args.kwargs["credentials"]["endpoint_url"],
+            "http://minio:9000",
+        )
+
+    def test_filesystem_defaults_to_localhost_port(self) -> None:
+        env = {
+            "MINIO_API_PORT": "9002",
+            "MINIO_ROOT_USER": "minioadmin",
+            "MINIO_ROOT_PASSWORD": "minioadmin123",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            os.environ.pop("MINIO_ENDPOINT_URL", None)
+            with patch.object(self.products, "filesystem", return_value=MagicMock()):
+                _dest, _bucket, endpoint = self.products._filesystem_destination(
+                    env="dev",
+                    run_id="local-test",
+                    dt="2026-09-05",
+                )
+        self.assertEqual(endpoint, "http://localhost:9002")
+
+    def test_set_load_span_status_ok(self) -> None:
+        span = MagicMock()
+        with patch("opentelemetry.trace.Status") as status_cls:
+            with patch("opentelemetry.trace.StatusCode") as code:
+                code.OK = "OK"
+                code.ERROR = "ERROR"
+                self.products._set_load_span_status(span, status="ok")
+        span.set_attribute.assert_called_once_with("status", "ok")
+        span.set_status.assert_called_once()
+        status_cls.assert_called_once_with(code.OK)
+
+    def test_set_load_span_status_error(self) -> None:
+        span = MagicMock()
+        with patch("opentelemetry.trace.Status") as status_cls:
+            with patch("opentelemetry.trace.StatusCode") as code:
+                code.OK = "OK"
+                code.ERROR = "ERROR"
+                self.products._set_load_span_status(
+                    span,
+                    status="failed",
+                    description="boom",
+                )
+        span.set_attribute.assert_called_once_with("status", "failed")
+        span.set_status.assert_called_once()
+        status_cls.assert_called_once_with(code.ERROR, "boom")
+
+    def test_set_load_span_status_noop_when_none(self) -> None:
+        self.products._set_load_span_status(None, status="failed")
 
 
 class ResolveRunIdTest(unittest.TestCase):

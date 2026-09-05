@@ -11,7 +11,7 @@ It defines:
 
 Route API is a **public educational/demo** ecommerce API. Treat its data as **synthetic/demo**, not production business data.
 
-Pipelines are **not implemented yet**. This document orients naming and scope until the first Route dlt/dbt slice lands.
+ClickHouse Route **`products`** dlt (archive + Bronze + observability) is **implemented** — see [dlt-extraction.md](dlt-extraction.md) Reference pipeline. dbt staging/Gold, Airflow source DAG, and other catalog endpoints (`categories`, `brands`) are not yet.
 
 ## Related standards
 
