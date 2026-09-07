@@ -1,16 +1,15 @@
 """Route products — full-refresh dlt load → MinIO archive + ClickHouse Bronze.
 
-Extract once from GET /api/v1/products (paginated), stamp audit/lineage, dual-write,
-then publish observability lake events. No dbt, no incremental.
+Extract once from GET /api/v1/products (paginated), stamp audit/lineage, dual-write
+(as nexus_loader into bronze_{env}.raw_route__products), then publish observability.
 
 Run from repo root:
 
-    set -a && source .env && set +a
+    set -a && source .env && source scripts/load-secrets.sh && set +a
     export NEXUS_ENV="${NEXUS_ENV:-dev}"
-    unset NEXUS_RUN_ID   # leftover export overrides minting
+    unset NEXUS_RUN_ID
+    ./scripts/clickhouse-rbac-bootstrap.sh   # once per env
     uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
-    # Optional override (Airflow / replay / intentional dlt→dbt chain):
-    uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py --run-id local-20260905T120000Z
 """
 
 from __future__ import annotations
@@ -110,17 +109,24 @@ def _extract_products(
     return rows
 
 
-def _clickhouse_destination():
+def _clickhouse_destination(*, env: str):
+    """Bronze destination: database bronze_{env}, loader user, separator __."""
+    bronze_db = f"bronze_{env}"
     return clickhouse(
         credentials={
             "host": os.environ.get("CLICKHOUSE_HOST", "localhost"),
             "port": int(os.environ.get("CLICKHOUSE_NATIVE_PORT", "9000")),
             "http_port": int(os.environ.get("CLICKHOUSE_HTTP_PORT", "8123")),
-            "username": os.environ.get("CLICKHOUSE_USER", "default"),
-            "password": _required("CLICKHOUSE_PASSWORD"),
-            "database": os.environ.get("CLICKHOUSE_DB", "default"),
+            "username": os.environ.get(
+                "CLICKHOUSE_LOADER_USER",
+                os.environ.get("CLICKHOUSE_USER", "default"),
+            ),
+            "password": os.environ.get("CLICKHOUSE_LOADER_PASSWORD")
+            or _required("CLICKHOUSE_PASSWORD"),
+            "database": bronze_db,
             "secure": 0,
-        }
+        },
+        dataset_table_separator="__",
     )
 
 
@@ -288,7 +294,7 @@ def main(argv: list[str] | None = None) -> None:
     os.environ["NEXUS_RUN_ID"] = run_id
     extracted_at = now.isoformat()
     dt = now.strftime("%Y-%m-%d")
-    bronze_dataset = f"raw_{SOURCE_ID}_{env}"
+    bronze_dataset = f"raw_{SOURCE_ID}"  # → bronze_{env}.raw_route__products
     archive_dataset = SOURCE_ID  # → s3://…/route/products/dt=…/run_id=…/
 
     print(f"run_id={run_id} source={run_id_source}")
@@ -336,14 +342,14 @@ def main(argv: list[str] | None = None) -> None:
 
             ch_pipeline = dlt.pipeline(
                 pipeline_name=PIPELINE_NAME,
-                destination=_clickhouse_destination(),
+                destination=_clickhouse_destination(env=env),
                 dataset_name=bronze_dataset,
             )
             ch_info = ch_pipeline.run(_products_resource(rows))
             _assert_load_ok(ch_info)
             print("ClickHouse load:", ch_info)
-            print(f"  dataset={bronze_dataset} table={ENDPOINT}")
-            print(f"  dlt table={bronze_dataset}___{ENDPOINT}")
+            print(f"  database=bronze_{env} dataset={bronze_dataset} table={ENDPOINT}")
+            print(f"  dlt table={bronze_dataset}__{ENDPOINT}")
 
             # Publish while parent span is current so dlt.load nests under it.
             lake_uri = publish_dlt_load(

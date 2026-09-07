@@ -1,56 +1,91 @@
-# Role-based access (RBAC) — held
+# Role-based access (RBAC)
 
-**Status: held.** Engine RBAC is not implemented and is **not** a Milestone 1 or capstone requirement. Live security is [HashiCorp Vault](vault.md) (secrets). ClickHouse and MinIO stay on the shared bootstrap users.
+**Status: implemented for ClickHouse (dev)** — loader / transformer / reader / admin.  
+Implementation record: [bronze-silver-cutover.md](bronze-silver-cutover.md). Bootstrap: `./scripts/clickhouse-rbac-bootstrap.sh` (pipes SQL into `clickhouse-client`; no password tempfile).
 
-Related: [vault.md](vault.md), [environments.md](environments.md), [roadmap.md](roadmap.md), [dbt-modeling.md](dbt-modeling.md).
+Related: [vault.md](vault.md), [environments.md](environments.md), [observability.md](observability.md), [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md).
 
-Do **not** add ClickHouse users, GRANT scripts, nested Vault paths, or MinIO IAM policies while this document is held. Do not treat the rest of this page as a cutover runbook.
+**Password rotation (VPS):** change KV in Vault UI → reload Agent → `source scripts/load-secrets.sh` → re-run `./scripts/clickhouse-rbac-bootstrap.sh`. Details: [vault.md](vault.md) (Daily operations).
+
+**MinIO IAM:** out of scope — keep shared root.  
+**Lakehouse (Polaris/Trino) RBAC:** not started.  
+**SSO / row-column masking:** out of scope unless a later requirement forces it.
 
 ---
 
-## Current state (what actually runs)
+## Secrets vs authorization
 
-| Surface | Today |
+| Layer | Question | Mechanism |
+| --- | --- | --- |
+| Secrets | How are passwords injected? | Vault Agent → env (or `.env` when `NEXUS_SECRETS_BACKEND=env`) |
+| Authorization | What may that identity do? | ClickHouse users + GRANTs |
+
+dlt and dbt do **not** switch roles at runtime. Each process connects as a **different user**.
+
+---
+
+## Current state
+
+| Surface | Credential |
 | --- | --- |
-| Secrets | Vault KV + Agent, or `.env` when `NEXUS_SECRETS_BACKEND=env` |
-| ClickHouse | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` (typically `default`) |
-| MinIO | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` for archive, telemetry, Airflow logs, lakehouse |
-| dlt | One process, **two** destinations: ClickHouse **and** MinIO — both of the above env sets |
-
-Vault answers how credentials are stored. It does not grant `SELECT`/`INSERT` or bucket write. Those privileges are whatever the shared users already have.
-
----
-
-## Secrets vs authorization (intent)
-
-| Layer | Question | Now | If ever cut over |
-| --- | --- | --- | --- |
-| Secrets | How are passwords injected? | Vault Agent → env | Same; extra **sibling** KV secrets |
-| Authorization | What may that identity do? | Shared admin-class users | Engine roles (ClickHouse / MinIO / later Polaris+Trino) |
-
-Snowflake/IAM often blend both. This project splits them on purpose. Portfolio line that matches **today:** secrets in Vault, not in git. Least-privilege **engine** roles are future, not current.
+| ClickHouse | `nexus_loader` / `nexus_transformer` / `nexus_reader` / `nexus_admin` |
+| MinIO | Root for archive, telemetry, Airflow logs (unchanged) |
+| dlt | CH **loader** + MinIO root |
+| dbt | CH **transformer** |
+| Compose bootstrap | Shared `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` (admin seed only) |
 
 ---
 
-## Why this is held
+## ClickHouse users (locked)
 
-1. **Vault paths** — Live secrets are flat (`secret/nexusflow/{env}/clickhouse`, `…/minio`). Nested paths such as `clickhouse/loader` conflict with that leaf. A later cutover must add **siblings** (`clickhouse_loader`, …) and keep the existing `clickhouse` / `minio` secrets for Compose.
-2. **ClickHouse grants** — Staging in this repo is **views** (`+materialized: view` in `branches/dlt_dbt_clickhouse/dbt_project.yml`). Transformer privileges would need `CREATE VIEW` (and likely `ALTER`/`DROP`, `CREATE DATABASE` ownership, `CREATE USER` + `DEFAULT ROLE`). `CREATE TABLE` alone is not enough. Verify against Compose ClickHouse before any SQL.
-3. **MinIO** — Root is wired in dlt, `common/observability`, Airflow remote logs, and lakehouse Compose. Splitting access keys is a large change. A thin later slice is ClickHouse roles only; **MinIO stays root**.
+| User | Process | Privileges (intent) |
+| --- | --- | --- |
+| `nexus_loader` | **dlt only** | CREATE/INSERT on `bronze_{env}` (+ dlt metadata as needed); no write to silver/gold |
+| `nexus_transformer` | **dbt only** | SELECT `bronze_{env}`; DDL/DML on `silver_{env}`, `elementary_{env}`, and later gold/marts/published/intermediate |
+| `nexus_reader` | Consumers (BI/apps) | SELECT on `gold_{env}` / `marts_{env}` / `published_{env}` |
+| `nexus_admin` | Break-glass / bootstrap | Full CH; create users and GRANTs |
+
+Complexity of this slice: **MEDIUM** (CH only). Full CH + MinIO IAM + lakehouse: **COMPLEX** — deferred.
+
+```text
+dlt  →  nexus_loader       →  bronze_{env}
+dbt  →  nexus_transformer  →  read bronze; write silver / elementary / (later gold+)
+BI   →  nexus_reader       →  read gold / marts / published
+ops  →  nexus_admin        →  break-glass
+```
 
 ---
 
-## Future model (intent only — do not implement now)
+## Vault paths (siblings, not nested leaves)
 
-Logical roles: `admin` (bootstrap), `loader` (dlt Bronze), `transformer` (dbt), `reader` (Gold/marts). MinIO writers for archive / telemetry / Airflow logs map to those intents; physical names may differ.
+Under `secret/nexusflow/{env}/` add siblings:
 
-If Milestone 1 is verified and you still want a demo:
+| KV path | Env vars |
+| --- | --- |
+| `clickhouse_loader` | `CLICKHOUSE_LOADER_USER`, `CLICKHOUSE_LOADER_PASSWORD` |
+| `clickhouse_transformer` | `CLICKHOUSE_TRANSFORMER_USER`, `CLICKHOUSE_TRANSFORMER_PASSWORD` |
+| `clickhouse_reader` | `CLICKHOUSE_READER_USER`, `CLICKHOUSE_READER_PASSWORD` |
+| `clickhouse_admin` | `CLICKHOUSE_ADMIN_USER`, `CLICKHOUSE_ADMIN_PASSWORD` |
 
-- ClickHouse loader vs transformer vs reader first.
-- dlt still needs **ClickHouse loader + MinIO writer** env vars together (MinIO may remain root).
-- Do not start Polaris/Trino RBAC before the lakehouse stack runs.
+Keep existing `clickhouse` and `minio` secrets for Compose/bootstrap as needed.  
+**Do not** use nested paths like `clickhouse/loader` (conflicts with the flat `clickhouse` leaf).
 
-Out of scope unless a later requirement forces it: SSO, column/row masking, custom auth, using Streamlit/Supabase login as warehouse RBAC.
+---
+
+## Observability alignment
+
+| Surface | Credential |
+| --- | --- |
+| MinIO archive + `nexus-telemetry-{env}` | MinIO root (unchanged) |
+| Elementary models in ClickHouse | `nexus_transformer` (dbt) |
+| OTLP / lake JSON events | `common/observability` + Collector — no direct SigNoz/OM API calls |
+| SigNoz / OpenMetadata / Elementary **UI** | After gold for the products pipeline; artifact/OTLP producers from day one |
+
+---
+
+## Terraform / GitHub Actions
+
+Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`; GHA ingest job injects loader secrets; transform job injects transformer secrets. Terraform (later) can create users/GRANTs and write Vault siblings.
 
 ---
 
@@ -58,8 +93,6 @@ Out of scope unless a later requirement forces it: SSO, column/row masking, cust
 
 | Status | Item |
 | --- | --- |
-| Done | Vault secrets injection |
-| Held | This document (intent only) |
-| Not started | ClickHouse roles, sibling Vault passwords, MinIO policies, Polaris/Trino |
-
-Read this before adding “security” scaffolding that invents a different role model or changes Vault layout.
+| Done (dev) | CREATE USER/GRANT, Vault siblings, dlt=`nexus_loader`, dbt=`nexus_transformer` |
+| Canonical | This document; record [bronze-silver-cutover.md](bronze-silver-cutover.md) |
+| Deferred | MinIO IAM, Polaris/Trino RBAC, SSO/masking |

@@ -8,7 +8,7 @@ Related:
 - [dlt extraction](dlt-extraction.md) — dlt reads secrets from the environment
 - [Environments](environments.md) — `NEXUS_ENV` and naming
 - [Architecture](architecture.md) — infra on host vs Docker
-- [Role-based access (RBAC)](rbac.md) — engine privileges **held**; not the live Vault contract
+- [Role-based access (RBAC)](rbac.md) — ClickHouse loader/transformer accepted with products cutover; MinIO IAM deferred
 
 Official HashiCorp references:
 
@@ -116,7 +116,11 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 
 | Vault path (under `secret/nexusflow/dev/`) | Keys in Vault | Rendered env var(s) | Used by |
 | --- | --- | --- | --- |
-| `clickhouse` | `password` | `CLICKHOUSE_PASSWORD` | Compose, dbt |
+| `clickhouse` | `password` | `CLICKHOUSE_PASSWORD` | Compose bootstrap admin |
+| `clickhouse_loader` | `username`, `password` | `CLICKHOUSE_LOADER_*` | dlt Bronze |
+| `clickhouse_transformer` | `username`, `password` | `CLICKHOUSE_TRANSFORMER_*` | dbt |
+| `clickhouse_reader` | `username`, `password` | `CLICKHOUSE_READER_*` | consumers |
+| `clickhouse_admin` | `username`, `password` | `CLICKHOUSE_ADMIN_*` | break-glass |
 | `minio` | `root_user`, `root_password` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Compose, dlt archive |
 | `polaris` | `client_secret` | `POLARIS_CLIENT_SECRET` | lakehouse profile |
 | `airflow` | `fernet_key`, `web_secret`, `admin_password` | `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY`, `AIRFLOW_ADMIN_PASSWORD` | airflow profile |
@@ -147,7 +151,7 @@ If you have used AWS Secrets Manager, the mapping is:
 
 **Platform injects secrets; applications never fetch them directly.**
 
-Authorization (who may `SELECT` / `INSERT` / write a bucket) is **not** defined here — engine RBAC is **held**; see [rbac.md](rbac.md). Keep the single shared `clickhouse` and `minio` KV secrets. Do not add nested role paths (`clickhouse/loader`) unless RBAC is un-held and the KV table in this document is updated in the same change.
+Authorization (who may `SELECT` / `INSERT` on ClickHouse) is defined in [rbac.md](rbac.md) for the products cutover (`nexus_loader` / `nexus_transformer` / …). MinIO bucket write stays on the shared root secret for now. Add **sibling** KV paths (`clickhouse_loader`, …) — do **not** nest under the `clickhouse` leaf.
 
 ---
 
@@ -210,10 +214,18 @@ One-time (store **recovery keys** and **root token** offline — password manage
 
 ### Rotate a secret
 
-1. Write new version: `vault kv put secret/nexusflow/dev/clickhouse password='new-value'`
-2. Reload Vault Agent (or restart Agent service)
-3. Restart affected containers if they already started with old env: `docker compose up -d --force-recreate clickhouse` (example)
-4. Re-run dbt/dlt as needed
+Prefer **Vault UI** or CLI — not `.env` — when `NEXUS_SECRETS_BACKEND=vault`. Bootstrap only **seeds missing** KV paths; it does not overwrite existing secrets.
+
+**ClickHouse process users** (`clickhouse_loader` / `clickhouse_transformer` / `clickhouse_reader` / `clickhouse_admin`):
+
+1. Update password in Vault UI (or `vault kv put secret/nexusflow/{env}/clickhouse_loader username=… password=…`).
+2. Reload Vault Agent (or `docker compose --profile vault up -d --force-recreate vault-agent`).
+3. `set -a && source .env && source scripts/load-secrets.sh && set +a`
+4. Re-run `./scripts/clickhouse-rbac-bootstrap.sh` so ClickHouse `ALTER USER` matches Vault (SQL is piped; no password tempfile).
+
+**Compose admin** (`secret/nexusflow/{env}/clickhouse` → `CLICKHOUSE_PASSWORD`): update Vault, reload Agent, recreate the ClickHouse container if it already started with the old env.
+
+**MinIO / other KV:** update Vault, reload Agent, recreate the affected service if needed.
 
 ### Backup
 
@@ -295,6 +307,7 @@ Fail clearly in dlt when a required secret env var is missing (for example a fut
 | Done | `scripts/vault-ensure.sh`, `scripts/vault-bootstrap.sh`, `scripts/load-secrets.sh` |
 | Done | Verified: `dlt_clickhouse_smoke` with Vault-injected secrets |
 | Planned | Route catalog ingestion (no secrets); JWT secrets only when authenticated entities are added |
-| Held | Per-role ClickHouse / MinIO credentials in KV — not in progress; [rbac.md](rbac.md) |
+| Held | Per-role MinIO IAM / lakehouse RBAC — not in this cutover |
+| Implemented (dev) | ClickHouse `nexus_loader` / `nexus_transformer` / … — [rbac.md](rbac.md), [bronze-silver-cutover.md](bronze-silver-cutover.md) |
 
 Read this document before changing secrets layout, bootstrap scripts, or Compose Vault services.

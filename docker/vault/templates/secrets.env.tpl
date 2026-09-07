@@ -3,6 +3,22 @@
 {{- with secret (printf "secret/data/nexusflow/%s/clickhouse" $env) }}
 CLICKHOUSE_PASSWORD={{ .Data.data.password }}
 {{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/clickhouse_loader" $env) }}
+CLICKHOUSE_LOADER_USER={{ .Data.data.username }}
+CLICKHOUSE_LOADER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/clickhouse_transformer" $env) }}
+CLICKHOUSE_TRANSFORMER_USER={{ .Data.data.username }}
+CLICKHOUSE_TRANSFORMER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/clickhouse_reader" $env) }}
+CLICKHOUSE_READER_USER={{ .Data.data.username }}
+CLICKHOUSE_READER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/clickhouse_admin" $env) }}
+CLICKHOUSE_ADMIN_USER={{ .Data.data.username }}
+CLICKHOUSE_ADMIN_PASSWORD={{ .Data.data.password }}
+{{- end }}
 {{- with secret (printf "secret/data/nexusflow/%s/minio" $env) }}
 MINIO_ROOT_USER={{ .Data.data.root_user }}
 MINIO_ROOT_PASSWORD={{ .Data.data.root_password }}

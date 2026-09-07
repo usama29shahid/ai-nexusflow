@@ -1,8 +1,8 @@
-# Route — dlt endpoint pipelines → raw_route_{env}
+# Route — dlt endpoint pipelines → bronze_{env}.raw_route__*
 
 Primary REST source: [Route API](https://ecommerce.routemisr.com/) (synthetic ecommerce demo data). Shared source contract: [docs/route-ingestion.md](../../../../docs/route-ingestion.md).
 
-This folder belongs to `dlt_dbt_clickhouse`. Endpoint pipelines write ClickHouse Bronze `raw_route_{env}` and MinIO archive `nexus-dlt-dbt-clickhouse-{env}`.
+This folder belongs to `dlt_dbt_clickhouse`. Endpoint pipelines write ClickHouse Bronze `bronze_{env}.raw_route__{endpoint}` (as `nexus_loader`) and MinIO archive `nexus-dlt-dbt-clickhouse-{env}`. Naming/RBAC record: [docs/bronze-silver-cutover.md](../../../../docs/bronze-silver-cutover.md).
 
 **Org standard:** [docs/dlt-extraction.md](../../../../docs/dlt-extraction.md) — **Reference pipeline**. [`products.py`](products.py) is the canonical implementation; the next script here must follow it.
 
@@ -64,18 +64,15 @@ uv sync --extra dlt-dashboard   # once (pulls dlt[hub] + marimo/…)
 
 ### ClickHouse Bronze table names (CloudBeaver / clickhouse-client)
 
-ClickHouse has **no schemas**. dlt stores the dataset as a **table name prefix** with `___`, inside `CLICKHOUSE_DB` (usually `warehouse`). Logical resource names (`products`) ≠ physical tables (`NEXUS_ENV=dev` → `raw_route_dev`):
+Database `bronze_{env}`; dlt uses `dataset_table_separator=__` so tables are `raw_route__products` (connect as `nexus_loader` for writes; `nexus_transformer` for dbt reads).
 
 ```sql
--- works (physical tables in warehouse)
-SELECT * FROM raw_route_dev___products LIMIT 1000;
-SELECT * FROM raw_route_dev___products__images LIMIT 100;
-SELECT * FROM raw_route_dev___products__subcategory LIMIT 100;
-SELECT * FROM raw_route_dev____dlt_loads ORDER BY inserted_at DESC LIMIT 20;
-
--- fails (no table literally named products)
--- SELECT * FROM products;
+SELECT * FROM bronze_dev.raw_route__products LIMIT 1000;
+SELECT * FROM bronze_dev.raw_route__products__images LIMIT 100;
+SELECT * FROM bronze_dev.raw_route__products__subcategory LIMIT 100;
 ```
+
+Legacy `warehouse.raw_route_dev___products` is obsolete after the cutover.
 
 ## Not yet implemented
 

@@ -2,7 +2,7 @@
 
 Public name: **dlt_dbt_clickhouse** (dlt → dbt → ClickHouse). This is the warehouse ELT **capability**, not a git branch.
 
-The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md). Secrets: [vault.md](vault.md). Warehouse engine RBAC: **held** — [rbac.md](rbac.md).
+The five-backend platform story lives in [architecture.md](architecture.md). Extraction: [dlt-extraction.md](dlt-extraction.md). Route source contract: [route-ingestion.md](route-ingestion.md). Modeling: [dbt-modeling.md](dbt-modeling.md). Enhanced modeling backlog: [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md). Logs: [observability.md](observability.md). Env: [environments.md](environments.md). Secrets: [vault.md](vault.md). Warehouse engine RBAC: **implemented (dev)** — [rbac.md](rbac.md). Bronze/silver record: [bronze-silver-cutover.md](bronze-silver-cutover.md).
 
 dbt project: `branches/dlt_dbt_clickhouse`. Config key: `dlt_dbt_clickhouse` in [`config/branches.yaml`](../config/branches.yaml). Docker profile: **`clickhouse`** (MinIO always on). See [setup.md](setup.md).
 
@@ -10,11 +10,11 @@ This capability is **ClickHouse-primary**. MinIO here is a **raw API archive**, 
 
 ```text
 REST API
-  → dlt (extract once)
+  → dlt (extract once) as nexus_loader
        ├─ MinIO `nexus-dlt-dbt-clickhouse-{env}` (immutable JSONL archive)
-       └─ ClickHouse `raw_{source}_{env}` (append-only Bronze, run_id on every row)
-            → dbt target `{env}` (DAG, not a ladder)
-                 stg_* → int_* → Conformed Gold (dim / fct / evt)
+       └─ ClickHouse `bronze_{env}.raw_{source}__{endpoint}` (append-only Bronze, run_id on every row)
+            → dbt as nexus_transformer, target `{env}` (DAG, not a ladder)
+                 silver_{env}.stg_* → intermediate_* → Conformed Gold (dim / fct / evt)
                       → domain int_* → domain marts
                       → optional published
 ```
@@ -73,44 +73,46 @@ Archive objects are **immutable**. Format: **JSONL** (compressed). Do not put Ic
 
 ## ClickHouse databases
 
-ClickHouse has **no schemas** (only `database.table`). **Hybrid:** per-source databases for landing (raw/stg); **shared** databases for int, gold, marts, pub.
+ClickHouse has **no schemas** (only `database.table`). Env suffix on **shared layer databases only**. Table names have **no** env suffix. Do **not** create `gold_route_dev` — shared Conformed Gold cannot live inside a source database.
 
-Do **not** create `gold_route_dev`. Shared Conformed Gold cannot live inside a source database.
-
-Until Terraform, `env=dev`.
+Until Terraform, `env=dev`. Full naming: [environments.md](environments.md).
 
 ```text
-raw_{source}_{env}     raw_route_dev.products
-stg_{source}_{env}     stg_route_dev.stg_route_products
-int_{env}              int_dev.int_product_keys
+bronze_{env}           bronze_dev.raw_route__products
+silver_{env}           silver_dev.stg_route__products
+intermediate_{env}     intermediate_dev.int_product_keys
 gold_{env}             gold_dev.dim_product
 marts_{env}            marts_dev.mart_product_performance
-pub_{env}              pub_dev.pub_...              -- optional
+published_{env}        published_dev.pub_...           -- optional
+elementary_{env}       elementary_dev.*                -- Elementary package
 ```
 
 | Database | Maps to | Who writes |
 | --- | --- | --- |
-| `raw_{source}_{env}` | bronze / raw | dlt |
-| `stg_{source}_{env}` | silver staging | dbt `stg_*` for that source |
-| `int_{env}` | shared int + domain int | dbt `int_*` |
+| `bronze_{env}` | bronze / raw | dlt as `nexus_loader` |
+| `silver_{env}` | silver staging | dbt `stg_*` as `nexus_transformer` |
+| `intermediate_{env}` | shared int + domain int | dbt `int_*` |
 | `gold_{env}` | conformed gold | dbt `dim_*` / `fct_*` / `evt_*` — **all sources** |
 | `marts_{env}` | domain marts | dbt |
-| `pub_{env}` | published | dbt, optional |
+| `published_{env}` | published | dbt, optional |
+| `elementary_{env}` | Elementary | dbt |
+
+**dlt physical naming:** `database=bronze_{env}`, `dataset_name=raw_{source}`, `dataset_table_separator=__` → `bronze_dev.raw_route__products`. Nested: `raw_route__products__images`, `raw_route__products__subcategory`.
 
 Gold table names are **conformed** (`dim_product`, not `route_dim_product`) unless the requirement explicitly names a separate dim.
 
-Gold in ClickHouse is already queryable. Do not add `pub` on the first pipeline unless a BI/app contract exists.
+Gold in ClickHouse is already queryable. Do not add `published` on the first pipeline unless a BI/app contract exists.
 
 ### Repo folders (match databases)
 
 ```text
 branches/dlt_dbt_clickhouse/
-  dlt/{source}/                 → raw_{source}_{env}
-  models/staging/{source}/      → stg_{source}_{env}
-  models/intermediate/shared/   → int_{env}
+  dlt/{source}/                 → bronze_{env}
+  models/staging/{source}/      → silver_{env}
+  models/intermediate/shared/   → intermediate_{env}
   models/gold/dims|facts|events → gold_{env}
   models/marts/{domain}/        → marts_{env}
-  models/published/             → pub_{env}
+  models/published/             → published_{env}
 ```
 
 Staging splits by **API**. Gold splits by **grain** (dims/facts/events), not by route/dataforseo. See [dbt-modeling.md](dbt-modeling.md).
@@ -173,13 +175,13 @@ Assumptions: source Route API, endpoint `GET /api/v1/products`, resource `produc
 
 ```text
 Job     products.py / route_products   # script now; Airflow task id later
-Table   products
-Bucket  nexus-dlt-dbt-clickhouse-{env}            # all warehouse JSONL for this env
+Table   products                       # REST resource / endpoint segment
+Bucket  nexus-dlt-dbt-clickhouse-{env}
 Prefix  route/products/dt=.../run_id=.../part-*.jsonl.gz
-Bronze  raw_route_{env} (dataset); physical table often raw_route_{env}___products under CLICKHOUSE_DB
+Bronze  bronze_{env}.raw_route__products   # dataset raw_route, separator __
 ```
 
-Do not name the ClickHouse database or MinIO bucket after the job. dlt dataset = `raw_route_{env}`, not the script name. Script name, Bronze table, and archive `{endpoint}` segment stay aligned (`products`).
+Do not name the ClickHouse database or MinIO bucket after the job. dlt dataset = `raw_route` (no env), database = `bronze_{env}`. Script name, Bronze table endpoint segment, and archive `{endpoint}` stay aligned (`products`).
 
 **Archive (`NEXUS_ENV=dev`):** one MinIO service; dlt writes objects (prefixes, not mkdir):
 
@@ -188,43 +190,46 @@ s3://nexus-dlt-dbt-clickhouse-dev/
   route/products/dt=2026-08-18/run_id=local-20260818T175000Z/part-000.jsonl.gz
 ```
 
-**dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Physical names are `stg_route_dev`, `gold_dev`, etc. Staging / Gold for Route products are the next Milestone 1 step after this dlt slice.
+**dbt** — env is `--target` (`target.name`). ClickHouse `schema` in dbt is the **database**. Route staging uses `+schema: silver` → `silver_{env}`; peer tables `stg_route__products*`. Gold next.
 
-- **`sources.yml`:** put `_{{ target.name }}` in identifiers; under current dlt ClickHouse naming use `identifier: raw_route_{{ target.name }}___products` inside `CLICKHOUSE_DB` (same pattern as `dlt_smoke`).
-- **`dbt_project.yml` `+schema`:** use the **unsuffixed** layer name (`stg_route`, `gold`, …). This project’s `generate_schema_name` macro appends `_{{ target.name }}`. Do **not** also write `stg_route_{{ target.name }}` in `+schema` — that would become `stg_route_dev_dev`.
+- **`_route_sources.yml`:** `database: bronze_{{ target.name }}`, identifier `raw_route__products` (and nested peers).
+- **`dbt_project.yml` `+schema`:** unsuffixed layer (`silver`, `gold`, `elementary`, …). `generate_schema_name` appends `_{{ target.name }}`. Do **not** also write `silver_{{ target.name }}` in `+schema`.
 
-`dbt_project.yml` (fragment already in tree for route staging):
+`dbt_project.yml` (fragment):
 
 ```yaml
 models:
   nexus_clickhouse:
     staging:
       route:
-        +schema: stg_route          # → stg_route_{{ target.name }}
+        +schema: silver               # → silver_{{ target.name }}
     intermediate:
-      +schema: int                  # → int_{{ target.name }}
+      +schema: intermediate           # → intermediate_{{ target.name }}
     gold:
-      +schema: gold                 # → gold_{{ target.name }}
+      +schema: gold                   # → gold_{{ target.name }}
     marts:
-      +schema: marts                # → marts_{{ target.name }}
+      +schema: marts                  # → marts_{{ target.name }}
     published:
-      +schema: pub                  # → pub_{{ target.name }}
+      +schema: published              # → published_{{ target.name }}
 ```
 
-Staging (when modeled): `stg_route_dev.stg_route_products` via `{{ source('route_raw', 'products') }}`. Gold only if a requirement **names** a model (for example `dim_product`). dlt ends at MinIO + Bronze; all post-Bronze work is dbt-only.
+Staging: `silver_dev.stg_route__products` via `{{ source('route_raw', 'products') }}`. Gold only if a requirement **names** a model (for example `dim_product`). dlt ends at MinIO + Bronze; all post-Bronze work is dbt-only.
 
-From the repo root (dlt only today):
+From the repo root:
 
 ```bash
-set -a && source .env && set +a
+set -a && source .env && source scripts/load-secrets.sh && set +a
 export NEXUS_ENV=dev
 unset NEXUS_RUN_ID   # leftover export overrides minting
 export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4317}"
+./scripts/clickhouse-rbac-bootstrap.sh   # once per env
 uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
 # Optional: --run-id <id> for Airflow / replay / intentional dlt→dbt chain
+cd branches/dlt_dbt_clickhouse
+uv run dbt run --select stg_route__products+ --profiles-dir . --target "$NEXUS_ENV"
 ```
 
-After dbt models exist, pass the **same** `NEXUS_RUN_ID` (printed by the script, or `--run-id`) as `var('run_id')`.
+Pass the **same** `NEXUS_RUN_ID` (printed by the script, or `--run-id`) as `var('run_id')` when chaining.
 
 `prd` later: same files, `NEXUS_ENV=prd` and `--target prd` → bucket `-prd`, databases `*_prd`.
 
@@ -234,8 +239,12 @@ After dbt models exist, pass the **same** `NEXUS_RUN_ID` (printed by the script,
 
 | Layer | Status |
 | --- | --- |
-| dlt Route `products` (archive + Bronze + telemetry) | **Implemented** — reference for follow-on endpoints |
-| dbt `stg_route_products` / Gold | Not yet |
+| dlt Route `products` (archive + Bronze + telemetry) | **Implemented** — `bronze_{env}.raw_route__products` as `nexus_loader` |
+| ClickHouse RBAC (loader/transformer/reader/admin) | **Implemented** (dev) — [rbac.md](rbac.md), `./scripts/clickhouse-rbac-bootstrap.sh` |
+| Silver `stg_route__products*` peer tables | **Implemented** (dev) — [dbt-modeling.md](dbt-modeling.md), [bronze-silver-cutover.md](bronze-silver-cutover.md) |
+| Gold | Not yet |
 | Airflow source DAG | Not yet (smoke DAG only) |
+
+Physical Bronze: `bronze_{env}.raw_route__products` (`dataset_table_separator=__`). RBAC: dlt=`nexus_loader`, dbt=`nexus_transformer`.
 
 Facts, SCD2, marts, and `pub` only when the requirement needs them. No Spark or LLM in this slice.

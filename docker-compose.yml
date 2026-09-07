@@ -149,6 +149,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
+      - ./docker/clickhouse/users.d/nexus_access_management.xml:/etc/clickhouse-server/users.d/nexus_access_management.xml:ro
 
     healthcheck:
       test:

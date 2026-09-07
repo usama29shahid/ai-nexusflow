@@ -1,7 +1,8 @@
 # dlt_dbt_clickhouse — warehouse ELT
 
 ```text
-Source → DLT → MinIO archive + ClickHouse raw_{source}_dev → dbt stg_{source}_dev → gold_dev
+Source → dlt → MinIO archive + ClickHouse bronze_{env}.raw_{source}__{endpoint}
+       → dbt silver_{env}.stg_* → gold_{env} / marts_{env} (later)
 ```
 
 Standards: [docs/dlt-dbt-clickhouse.md](../../docs/dlt-dbt-clickhouse.md) (includes Route `products` example), [docs/route-ingestion.md](../../docs/route-ingestion.md), [docs/environments.md](../../docs/environments.md). Env: `NEXUS_ENV` (default `dev`).
@@ -18,12 +19,12 @@ set -a && source .env && set +a
 uv run dbt debug --project-dir branches/dlt_dbt_clickhouse
 ```
 
-Or use a project-local profile (gitignored copy of `profiles.example.yml`):
+Or use a project-local profile (gitignored copy of `profiles.example.yml`). Profile `schema` is `silver_dev` / `silver_prd` per target (not `NEXUS_ENV`). Re-copy or edit `profiles.yml` when the example changes:
 
 ```bash
 cp branches/dlt_dbt_clickhouse/profiles.example.yml branches/dlt_dbt_clickhouse/profiles.yml
-set -a && source .env && set +a
-uv run dbt debug --project-dir branches/dlt_dbt_clickhouse --profiles-dir branches/dlt_dbt_clickhouse
+set -a && source .env && source scripts/load-secrets.sh && set +a
+uv run dbt debug --project-dir branches/dlt_dbt_clickhouse --profiles-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
 ```
 
 Smoke staging (after `uv run python tests/integration/dlt_clickhouse_smoke.py`):

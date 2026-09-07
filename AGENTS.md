@@ -11,7 +11,8 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 - `docs/setup.md` — local development and service topology.
 - `docs/operations.md` — daily start/stop, all services, lakehouse restore.
 - `docs/vault.md` — HashiCorp Vault secrets (KV paths, Agent injection, VPS ops). Read before changing secrets or bootstrap scripts.
-- `docs/rbac.md` — Engine RBAC **held** (intent only). Secrets ≠ privileges. Do not implement ClickHouse/MinIO roles; Vault is the live security standard.
+- `docs/rbac.md` — ClickHouse loader/transformer/reader/admin (accepted; implement with Bronze cutover). MinIO IAM held.
+- `docs/bronze-silver-cutover.md` — implementation record for warehouse Bronze rename, RBAC, and silver peer tables (canonical rules in environments / dbt-modeling / dlt-dbt-clickhouse / rbac).
 - `docs/dlt-dbt-clickhouse.md` and `docs/dlt-extraction.md` — warehouse ingestion rules.
 - `docs/dlt-dbt-spark-iceberg.md` — lakehouse rules.
 - `docs/dbt-modeling.md` — shared transformation and modeling rules.
@@ -27,7 +28,7 @@ REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging 
 Airflow DAG → same dlt/dbt on host (DAG run_id = NEXUS_RUN_ID)
 ```
 
-Implement and verify `dlt_dbt_clickhouse` with full observability producers (lake writes on every run) before starting Spark/Iceberg, Terraform/CI, reader-tool dashboards, LLM/RAG, or engine RBAC. Airflow smoke/source DAGs are part of Milestone 1, not a later phase. Do not fill future-phase folders with speculative implementations. Do not implement [docs/rbac.md](docs/rbac.md) while it is held.
+Implement and verify `dlt_dbt_clickhouse` with full observability producers (lake writes on every run) before starting Spark/Iceberg, Terraform/CI, reader-tool dashboards, or LLM/RAG. Warehouse Bronze/RBAC/silver for products is implemented — see [docs/bronze-silver-cutover.md](docs/bronze-silver-cutover.md). Airflow smoke/source DAGs are part of Milestone 1. Do not fill future-phase folders with speculative implementations. MinIO IAM and lakehouse RBAC stay deferred.
 
 ## Capability boundaries
 
@@ -49,7 +50,7 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 - **Reference implementation:** `branches/dlt_dbt_clickhouse/dlt/route/products.py`. Every new warehouse endpoint script must follow the same norms in [docs/dlt-extraction.md](docs/dlt-extraction.md) (Reference pipeline section). Do not invent a second style for `categories` / `brands` / other sources.
 - dlt owns REST auth, pagination, retries, rate limits, incremental state, raw archival, and Bronze loads. dbt must not call APIs.
 - Extract a source once, then write to both destinations (archive **first**, then Bronze); never scrape an API separately for archive and Bronze. Assert `LoadInfo` after each destination run.
-- In the warehouse branch, archive immutable compressed JSONL to `nexus-dlt-dbt-clickhouse-{env}` and append Bronze rows to `raw_{source}_{env}`.
+- In the warehouse branch, archive immutable compressed JSONL to `nexus-dlt-dbt-clickhouse-{env}` and append Bronze rows to `bronze_{env}` as `raw_{source}__{endpoint}` (see [docs/environments.md](docs/environments.md), [docs/bronze-silver-cutover.md](docs/bronze-silver-cutover.md); legacy `raw_{source}_{env}` / `___` naming is obsolete).
 - Use one endpoint pipeline per REST endpoint. Parameter variants are separate only if their payload contract (schema, grain, auth, or incremental behavior) differs.
 - Keep dlt state for cursors and schema; do not introduce a custom watermark system.
 - Every load receives a shared `NEXUS_RUN_ID` (`--run-id` > env > mint `local-{UTC}`). Stamp it on Bronze rows and pass the same ID to dbt as `var('run_id')`. Do not use a permanent default run ID.
@@ -61,7 +62,7 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 - dbt reads Bronze with `source()`, owns staging, intermediate, Gold, marts, and tests, and never owns extraction or archival.
 - Model dependencies form a DAG, not a mandatory Bronze → staging → intermediate → Gold → mart ladder. Create only layers required by the data/consumer requirement.
 - Staging folders split by REST source: `models/staging/{source}/`. Gold folders split by grain: `gold/dims`, `gold/facts`, `gold/events`.
-- For ClickHouse, use per-source `raw_{source}_{env}` and `stg_{source}_{env}` databases; use shared `int_{env}`, `gold_{env}`, `marts_{env}`, and optional `pub_{env}` databases. ClickHouse has databases, not schemas.
+- For ClickHouse, use shared layer databases `bronze_{env}`, `silver_{env}`, `intermediate_{env}`, `gold_{env}`, `marts_{env}`, `published_{env}`, `elementary_{env}` (env on DB only; tables like `raw_route__products`, `stg_route__products`). ClickHouse has databases, not schemas. See [docs/environments.md](docs/environments.md), [docs/bronze-silver-cutover.md](docs/bronze-silver-cutover.md).
 - Gold is conformed and shared by default. Do not create a distinct `dim_*` merely because an endpoint or URL parameter differs; create one only when the requirement names a separate dimension.
 - Use `dim_*`, `fct_*`, and `evt_*` according to declared grain. SCD2, facts, marts, and published tables are optional requirements, not default scaffolding.
 - Keep Bronze append-only; model “current” or as-of logic downstream. Prefer natural or hashed keys over serial surrogate keys.

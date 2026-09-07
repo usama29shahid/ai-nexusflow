@@ -1,0 +1,68 @@
+version: 2
+
+sources:
+  - name: route_raw
+    description: >
+      Route API Bronze in bronze_{env}. Physical tables use dataset_table_separator __
+      (e.g. raw_route__products). Nested arrays are peer Bronze tables, not silver roles.
+    database: "bronze_{{ target.name }}"
+    schema: "bronze_{{ target.name }}"
+    tables:
+      - name: products
+        identifier: raw_route__products
+        description: Products endpoint parent resource (append-only Bronze).
+        meta:
+          bronze_nested_from: null
+          table_role: bronze_root
+        columns:
+          - name: id
+            description: Route product id (natural key).
+            data_tests:
+              - not_null
+          - name: _id
+            description: Source document id (often same as id).
+          - name: run_id
+            description: Nexus shared run id (NEXUS_RUN_ID).
+            data_tests:
+              - not_null
+          - name: _dlt_id
+            description: dlt row id (parent key for nested tables).
+            data_tests:
+              - not_null
+          - name: _extracted_at
+            description: Extract timestamp stamped by products.py.
+          - name: brand___id
+            description: Flattened brand._id (dlt nested naming).
+          - name: category___id
+            description: Flattened category._id (dlt nested naming).
+
+      - name: products__images
+        identifier: raw_route__products__images
+        description: Nested images[] rows; join to products via _dlt_parent_id = products._dlt_id.
+        meta:
+          bronze_nested_from: products
+        columns:
+          - name: value
+            description: Image URL.
+          - name: _dlt_parent_id
+            description: FK to products._dlt_id.
+            data_tests:
+              - not_null
+          - name: _dlt_id
+            data_tests:
+              - not_null
+
+      - name: products__subcategory
+        identifier: raw_route__products__subcategory
+        description: Nested subcategory[] rows; join via _dlt_parent_id.
+        meta:
+          bronze_nested_from: products
+        columns:
+          - name: _id
+            description: Subcategory id.
+          - name: _dlt_parent_id
+            data_tests:
+              - not_null
+          - name: _dlt_id
+            data_tests:
+              - not_null

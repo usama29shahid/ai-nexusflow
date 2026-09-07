@@ -1,12 +1,7 @@
-# Optional. Copy to profiles.yml in this directory if you do not use ~/.dbt
-# (profiles.yml is gitignored). dbt does NOT load the repo .env — export vars first:
-#
-#   set -a && source ../../.env && set +a
-#   uv run dbt debug --project-dir . --profiles-dir .
-#
-# Profile name matches Compose stack: clickhouse → nexus_clickhouse
-# (lakehouse → nexus_lakehouse).
-
+# Copy to profiles.yml (gitignored). Transformer credentials — docs/rbac.md.
+# Profile schema = connection default DB for this target (silver_{target}), not NEXUS_ENV.
+# Always: dbt --target "$NEXUS_ENV" so dlt env and dbt target match.
+# If you already have profiles.yml, update schema lines to match this example.
 nexus_clickhouse:
   target: dev
   outputs:
@@ -14,7 +9,15 @@ nexus_clickhouse:
       type: clickhouse
       host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
       port: "{{ env_var('CLICKHOUSE_HTTP_PORT', '8123') | as_number }}"
-      user: "{{ env_var('CLICKHOUSE_USER', 'default') }}"
-      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
-      schema: "{{ env_var('CLICKHOUSE_DB', 'warehouse') }}"
+      user: "{{ env_var('CLICKHOUSE_TRANSFORMER_USER', 'nexus_transformer') }}"
+      password: "{{ env_var('CLICKHOUSE_TRANSFORMER_PASSWORD') }}"
+      schema: silver_dev
+      secure: false
+    prd:
+      type: clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
+      port: "{{ env_var('CLICKHOUSE_HTTP_PORT', '8123') | as_number }}"
+      user: "{{ env_var('CLICKHOUSE_TRANSFORMER_USER', 'nexus_transformer') }}"
+      password: "{{ env_var('CLICKHOUSE_TRANSFORMER_PASSWORD') }}"
+      schema: silver_prd
       secure: false

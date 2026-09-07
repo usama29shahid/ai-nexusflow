@@ -1,7 +1,13 @@
-# staging/route → stg_route_{env}
+# staging/route → silver_{env}
 
-dbt staging for the Route API source. Models `stg_*` over Bronze `raw_route_{env}` via `source()`.
+dbt silver (staging) for the Route API source. Peer tables over Bronze `bronze_{env}.raw_route__*` via `source()`.
 
-**Not implemented yet.** Catalog-first when built (`products`, `categories`, `brands`).
+**Implemented (products cutover):** `stg_route__products`, `stg_route__products__images`, `stg_route__products__subcategory`.
 
-Conformed Gold lives in shared `gold_{env}` / `marts_{env}`, not under this folder. Other REST sources keep separate `staging/{source}/` trees and must not change Route staging. See [docs/route-ingestion.md](../../../../docs/route-ingestion.md) and [docs/enhanced-modeling-strategy.md](../../../../docs/enhanced-modeling-strategy.md).
+- Config: `_route_sources.yml`, `_route_models.yml`
+- Materialization: table; FULL_LOAD lookback (`lookback_days`, default 15) / `--full-refresh` / optional `run_id`; dedupe by `pk_hash`
+- Vars are **trusted** (validate at dlt/Airflow/operator): `run_id` matches dlt charset/length; `lookback_days` is a non-negative int. `--full-refresh` ignores both. Details: [docs/dbt-modeling.md](../../../../docs/dbt-modeling.md)
+- ClickHouse user: `nexus_transformer` ([docs/rbac.md](../../../../docs/rbac.md))
+- Record: [docs/bronze-silver-cutover.md](../../../../docs/bronze-silver-cutover.md)
+
+Conformed Gold lives in shared `gold_{env}` / `marts_{env}`, not under this folder.

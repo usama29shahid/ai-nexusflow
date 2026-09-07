@@ -1,0 +1,181 @@
+version: 2
+
+models:
+  - name: stg_route__products
+    description: >
+      Silver peer table for Route products — FULL_LOAD lookback / --full-refresh /
+      optional run_id; dedupe by pk_hash; materialized table.
+    config:
+      tags: ["staging", "route", "products"]
+    columns:
+      - name: product_id
+        description: Natural business key from Bronze id (source _id is duplicate; not carried).
+        data_tests:
+          - not_null
+          - unique
+      - name: pk_hash
+        description: dbt_utils.generate_surrogate_key of product_id.
+        data_tests:
+          - not_null
+          - unique
+      - name: row_hash
+        description: Hash of source attributes for change detection.
+        data_tests:
+          - not_null
+      - name: ingestion_hash
+        description: Hash of product_id + run_id (unique within a load).
+        data_tests:
+          - not_null
+          - unique
+      - name: title
+        data_tests:
+          - not_null
+      - name: brand_id
+        description: Flattened from brand___id.
+      - name: category_id
+        description: Flattened from category___id.
+      - name: source_created_at
+        description: Route createdAt (source system date).
+      - name: source_updated_at
+        description: Route updatedAt (source system date).
+      - name: has_discount
+        description: True when price_after_discount is set and lower than price.
+      - name: discount_amount
+        description: price - price_after_discount when discounted, else 0.
+      - name: run_id
+        data_tests:
+          - not_null
+      - name: _extracted_at
+        description: Platform extract time from dlt/products.py.
+      - name: _inserted_at
+        description: Silver build time (now64).
+        data_tests:
+          - not_null
+      - name: _dlt_id
+        description: dlt row id.
+        data_tests:
+          - not_null
+          - unique
+      - name: _source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["route"]
+      - name: _endpoint
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["products"]
+
+  - name: stg_route__products__images
+    description: >
+      Silver peer table for product images — same FULL_LOAD parent Bronze scope as
+      products; children of winning parent _dlt_id only; dedupe by pk_hash.
+    config:
+      tags: ["staging", "route", "products"]
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("stg_route__products")
+                field: product_id
+      - name: image_url
+        data_tests:
+          - not_null
+      - name: pk_hash
+        data_tests:
+          - not_null
+          - unique
+      - name: ingestion_hash
+        data_tests:
+          - not_null
+          - unique
+      - name: run_id
+        data_tests:
+          - not_null
+      - name: _dlt_id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: stg_route__products__subcategory
+    description: >
+      Silver peer table for product subcategory — same FULL_LOAD parent Bronze scope;
+      children of winning parent _dlt_id only; dedupe by pk_hash.
+    config:
+      tags: ["staging", "route", "products"]
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("stg_route__products")
+                field: product_id
+      - name: subcategory_id
+        data_tests:
+          - not_null
+      - name: pk_hash
+        data_tests:
+          - not_null
+          - unique
+      - name: ingestion_hash
+        data_tests:
+          - not_null
+          - unique
+      - name: run_id
+        data_tests:
+          - not_null
+      - name: _dlt_id
+        data_tests:
+          - not_null
+          - unique
+
+unit_tests:
+  - name: test_stg_route__products_brand_flatten
+    description: brand___id maps to brand_id.
+    model: stg_route__products
+    # Wide lookback so fixture _extracted_at never ages out of the default 15-day window.
+    overrides:
+      vars:
+        lookback_days: 36500
+    given:
+      - input: source("route_raw", "products")
+        rows:
+          - id: "p1"
+            title: "T"
+            slug: "t"
+            description: "d"
+            quantity: 1
+            sold: 0
+            price: 10
+            price_after_discount: null
+            image_cover: null
+            ratings_average: 4.5
+            ratings_quantity: 1
+            brand___id: "b1"
+            brand__name: "Brand"
+            brand__slug: "brand"
+            brand__image: null
+            category___id: "c1"
+            category__name: "Cat"
+            category__slug: "cat"
+            category__image: null
+            created_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+            _source: "route"
+            _endpoint: "products"
+            _nexus_env: "dev"
+            _dlt_load_id: "l1"
+            _dlt_id: "d1"
+    expect:
+      rows:
+        - product_id: "p1"
+          brand_id: "b1"
+          brand_name: "Brand"
+          category_id: "c1"
+          run_id: "r1"

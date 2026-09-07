@@ -238,6 +238,40 @@ else
   vault_exec kv put "${kv_base}/clickhouse" \
     password="$(read_env_default CLICKHOUSE_PASSWORD change-me)"
 fi
+# Sibling CH process users (products cutover / docs/rbac.md) — seed if missing.
+_ch_pw="$(read_env_default CLICKHOUSE_PASSWORD change-me)"
+if kv_secret_exists "${kv_base}/clickhouse_loader"; then
+  echo "  KV exists: ${kv_base}/clickhouse_loader (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/clickhouse_loader"
+  vault_exec kv put "${kv_base}/clickhouse_loader" \
+    username="$(read_env_default CLICKHOUSE_LOADER_USER nexus_loader)" \
+    password="$(read_env_default CLICKHOUSE_LOADER_PASSWORD "${_ch_pw}")"
+fi
+if kv_secret_exists "${kv_base}/clickhouse_transformer"; then
+  echo "  KV exists: ${kv_base}/clickhouse_transformer (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/clickhouse_transformer"
+  vault_exec kv put "${kv_base}/clickhouse_transformer" \
+    username="$(read_env_default CLICKHOUSE_TRANSFORMER_USER nexus_transformer)" \
+    password="$(read_env_default CLICKHOUSE_TRANSFORMER_PASSWORD "${_ch_pw}")"
+fi
+if kv_secret_exists "${kv_base}/clickhouse_reader"; then
+  echo "  KV exists: ${kv_base}/clickhouse_reader (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/clickhouse_reader"
+  vault_exec kv put "${kv_base}/clickhouse_reader" \
+    username="$(read_env_default CLICKHOUSE_READER_USER nexus_reader)" \
+    password="$(read_env_default CLICKHOUSE_READER_PASSWORD "${_ch_pw}")"
+fi
+if kv_secret_exists "${kv_base}/clickhouse_admin"; then
+  echo "  KV exists: ${kv_base}/clickhouse_admin (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/clickhouse_admin"
+  vault_exec kv put "${kv_base}/clickhouse_admin" \
+    username="$(read_env_default CLICKHOUSE_ADMIN_USER nexus_admin)" \
+    password="$(read_env_default CLICKHOUSE_ADMIN_PASSWORD "${_ch_pw}")"
+fi
 if kv_secret_exists "${kv_base}/minio"; then
   echo "  KV exists: ${kv_base}/minio (skip seed)"
 else

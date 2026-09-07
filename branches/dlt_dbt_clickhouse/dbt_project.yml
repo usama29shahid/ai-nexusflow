@@ -16,7 +16,21 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
+flags:
+  require_explicit_package_overrides_for_builtin_materializations: false
+
+vars:
+  # FULL_LOAD silver Bronze lookback (days). Must be a non-negative int (trusted vars; see docs/dbt-modeling.md).
+  # Override: --vars '{"lookback_days": 3}'
+  lookback_days: 15
+  # Optional pin to a Bronze load id (same charset as dlt products.py). Ignored when --full-refresh.
+  # --vars '{"run_id": "<bronze_run_id>"}'
+  # run_id: null
+
 models:
+  elementary:
+    +schema: elementary
+    +enabled: true
   nexus_clickhouse:
     example:
       +materialized: view
@@ -25,4 +39,6 @@ models:
         +schema: stg_dlt_smoke
         +materialized: view
       route:
-        +schema: stg_route
+        +schema: silver
+        +materialized: table
+        +copy_grants: true
