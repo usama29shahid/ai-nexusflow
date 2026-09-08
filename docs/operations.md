@@ -151,6 +151,52 @@ curl --fail http://localhost:8182/q/health         # Polaris
 | Spark UI | http://localhost:4040 |
 | CloudBeaver | http://localhost:8978 |
 | Airflow | http://127.0.0.1:8081 |
+| Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
+
+### Elementary report (host CLI)
+
+Needs ClickHouse up and an `elementary` profile (copy from [`profiles.example.yml`](../branches/dlt_dbt_clickhouse/profiles.example.yml) into branch `profiles.yml` or `~/.dbt/profiles.yml`).
+
+Install once (intentional — this extra shares the project venv: Elementary pins `networkx` 2.x and the resolver may pick an older `boto3`/`botocore`/`aiobotocore` than a plain sync):
+
+```bash
+uv sync --extra elementary
+```
+
+Plain `./scripts/setup.sh` / `uv sync` does **not** install `edr`. After enabling the extra, keep using `uv sync --extra elementary` when refreshing the lock so report tooling stays installed. If you need the pre-extra AWS client pins, use a separate venv or omit the extra until you generate a report.
+
+**Everyday refresh (after any `dbt run` / `dbt test` / `dbt build`):** the package `on-run-end` hook already wrote ClickHouse `elementary_{env}`. Regenerate the static HTML only:
+
+```bash
+./scripts/start.sh uv run edr report \
+  --profiles-dir branches/dlt_dbt_clickhouse \
+  --project-dir branches/dlt_dbt_clickhouse \
+  --profile-target "$NEXUS_ENV" \
+  --target-path edr_target \
+  --open-browser false
+# Open: edr_target/elementary_report.html (WSL: open the path in Windows browser)
+```
+
+`--profile-target` must match the dbt `--target` / `NEXUS_ENV` that wrote the tables (`elementary_dev` / `elementary_prd` in profiles). For shared or non-local viewing, add `--disable-samples` so failed-test sample rows (possible PII) are not embedded in the HTML.
+
+**First-time / empty index only** — build Elementary models, then run tests (or a normal project `dbt build`) so hooks populate history, then `edr report` as above:
+
+```bash
+./scripts/start.sh dbt run --select elementary --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
+./scripts/start.sh dbt test --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
+```
+
+**Package upgrade (e.g. Elementary dbt package 0.19 → 0.25):** ClickHouse incremental tables may fail with `NUMBER_OF_COLUMNS_DOESNT_MATCH` because column layouts changed. Drop the broken table(s) in `elementary_{env}` first (or the whole DB if you can afford to lose DQ history), then deps + rebuild:
+
+```bash
+# Required when the table schema changed — example for one table:
+# DROP TABLE IF EXISTS elementary_dev.test_result_rows;  -- via clickhouse-client / HTTP
+
+./scripts/start.sh dbt deps --project-dir branches/dlt_dbt_clickhouse
+./scripts/start.sh dbt run --select elementary --full-refresh --project-dir branches/dlt_dbt_clickhouse --target "$NEXUS_ENV"
+```
+
+`--full-refresh` alone often does **not** fix a mismatched ClickHouse table; drop first, then re-run.
 
 ---
 
@@ -167,4 +213,5 @@ Stop both readers   →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
 dlt smoke           →  ./scripts/start.sh smoke
+Elementary report   →  uv sync --extra elementary; edr report --profile-target "$NEXUS_ENV" (see above)
 ```

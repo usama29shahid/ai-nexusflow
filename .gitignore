@@ -231,6 +231,10 @@ target/
 dbt_packages/
 **/dbt_packages/
 
+# Elementary OSS HTML report (`edr report`)
+edr_target/
+**/edr_target/
+
 # dbt local profile (copy from profiles.example.yml)
 **/profiles.yml
 !**/profiles.example.yml

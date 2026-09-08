@@ -2,8 +2,14 @@
 # Profile schema = connection default DB for this target (silver_{target}), not NEXUS_ENV.
 # Always: dbt --target "$NEXUS_ENV" so dlt env and dbt target match.
 # If you already have profiles.yml, update schema lines to match this example.
+#
+# Elementary CLI (`edr report`) needs a profile named `elementary`.
+# ClickHouse: `schema` is the layer database (`elementary_{target}`), matching
+# dbt `+schema: elementary` + generate_schema_name. Use the same target as dbt:
+#   edr report --profile-target "$NEXUS_ENV"
+# (On ClickHouse, edr may print database.schema as elementary_dev.elementary_dev — both are that DB.)
 nexus_clickhouse:
-  target: dev
+  target: "{{ env_var('NEXUS_ENV', 'dev') }}"
   outputs:
     dev:
       type: clickhouse
@@ -21,3 +27,27 @@ nexus_clickhouse:
       password: "{{ env_var('CLICKHOUSE_TRANSFORMER_PASSWORD') }}"
       schema: silver_prd
       secure: false
+
+# Profile name must be `elementary`. Default target follows NEXUS_ENV; each
+# output.schema is elementary_<output_name> (dev → elementary_dev, prd → elementary_prd).
+elementary:
+  target: "{{ env_var('NEXUS_ENV', 'dev') }}"
+  outputs:
+    dev:
+      type: clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
+      port: "{{ env_var('CLICKHOUSE_HTTP_PORT', '8123') | as_number }}"
+      user: "{{ env_var('CLICKHOUSE_TRANSFORMER_USER', 'nexus_transformer') }}"
+      password: "{{ env_var('CLICKHOUSE_TRANSFORMER_PASSWORD') }}"
+      schema: elementary_dev
+      secure: false
+      threads: 4
+    prd:
+      type: clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
+      port: "{{ env_var('CLICKHOUSE_HTTP_PORT', '8123') | as_number }}"
+      user: "{{ env_var('CLICKHOUSE_TRANSFORMER_USER', 'nexus_transformer') }}"
+      password: "{{ env_var('CLICKHOUSE_TRANSFORMER_PASSWORD') }}"
+      schema: elementary_prd
+      secure: false
+      threads: 4

@@ -24,6 +24,13 @@ dlt-dashboard = [
     "ibis-framework",
     "numpy",
 ]
+# Elementary OSS CLI (`edr report` → local HTML dashboard).
+# Shares the project venv: Elementary pins networkx 2.x and may resolve an older
+# boto3/botocore/aiobotocore than a plain `uv sync`. Install intentionally;
+# setup.sh does not enable this extra.
+elementary = [
+    "elementary-data[clickhouse]>=0.25.0,<0.26.0",
+]
 
 [build-system]
 requires = ["hatchling"]

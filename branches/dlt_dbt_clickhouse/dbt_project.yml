@@ -32,8 +32,6 @@ models:
     +schema: elementary
     +enabled: true
   nexus_clickhouse:
-    example:
-      +materialized: view
     staging:
       dlt_smoke:
         +schema: stg_dlt_smoke
