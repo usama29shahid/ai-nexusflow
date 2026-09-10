@@ -242,7 +242,7 @@ Pass the **same** `NEXUS_RUN_ID` (printed by the script, or `--run-id`) as `var(
 | dlt Route `products` (archive + Bronze + telemetry) | **Implemented** — `bronze_{env}.raw_route__products` as `nexus_loader` |
 | ClickHouse RBAC (loader/transformer/reader/admin) | **Implemented** (dev) — [rbac.md](rbac.md), `./scripts/clickhouse-rbac-bootstrap.sh` |
 | Silver `stg_route__products*` peer tables | **Implemented** (dev) — [dbt-modeling.md](dbt-modeling.md), [bronze-silver-cutover.md](bronze-silver-cutover.md) |
-| Gold | Not yet |
+| Gold | `dim_product`, `brg_product_image`, `brg_product_subcategory` SCD2 — [gold-products-cutover.md](gold-products-cutover.md) |
 | Airflow source DAG | Not yet (smoke DAG only) |
 
 Physical Bronze: `bronze_{env}.raw_route__products` (`dataset_table_separator=__`). RBAC: dlt=`nexus_loader`, dbt=`nexus_transformer`.

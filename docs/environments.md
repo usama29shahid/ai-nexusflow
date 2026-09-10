@@ -13,7 +13,8 @@ Env on **databases only**; table names have **no** env suffix. Implementation re
 | Bronze | `bronze_{env}` | `raw_{source}__{endpoint}` | `bronze_dev.raw_route__products` |
 | Silver | `silver_{env}` | `stg_{source}__{endpoint}` | `silver_dev.stg_route__products` |
 | Intermediate | `intermediate_{env}` | `int_*` | later |
-| Gold | `gold_{env}` | `dim_*` / `fct_*` / `evt_*` | later |
+| Gold | `gold_{env}` | `dim_*` / `brg_*` / `fct_*` / `evt_*` | products SCD2 live |
+
 | Marts | `marts_{env}` | `mart_*` | later |
 | Published | `published_{env}` | `pub_*` | later |
 | Elementary | `elementary_{env}` | Elementary package models | with dbt |

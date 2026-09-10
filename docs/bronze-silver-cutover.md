@@ -2,7 +2,7 @@
 
 **Status: implemented for Route products (dev verified).**  
 **Purpose:** Implementation record and historical lock. Normative rules live in the docs below — do not duplicate full tables here.  
-**Next:** Gold for products; categories/brands; optional DROP of legacy `warehouse.raw_route_*` tables.
+**Next:** categories/brands; optional DROP of legacy `warehouse.raw_route_*` tables. Gold products SCD2: see [gold-products-cutover.md](gold-products-cutover.md).
 
 | Topic | Canonical doc |
 | --- | --- |
@@ -39,9 +39,9 @@ Reason RBAC started with the rename: Bronze physical names and CH connection con
 
 ## Explicitly deferred
 
-- Gold dims / SCD / incremental / soft-delete
 - MinIO IAM policies
 - OM / SigNoz / Elementary **UI** product setup
 - Airflow source DAG, categories/brands endpoints
 - Full Terraform modules + GitHub Actions workflows (naming/RBAC already compatible)
 - `dlt_smoke` rename to new bronze pattern
+- Silver incremental / delta (FULL_LOAD only today)

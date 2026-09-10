@@ -132,7 +132,7 @@ Malformed vars can break the compiled SQL; that is acceptable for trusted local/
 | Keep columns | `_dlt_id`, `_dlt_load_id`, nexus audit cols (do not carry duplicate source `_id` when it equals the business key) | — |
 
 Hashes: MD5 via `dbt_utils.generate_surrogate_key`.  
-`pk_hash` = hash of business key(s); `row_hash` = source attrs only; `ingestion_hash` = business key(s) + `run_id`.
+**Every silver table** carries all three: `pk_hash` = hash of business key(s); `row_hash` = source attrs only (timestamps excluded by default; ask before dropping other columns); `ingestion_hash` = business key(s) + `run_id`. Gold SCD2 keeps the same column name **`row_hash`** (do not rename to `scd_hash`).
 
 Also:
 
@@ -148,6 +148,8 @@ Also:
 | `_{source}_sources.yml` | sources only (Bronze tables, meta, column docs) |
 | `_{source}_models.yml` | models, column docs, tests, unit_tests |
 
+Gold folders use `_{layer}_*_models.yml` (e.g. `_gold_dims_models.yml`, `_gold_bridges_models.yml`).
+
 Always run `dbt docs generate` after run/test (OpenMetadata-compatible artifacts).
 
 ### Packages (day one, warehouse)
@@ -155,6 +157,8 @@ Always run `dbt docs generate` after run/test (OpenMetadata-compatible artifacts
 - `dbt-labs/dbt_utils` (required)
 - `elementary-data/elementary` (`>=0.25.0,<0.26.0`, same minor as host `edr`) → `+schema: elementary` → `elementary_{env}` (package registers `on-run-end` hooks). Local UI: after dbt, `uv sync --extra elementary` then `edr report --profile-target "$NEXUS_ENV"` (optional `--disable-samples` for shared HTML); see [operations.md](operations.md)
 - `calogica/dbt_expectations` (use when native tests insufficient)
+
+Gold models that participate in Elementary observability use tags including `elementary` and `meta.elementary.timestamp_column` (typically `inserted_at`).
 
 ### Shared intermediate — `int_*`
 
@@ -167,8 +171,11 @@ Shared across endpoints **by default**. Database: `gold_{env}`.
 | Type | Role |
 | --- | --- |
 | **`dim_*`** | Entities. SCD1 if history is irrelevant. SCD2 if you must answer “as of that day.” |
+| **`brg_*`** | Multivalued / membership bridges (e.g. product images, product–subcategory). SCD2 when history or as-of marts need it. |
 | **`fct_*`** | Measured processes at a declared grain, keyed to dims. |
 | **`evt_*`** | Append-only activity. ClickHouse’s natural fit. Do not force every event into a periodic fact. |
+
+Folders: `models/gold/dims`, `models/gold/bridges`, `models/gold/facts`, `models/gold/events`.
 
 **Separate dim only when the requirement names it:**
 
@@ -180,9 +187,30 @@ otherwise both feed one dim_name
 
 Do not create `dim_*` per URL. Do not widen a shared dim for one team’s attribute — use a domain `int_*`, satellite, or mart.
 
-Prefer **natural or hashed keys** over serial surrogates.
+Prefer **natural or hashed keys** over serial surrogates. SCD2 version rows also carry a **version surrogate** (`dim_*_sk` / `brg_*_sk`).
 
-**SCD2 on ClickHouse:** insert-only (`valid_from`, `valid_to`, `is_current`). Do not rely on classic dbt snapshots. Add SCD2 only when the requirement needs history.
+**SCD2 on ClickHouse (general Gold contract — all `dim_*` / `brg_*`):**
+
+- Columns: `valid_from`, `valid_to`, `is_active`, `is_deleted` (**Int8** 0/1, not Bool), `row_hash` (same name as silver), version SK, `inserted_at`, `updated_at` (Gold-only audit).
+- Sentinels: unknown start `1900-01-01 00:00:00.000`; open end `9999-01-01 23:59:59.999` (macros `scd2_valid_from_unknown` / `scd2_valid_to_open`).
+- Materialization: `incremental` + `delete+insert` on the version surrogate. Do not use classic dbt snapshots.
+- **Change seam (required):** one `scd_bound_at` per dbt invocation via macro `scd2_bound_at()` (compile-time `DateTime64` literal from `run_started_at`, so every SQL reference is identical; override in unit tests). On `row_hash` change, prior `valid_to` and new `valid_from` both equal that bound (no gap/overlap). Do **not** use silver `_extracted_at` or wall-clock `now64(3)` as the change-seam.
+- **Delete (Pattern A):** key absent from FULL_LOAD silver → expire current row (`is_active=0`, `is_deleted=1`, `valid_to=scd_bound_at`). Do **not** insert a new tombstone version row.
+- **First version / brand-new key:** `valid_from` from source-created when available (else unknown sentinel); bridges may use `_extracted_at` for first membership only. Open `valid_to` sentinel. Only when `pk_hash` has **never** appeared in Gold.
+- **Reappear after delete:** key present in silver, no `is_active=1` row, but `pk_hash` already exists in Gold → open a **new** version at `scd_bound_at` with a new version SK. Do **not** replay `source_created_at` / first-version `_extracted_at`. A gap between prior delete `valid_to` and reappear `valid_from` is correct (entity was absent).
+- **ClickHouse anti-joins:** use `LEFT ANTI JOIN` for “key missing from the other side” (new / delete / truly-new). Do **not** use `LEFT JOIN … WHERE right.key IS NULL` — with default `join_use_nulls=0`, non-Nullable `String` columns become `''` and the filter never matches.
+- Model SQL `config()` = materialization only; tags/meta/docs in YAML.
+
+**Join keys (general):**
+
+| Relationship | Keying |
+| --- | --- |
+| Gold dim/bridge ↔ Gold dim/bridge | **Natural/business key** + **as-of** (`valid_from`/`valid_to`) or `is_active = 1` for current. No parent version SK on the child/bridge. |
+| Fact / mart → Gold dim or bridge | **Version surrogate key** (Version FK) when the grain must freeze which SCD2 version was true. Current-only marts may filter `is_active = 1` with natural keys instead. |
+
+Each SCD2 Gold table still has both a **durable natural key** and its **own version SK**. Image/subcategory membership are `brg_*` (multivalued history), not a product hierarchy — same join rules. Fact/mart Version FK details are deferred until those models are built; look them up here when creating facts/marts.
+
+Route products instance: `dim_product`, `brg_product_image`, `brg_product_subcategory` — [gold-products-cutover.md](gold-products-cutover.md). `dim_product` first-ever `valid_from` ← `source_created_at` (else sentinel); reappear and change use `scd_bound_at`; `source_updated_at` informational only.
 
 Facts and SCD2 are **not** required on every source. Entities + events are enough when that is the grain.
 
@@ -193,6 +221,8 @@ Business rules that **read** Gold or other ints. Department-specific.
 ### Domain marts — `mart_*`
 
 dbt **only**. No dlt pipeline. Wide or process-specific tables for a domain. Run with **dbt selectors**, not a new extract DAG. Database: `marts_{env}`.
+
+When building marts that need historical freeze, prefer storing Gold **version SKs** (`dim_product_sk`, `brg_*_sk`) at mart build/as-of time (see join keys above). Do not redesign Gold bridges to carry parent version SKs.
 
 ### Published — `pub_*` (optional)
 

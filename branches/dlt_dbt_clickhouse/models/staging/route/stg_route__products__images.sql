@@ -1,8 +1,6 @@
 {{
   config(
     alias="stg_route__products__images",
-    tags=["staging", "route", "products"],
-    meta={"load_type": "full_load"},
   )
 }}
 
@@ -69,6 +67,10 @@ joined as (
         cast(p.run_id as String) as run_id,
         cast(p._extracted_at as DateTime64(3, 'UTC')) as _extracted_at,
         {{ dbt_utils.generate_surrogate_key(["p.product_id", "i.value", "i._dlt_list_idx"]) }} as pk_hash,
+        {{ dbt_utils.generate_surrogate_key([
+            "coalesce(i.value, '')",
+            "coalesce(toString(i._dlt_list_idx), '')"
+        ]) }} as row_hash,
         {{ dbt_utils.generate_surrogate_key(["p.product_id", "i.value", "i._dlt_list_idx", "p.run_id"]) }} as ingestion_hash,
         now64(3) as _inserted_at
     from images as i
@@ -93,7 +95,9 @@ select
     _dlt_parent_id,
     _dlt_id,
     run_id,
+    _extracted_at,
     pk_hash,
+    row_hash,
     ingestion_hash,
     _inserted_at
 from deduped

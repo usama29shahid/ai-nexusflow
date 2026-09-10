@@ -1,8 +1,6 @@
 {{
   config(
     alias="stg_route__products",
-    tags=["staging", "route", "products"],
-    meta={"load_type": "full_load"},
   )
 }}
 
@@ -80,9 +78,7 @@ keyed as (
             "coalesce(category_id, '')",
             "coalesce(category_name, '')",
             "coalesce(category_slug, '')",
-            "coalesce(category_image, '')",
-            "coalesce(toString(source_created_at), '')",
-            "coalesce(toString(source_updated_at), '')",
+            "coalesce(category_image, '')"
         ]) }} as row_hash,
         {{ dbt_utils.generate_surrogate_key(["product_id", "run_id"]) }} as ingestion_hash,
         (

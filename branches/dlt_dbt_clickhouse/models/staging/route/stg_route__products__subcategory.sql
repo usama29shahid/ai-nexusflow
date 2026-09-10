@@ -1,11 +1,8 @@
 {{
   config(
     alias="stg_route__products__subcategory",
-    tags=["staging", "route", "products"],
-    meta={"load_type": "full_load"},
   )
 }}
-
 {# FULL_LOAD peer silver: same parent Bronze scope as products; children of winning parents only. #}
 
 with products as (
@@ -72,6 +69,11 @@ joined as (
         cast(p.run_id as String) as run_id,
         cast(p._extracted_at as DateTime64(3, 'UTC')) as _extracted_at,
         {{ dbt_utils.generate_surrogate_key(["p.product_id", "s._id", "s._dlt_list_idx"]) }} as pk_hash,
+        {{ dbt_utils.generate_surrogate_key([
+            "coalesce(s.name, '')",
+            "coalesce(s.slug, '')",
+            "coalesce(s.category, '')"
+        ]) }} as row_hash,
         {{ dbt_utils.generate_surrogate_key(["p.product_id", "s._id", "s._dlt_list_idx", "p.run_id"]) }} as ingestion_hash,
         now64(3) as _inserted_at
     from subcategory as s
@@ -99,7 +101,9 @@ select
     _dlt_parent_id,
     _dlt_id,
     run_id,
+    _extracted_at,
     pk_hash,
+    row_hash,
     ingestion_hash,
     _inserted_at
 from deduped

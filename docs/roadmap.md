@@ -50,7 +50,7 @@ Airflow → DAG per source (smoke, then first REST source) → same dlt/dbt on h
 - One stable REST source: **Route API** (`route`) — catalog-first (`products`, `categories`, `brands`); see [route-ingestion.md](route-ingestion.md)
 - DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_{source}_dev`
 - **Done:** Route `products` full-refresh dlt → archive + Bronze + lake events/OTLP (reference pipeline in [dlt-extraction.md](dlt-extraction.md))
-- **Next:** dbt `stg_*` / Gold for products, then Airflow source DAG; then `categories` / `brands` (same dlt norms)
+- **Next:** Airflow source DAG; then `categories` / `brands` (same dlt norms). Products Gold SCD2: [gold-products-cutover.md](gold-products-cutover.md)
 - dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
 - Shared `NEXUS_RUN_ID` into dlt and dbt (`local-*` manual; Airflow DAG `run_id` when orchestrated)
 - Observability lake writes verified for manual host dlt runs; Airflow-triggered runs when the source DAG lands
@@ -140,7 +140,7 @@ dbt-clickhouse  1.10.2
 - [x] SigNoz / OpenMetadata reader Compose profiles (`signoz`, `openmetadata`) — containers only; product setup is Phase 2
 - [ ] Pipeline instrumentation (dlt/dbt/Airflow wired to lake on every run) — Phase 1
 - [x] Route `products` dlt → MinIO archive + ClickHouse Bronze + lake/OTLP producers (`dlt_dbt_clickhouse`) — Phase 1
-- [ ] dbt silver / Gold + tests for Route products — Phase 1
+- [x] dbt silver / Gold + tests for Route products — Phase 1 (see [gold-products-cutover.md](gold-products-cutover.md))
 - [ ] Catalog follow-on dlt endpoints (`categories`, `brands`) — Phase 1
 - [ ] MinIO archive + Iceberg / Polaris / dbt-spark / Trino (dlt_dbt_spark_iceberg) — Phase 1
 - [ ] Airflow source/ELT DAGs beyond smoke (profile + smoke DAG exist) — Phase 1
@@ -155,7 +155,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**Phase 1 Milestone 1 (in progress):** Route `products` dlt + observability producers are live. Next: **dbt staging / Gold** for products, then **Airflow** source DAG (`nexus_route_clickhouse`), then other catalog endpoints.
+**Phase 1 Milestone 1 (in progress):** Route `products` dlt + silver + Gold SCD2 + observability producers are live. Next: **Airflow** source DAG (`nexus_route_clickhouse`), then other catalog endpoints.
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt (next) → lake telemetry ✓

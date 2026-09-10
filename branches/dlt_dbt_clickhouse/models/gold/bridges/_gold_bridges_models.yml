@@ -1,0 +1,558 @@
+version: 2
+
+models:
+  - name: brg_product_image
+    description: >
+      SCD Type 2 bridge of product gallery image membership in gold_{env}.
+      Grain is one version per (product_id, image_url, list_idx) from
+      stg_route__products__images. row_hash is the silver peer hash (image_url,
+      list_idx). Pattern A: absence from latest FULL_LOAD silver expires the
+      active membership (is_active=0, is_deleted=1) without inserting a
+      tombstone row. First-ever membership uses _extracted_at; change and
+      reappear after delete open at scd_bound_at (new SK). Use is_active=1 for
+      current gallery URLs; as-of or store brg_product_image_sk on marts for
+      historical image reporting. Depends on dim_product for DAG order and
+      relationship tests.
+    config:
+      tags: ["gold", "scd2", "products", "elementary", "bridges"]
+      meta:
+        scd_type: 2
+        delete_pattern: expire_current
+        change_detection_column: row_hash
+        elementary:
+          timestamp_column: inserted_at
+    columns:
+      - name: brg_product_image_sk
+        description: Surrogate key unique per SCD2 membership version (product_id + row_hash + valid_from basis).
+        data_tests:
+          - not_null
+          - unique
+      - name: product_id
+        description: Product business key; must exist on dim_product (any version).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("dim_product")
+                field: product_id
+      - name: image_url
+        description: Gallery image URL from Route products.images[].
+        data_tests:
+          - not_null
+      - name: list_idx
+        description: Zero-based array index from dlt nested list (_dlt_list_idx).
+      - name: pk_hash
+        description: Stable hash of product_id + image_url + list_idx across versions.
+        data_tests:
+          - not_null
+          - unique:
+              config:
+                where: "is_active = 1"
+      - name: row_hash
+        description: Same as silver stg_route__products__images.row_hash; drives version opens.
+        data_tests:
+          - not_null
+      - name: run_id
+        description: Nexus run_id from the silver membership row for this version.
+        data_tests:
+          - not_null
+      - name: valid_from
+        description: >
+          Effective start. First-ever membership uses silver _extracted_at;
+          change and reappear after delete use scd_bound_at (change equals prior
+          valid_to; reappear may leave a gap after delete).
+        data_tests:
+          - not_null
+      - name: valid_to
+        description: Effective end; open sentinel while is_active=1, else scd_bound_at.
+        data_tests:
+          - not_null
+      - name: is_active
+        description: Int8 1 = current membership; 0 = closed (superseded or deleted from source).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: is_deleted
+        description: Int8 1 = closed because image membership missing from latest FULL_LOAD silver.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: inserted_at
+        description: Gold warehouse insert time for this version row (independent of silver).
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: Gold warehouse last update time (insert or expire).
+        data_tests:
+          - not_null
+
+  - name: brg_product_subcategory
+    description: >
+      SCD Type 2 bridge of product–subcategory membership in gold_{env}. Grain
+      is one version per (product_id, subcategory_id, list_idx) from
+      stg_route__products__subcategory. row_hash tracks subcategory_name,
+      subcategory_slug, and parent_category_id changes. Pattern A expire on
+      absence from FULL_LOAD silver. First-ever membership uses _extracted_at;
+      change and reappear after delete open at scd_bound_at (new SK).
+      parent_category_id is the subcategory's parent category in the source
+      taxonomy (not a product parent). Use for as-of taxonomy placement and
+      current membership (is_active=1).
+    config:
+      tags: ["gold", "scd2", "products", "elementary", "bridges"]
+      meta:
+        scd_type: 2
+        delete_pattern: expire_current
+        change_detection_column: row_hash
+        elementary:
+          timestamp_column: inserted_at
+    columns:
+      - name: brg_product_subcategory_sk
+        description: Surrogate key unique per SCD2 membership version.
+        data_tests:
+          - not_null
+          - unique
+      - name: product_id
+        description: Product business key; must exist on dim_product (any version).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("dim_product")
+                field: product_id
+      - name: subcategory_id
+        description: Subcategory natural id from Route nested subcategory[].
+        data_tests:
+          - not_null
+      - name: subcategory_name
+        description: Subcategory display name at this version (in row_hash).
+      - name: subcategory_slug
+        description: Subcategory slug at this version (in row_hash).
+      - name: parent_category_id
+        description: >
+          Id of the parent category of this subcategory in the Route taxonomy
+          (source field category). Not a product hierarchy parent.
+      - name: list_idx
+        description: Zero-based array index from dlt nested list.
+      - name: pk_hash
+        description: Stable hash of product_id + subcategory_id + list_idx.
+        data_tests:
+          - not_null
+          - unique:
+              config:
+                where: "is_active = 1"
+      - name: row_hash
+        description: Same as silver peer row_hash; drives version opens on name/slug/parent changes.
+        data_tests:
+          - not_null
+      - name: run_id
+        description: Nexus run_id from the silver membership row for this version.
+        data_tests:
+          - not_null
+      - name: valid_from
+        description: >
+          Effective start. First-ever membership uses silver _extracted_at;
+          change and reappear after delete use scd_bound_at (change equals prior
+          valid_to; reappear may leave a gap after delete).
+        data_tests:
+          - not_null
+      - name: valid_to
+        description: Effective end; open sentinel or scd_bound_at on expire.
+        data_tests:
+          - not_null
+      - name: is_active
+        description: Int8 1 = current membership; 0 = closed.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: is_deleted
+        description: Int8 1 = closed because membership missing from latest FULL_LOAD silver.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: inserted_at
+        description: Gold warehouse insert time for this version row.
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: Gold warehouse last update time (insert or expire).
+        data_tests:
+          - not_null
+
+unit_tests:
+  # Fixture anchors: &img_stg / &img_gold_deleted / &img_gold_active;
+  # &sc_stg / &sc_gold_deleted / &sc_gold_active; &brg_scd_incr_macros.
+
+  - name: test_brg_product_image_initial_load
+    description: >
+      Verifies first load of brg_product_image copies silver row_hash into Gold
+      without renaming, creates is_active=1 / is_deleted=0, and preserves
+      product_id, image_url, and list_idx for gallery membership.
+    model: brg_product_image
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: ref("stg_route__products__images")
+        rows:
+          - &img_stg
+            product_id: "p1"
+            image_url: "https://img/a.jpg"
+            list_idx: 0
+            pk_hash: "pk_img1"
+            row_hash: "rh_img1"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          image_url: "https://img/a.jpg"
+          list_idx: 0
+          pk_hash: "pk_img1"
+          row_hash: "rh_img1"
+          is_active: 1
+          is_deleted: 0
+          run_id: "r1"
+
+  - name: test_brg_product_image_reappear_after_delete
+    description: >
+      Incremental reappear after Pattern A delete on gallery membership: opens
+      at scd_bound_at (not silver _extracted_at). Expect is the new open row
+      only (delete+insert batch).
+    model: brg_product_image
+    overrides:
+      macros: &brg_scd_incr_macros
+        is_incremental: true
+        scd2_bound_at: "cast('2026-09-12 12:00:00.000' as DateTime64(3, 'UTC'))"
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows:
+          - &img_gold_deleted
+            brg_product_image_sk: "sk_img_old"
+            product_id: "p1"
+            image_url: "https://img/a.jpg"
+            list_idx: 0
+            pk_hash: "pk_img1"
+            row_hash: "rh_img1"
+            run_id: "r_old"
+            valid_from: "2026-09-06T00:00:00.000Z"
+            valid_to: "2026-09-11T08:00:00.000Z"
+            is_active: 0
+            is_deleted: 1
+            inserted_at: "2026-09-06T00:00:00.000Z"
+            updated_at: "2026-09-11T08:00:00.000Z"
+      - input: ref("stg_route__products__images")
+        rows:
+          - <<: *img_stg
+            run_id: "r_reappear"
+    expect:
+      rows:
+        - product_id: "p1"
+          image_url: "https://img/a.jpg"
+          list_idx: 0
+          pk_hash: "pk_img1"
+          row_hash: "rh_img1"
+          run_id: "r_reappear"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_brg_product_image_incremental_truly_new
+    description: >
+      Incremental brand-new gallery membership: valid_from uses _extracted_at,
+      not scd_bound_at.
+    model: brg_product_image
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows: []
+      - input: ref("stg_route__products__images")
+        rows:
+          - <<: *img_stg
+            image_url: "https://img/b.jpg"
+            list_idx: 1
+            pk_hash: "pk_img_new"
+            row_hash: "rh_img_new"
+            run_id: "r_new"
+            _extracted_at: "2026-09-10T00:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          image_url: "https://img/b.jpg"
+          list_idx: 1
+          pk_hash: "pk_img_new"
+          row_hash: "rh_img_new"
+          run_id: "r_new"
+          valid_from: "2026-09-10T00:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_brg_product_image_incremental_pattern_a_delete
+    description: >
+      Pattern A delete on gallery membership: expire active row at scd_bound_at.
+    model: brg_product_image
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows:
+          - &img_gold_active
+            <<: *img_gold_deleted
+            brg_product_image_sk: "sk_img_active"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            updated_at: "2026-09-06T00:00:00.000Z"
+      - input: ref("stg_route__products__images")
+        rows: []
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk_img1"
+          brg_product_image_sk: "sk_img_active"
+          valid_from: "2026-09-06T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 1
+
+  - name: test_brg_product_image_incremental_attribute_change
+    description: >
+      Gallery membership row_hash change: expire prior and open new at same
+      scd_bound_at.
+    model: brg_product_image
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows:
+          - *img_gold_active
+      - input: ref("stg_route__products__images")
+        rows:
+          - <<: *img_stg
+            row_hash: "rh_img2"
+            run_id: "r_change"
+            _extracted_at: "2026-09-12T11:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk_img1"
+          row_hash: "rh_img1"
+          run_id: "r_old"
+          valid_from: "2026-09-06T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 0
+        - product_id: "p1"
+          pk_hash: "pk_img1"
+          row_hash: "rh_img2"
+          run_id: "r_change"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          valid_to: "9999-01-01T23:59:59.999Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_brg_product_subcategory_initial_load
+    description: >
+      Verifies first load of brg_product_subcategory passes through silver
+      row_hash, keeps subcategory_id, and marks the membership active
+      (is_active=1, is_deleted=0) for taxonomy bridge consumers.
+    model: brg_product_subcategory
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: ref("stg_route__products__subcategory")
+        rows:
+          - &sc_stg
+            product_id: "p1"
+            subcategory_id: "sc1"
+            subcategory_name: "Sub"
+            subcategory_slug: "sub"
+            parent_category_id: "c1"
+            list_idx: 0
+            pk_hash: "pk_sc1"
+            row_hash: "rh_sc1"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          subcategory_id: "sc1"
+          pk_hash: "pk_sc1"
+          row_hash: "rh_sc1"
+          is_active: 1
+          is_deleted: 0
+          run_id: "r1"
+
+  - name: test_brg_product_subcategory_reappear_after_delete
+    description: >
+      Incremental reappear after Pattern A delete on subcategory membership:
+      opens at scd_bound_at (not silver _extracted_at). Expect is the new open
+      row only (delete+insert batch).
+    model: brg_product_subcategory
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows:
+          - &sc_gold_deleted
+            brg_product_subcategory_sk: "sk_sc_old"
+            product_id: "p1"
+            subcategory_id: "sc1"
+            subcategory_name: "Sub"
+            subcategory_slug: "sub"
+            parent_category_id: "c1"
+            list_idx: 0
+            pk_hash: "pk_sc1"
+            row_hash: "rh_sc1"
+            run_id: "r_old"
+            valid_from: "2026-09-06T00:00:00.000Z"
+            valid_to: "2026-09-11T08:00:00.000Z"
+            is_active: 0
+            is_deleted: 1
+            inserted_at: "2026-09-06T00:00:00.000Z"
+            updated_at: "2026-09-11T08:00:00.000Z"
+      - input: ref("stg_route__products__subcategory")
+        rows:
+          - <<: *sc_stg
+            run_id: "r_reappear"
+    expect:
+      rows:
+        - product_id: "p1"
+          subcategory_id: "sc1"
+          pk_hash: "pk_sc1"
+          row_hash: "rh_sc1"
+          run_id: "r_reappear"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_brg_product_subcategory_incremental_truly_new
+    description: >
+      Incremental brand-new subcategory membership: valid_from uses
+      _extracted_at, not scd_bound_at.
+    model: brg_product_subcategory
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows: []
+      - input: ref("stg_route__products__subcategory")
+        rows:
+          - <<: *sc_stg
+            subcategory_id: "sc2"
+            subcategory_name: "Sub2"
+            subcategory_slug: "sub2"
+            list_idx: 1
+            pk_hash: "pk_sc_new"
+            row_hash: "rh_sc_new"
+            run_id: "r_new"
+            _extracted_at: "2026-09-10T00:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          subcategory_id: "sc2"
+          pk_hash: "pk_sc_new"
+          row_hash: "rh_sc_new"
+          run_id: "r_new"
+          valid_from: "2026-09-10T00:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_brg_product_subcategory_incremental_pattern_a_delete
+    description: >
+      Pattern A delete on subcategory membership: expire active row at
+      scd_bound_at.
+    model: brg_product_subcategory
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows:
+          - &sc_gold_active
+            <<: *sc_gold_deleted
+            brg_product_subcategory_sk: "sk_sc_active"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            updated_at: "2026-09-06T00:00:00.000Z"
+      - input: ref("stg_route__products__subcategory")
+        rows: []
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk_sc1"
+          brg_product_subcategory_sk: "sk_sc_active"
+          valid_from: "2026-09-06T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 1
+
+  - name: test_brg_product_subcategory_incremental_attribute_change
+    description: >
+      Subcategory membership row_hash change: expire prior and open new at
+      same scd_bound_at.
+    model: brg_product_subcategory
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows:
+          - *sc_gold_active
+      - input: ref("stg_route__products__subcategory")
+        rows:
+          - <<: *sc_stg
+            subcategory_name: "Sub Renamed"
+            row_hash: "rh_sc2"
+            run_id: "r_change"
+            _extracted_at: "2026-09-12T11:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk_sc1"
+          row_hash: "rh_sc1"
+          run_id: "r_old"
+          valid_from: "2026-09-06T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 0
+        - product_id: "p1"
+          pk_hash: "pk_sc1"
+          row_hash: "rh_sc2"
+          run_id: "r_change"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          valid_to: "9999-01-01T23:59:59.999Z"
+          is_active: 1
+          is_deleted: 0

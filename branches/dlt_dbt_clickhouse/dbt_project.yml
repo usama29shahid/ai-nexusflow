@@ -40,3 +40,14 @@ models:
         +schema: silver
         +materialized: table
         +copy_grants: true
+    gold:
+      +schema: gold
+      +copy_grants: true
+      dims:
+        +tags: ["gold", "dims"]
+      bridges:
+        +tags: ["gold", "bridges"]
+      facts:
+        +tags: ["gold", "facts"]
+      events:
+        +tags: ["gold", "events"]

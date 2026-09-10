@@ -1,0 +1,253 @@
+{{
+  config(
+    alias="brg_product_subcategory",
+    materialized="incremental",
+    incremental_strategy="delete+insert",
+    unique_key="brg_product_subcategory_sk",
+  )
+}}
+
+{% set _ensure_dim_product = ref("dim_product") %}
+
+{# SCD2 Pattern A: change/reappear use scd_bound_at; first-ever key uses _extracted_at. #}
+
+{% if not is_incremental() %}
+
+with silver as (
+    select
+        product_id,
+        subcategory_id,
+        subcategory_name,
+        subcategory_slug,
+        parent_category_id,
+        list_idx,
+        pk_hash,
+        row_hash,
+        run_id,
+        _extracted_at
+    from {{ ref("stg_route__products__subcategory") }}
+)
+
+select
+    {{ dbt_utils.generate_surrogate_key([
+        "product_id",
+        "row_hash",
+        "toString(_extracted_at)"
+    ]) }} as brg_product_subcategory_sk,
+    product_id,
+    subcategory_id,
+    subcategory_name,
+    subcategory_slug,
+    parent_category_id,
+    list_idx,
+    pk_hash,
+    row_hash,
+    run_id,
+    _extracted_at as valid_from,
+    {{ scd2_valid_to_open() }} as valid_to,
+    cast(1 as Int8) as is_active,
+    cast(0 as Int8) as is_deleted,
+    now64(3) as inserted_at,
+    now64(3) as updated_at
+from silver
+
+{% else %}
+
+with silver as (
+    select
+        product_id,
+        subcategory_id,
+        subcategory_name,
+        subcategory_slug,
+        parent_category_id,
+        list_idx,
+        pk_hash,
+        row_hash,
+        run_id,
+        _extracted_at
+    from {{ ref("stg_route__products__subcategory") }}
+),
+
+current_gold as (
+    select *
+    from {{ this }}
+    where is_active = 1
+),
+
+new_rows as (
+    select s.*
+    from silver as s
+    left anti join current_gold as g
+        on s.pk_hash = g.pk_hash
+),
+
+gold_keys as (
+    select distinct pk_hash
+    from {{ this }}
+),
+
+truly_new as (
+    select n.*
+    from new_rows as n
+    left anti join gold_keys as k
+        on n.pk_hash = k.pk_hash
+),
+
+reappear_rows as (
+    select n.*
+    from new_rows as n
+    inner join gold_keys as k
+        on n.pk_hash = k.pk_hash
+),
+
+deleted_rows as (
+    select g.*
+    from current_gold as g
+    left anti join silver as s
+        on g.pk_hash = s.pk_hash
+),
+
+changed_rows as (
+    select
+        s.*,
+        g.brg_product_subcategory_sk as existing_sk,
+        g.valid_from as existing_valid_from,
+        g.inserted_at as existing_inserted_at,
+        g.product_id as g_product_id,
+        g.subcategory_id as g_subcategory_id,
+        g.subcategory_name as g_subcategory_name,
+        g.subcategory_slug as g_subcategory_slug,
+        g.parent_category_id as g_parent_category_id,
+        g.list_idx as g_list_idx,
+        g.pk_hash as g_pk_hash,
+        g.row_hash as g_row_hash,
+        g.run_id as g_run_id
+    from silver as s
+    inner join current_gold as g
+        on s.pk_hash = g.pk_hash
+    where s.row_hash != g.row_hash
+),
+
+expired_deleted as (
+    select
+        brg_product_subcategory_sk,
+        product_id,
+        subcategory_id,
+        subcategory_name,
+        subcategory_slug,
+        parent_category_id,
+        list_idx,
+        pk_hash,
+        row_hash,
+        run_id,
+        valid_from,
+        {{ scd2_bound_at() }} as valid_to,
+        cast(0 as Int8) as is_active,
+        cast(1 as Int8) as is_deleted,
+        inserted_at,
+        {{ scd2_bound_at() }} as updated_at
+    from deleted_rows
+),
+
+expired_changed as (
+    select
+        existing_sk as brg_product_subcategory_sk,
+        g_product_id as product_id,
+        g_subcategory_id as subcategory_id,
+        g_subcategory_name as subcategory_name,
+        g_subcategory_slug as subcategory_slug,
+        g_parent_category_id as parent_category_id,
+        g_list_idx as list_idx,
+        g_pk_hash as pk_hash,
+        g_row_hash as row_hash,
+        g_run_id as run_id,
+        existing_valid_from as valid_from,
+        {{ scd2_bound_at() }} as valid_to,
+        cast(0 as Int8) as is_active,
+        cast(0 as Int8) as is_deleted,
+        existing_inserted_at as inserted_at,
+        {{ scd2_bound_at() }} as updated_at
+    from changed_rows
+),
+
+new_versions as (
+    select
+        {{ dbt_utils.generate_surrogate_key([
+            "product_id",
+            "row_hash",
+            "toString(_extracted_at)"
+        ]) }} as brg_product_subcategory_sk,
+        product_id,
+        subcategory_id,
+        subcategory_name,
+        subcategory_slug,
+        parent_category_id,
+        list_idx,
+        pk_hash,
+        row_hash,
+        run_id,
+        _extracted_at as valid_from,
+        {{ scd2_valid_to_open() }} as valid_to,
+        cast(1 as Int8) as is_active,
+        cast(0 as Int8) as is_deleted,
+        {{ scd2_bound_at() }} as inserted_at,
+        {{ scd2_bound_at() }} as updated_at
+    from truly_new
+
+    union all
+
+    select
+        {{ dbt_utils.generate_surrogate_key([
+            "product_id",
+            "row_hash",
+            "toString(" ~ scd2_bound_at() ~ ")"
+        ]) }} as brg_product_subcategory_sk,
+        product_id,
+        subcategory_id,
+        subcategory_name,
+        subcategory_slug,
+        parent_category_id,
+        list_idx,
+        pk_hash,
+        row_hash,
+        run_id,
+        {{ scd2_bound_at() }} as valid_from,
+        {{ scd2_valid_to_open() }} as valid_to,
+        cast(1 as Int8) as is_active,
+        cast(0 as Int8) as is_deleted,
+        {{ scd2_bound_at() }} as inserted_at,
+        {{ scd2_bound_at() }} as updated_at
+    from (
+        select
+            product_id,
+            subcategory_id,
+            subcategory_name,
+            subcategory_slug,
+            parent_category_id,
+            list_idx,
+            pk_hash,
+            row_hash,
+            run_id
+        from reappear_rows
+        union all
+        select
+            product_id,
+            subcategory_id,
+            subcategory_name,
+            subcategory_slug,
+            parent_category_id,
+            list_idx,
+            pk_hash,
+            row_hash,
+            run_id
+        from changed_rows
+    ) as scd_bound_opens
+)
+
+select * from expired_deleted
+union all
+select * from expired_changed
+union all
+select * from new_versions
+
+{% endif %}

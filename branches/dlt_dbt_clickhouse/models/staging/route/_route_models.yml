@@ -3,78 +3,129 @@ version: 2
 models:
   - name: stg_route__products
     description: >
-      Silver peer table for Route products — FULL_LOAD lookback / --full-refresh /
-      optional run_id; dedupe by pk_hash; materialized table.
+      Silver current-grain peer table for Route /products in silver_{env}.
+      FULL_LOAD pattern: scope Bronze by --full-refresh, optional var run_id, or
+      lookback_days (default 15), then dedupe by pk_hash keeping latest
+      _extracted_at. Flattens brand/category objects, derives has_discount and
+      discount_amount, and emits pk_hash, row_hash (attribute change detection
+      for Gold SCD2), and ingestion_hash. Soft-absent keys are dropped here;
+      Gold Pattern A expire handles deletes historically. Materialized table.
     config:
       tags: ["staging", "route", "products"]
+      meta:
+        load_type: full_load
+        layer: silver
     columns:
       - name: product_id
-        description: Natural business key from Bronze id (source _id is duplicate; not carried).
+        description: Natural business key from Bronze id (duplicate source _id not carried).
         data_tests:
           - not_null
           - unique
       - name: pk_hash
-        description: dbt_utils.generate_surrogate_key of product_id.
+        description: Surrogate hash of product_id only (identity for dedupe and Gold joins).
         data_tests:
           - not_null
           - unique
       - name: row_hash
-        description: Hash of source attributes for change detection.
+        description: >
+          Hash of tracked product attributes (title, slug, description, quantity,
+          sold, prices, image_cover, ratings, brand_*, category_*). Timestamps
+          excluded. Gold dim_product compares this column under the same name.
         data_tests:
           - not_null
       - name: ingestion_hash
-        description: Hash of product_id + run_id (unique within a load).
+        description: Hash of product_id + run_id; unique within a single Bronze load.
         data_tests:
           - not_null
           - unique
       - name: title
+        description: Product title from Route.
         data_tests:
           - not_null
+      - name: slug
+        description: Product URL slug.
+      - name: description
+        description: Product description text.
+      - name: quantity
+        description: Inventory quantity from Route.
+      - name: sold
+        description: Units-sold counter from Route.
+      - name: price
+        description: List price.
+      - name: price_after_discount
+        description: Discounted price when the API provides one.
       - name: brand_id
-        description: Flattened from brand___id.
+        description: Flattened from Bronze brand___id.
+      - name: brand_name
+        description: Flattened from Bronze brand__name.
+      - name: brand_slug
+        description: Flattened from Bronze brand__slug.
+      - name: brand_image
+        description: Flattened from Bronze brand__image.
       - name: category_id
-        description: Flattened from category___id.
+        description: Flattened from Bronze category___id.
+      - name: category_name
+        description: Flattened from Bronze category__name.
+      - name: category_slug
+        description: Flattened from Bronze category__slug.
+      - name: category_image
+        description: Flattened from Bronze category__image.
       - name: source_created_at
-        description: Route createdAt (source system date).
+        description: Route createdAt (source system); not in row_hash.
       - name: source_updated_at
-        description: Route updatedAt (source system date).
+        description: Route updatedAt (source system); not in row_hash.
       - name: has_discount
         description: True when price_after_discount is set and lower than price.
       - name: discount_amount
         description: price - price_after_discount when discounted, else 0.
       - name: run_id
+        description: Shared Nexus run id stamped on the Bronze load.
         data_tests:
           - not_null
       - name: _extracted_at
-        description: Platform extract time from dlt/products.py.
+        description: Platform extract time from dlt products.py; used by Gold for later valid_from.
       - name: _inserted_at
-        description: Silver build time (now64).
+        description: Silver build time (now64) when this current row was written.
         data_tests:
           - not_null
       - name: _dlt_id
-        description: dlt row id.
+        description: dlt row id; parent key for nested Bronze children.
         data_tests:
           - not_null
           - unique
       - name: _source
+        description: Ingestion source system code.
         data_tests:
           - accepted_values:
               arguments:
                 values: ["route"]
       - name: _endpoint
+        description: REST endpoint name for this pipeline.
         data_tests:
           - accepted_values:
               arguments:
                 values: ["products"]
+      - name: _nexus_env
+        description: Nexus environment (e.g. dev) stamped at extract.
+      - name: _dlt_load_id
+        description: dlt load package id for the Bronze batch.
 
   - name: stg_route__products__images
     description: >
-      Silver peer table for product images — same FULL_LOAD parent Bronze scope as
-      products; children of winning parent _dlt_id only; dedupe by pk_hash.
+      Silver peer table for Route product gallery images (nested images[]).
+      Same FULL_LOAD Bronze parent scope as stg_route__products; keeps only
+      children of winning parent _dlt_id after parent pk_hash dedupe. Grain:
+      product_id + image_url + list_idx. Emits pk_hash, row_hash, ingestion_hash
+      for Gold brg_product_image SCD2.
     config:
       tags: ["staging", "route", "products"]
+      meta:
+        load_type: full_load
+        layer: silver
+        bronze_nested_from: products
     columns:
       - name: product_id
+        description: Parent product business key resolved via winning parent _dlt_id.
         data_tests:
           - not_null
           - relationships:
@@ -82,32 +133,58 @@ models:
                 to: ref("stg_route__products")
                 field: product_id
       - name: image_url
+        description: Image URL from Bronze value column.
         data_tests:
           - not_null
+      - name: list_idx
+        description: Array index from dlt _dlt_list_idx.
       - name: pk_hash
+        description: Hash of product_id + image_url + list_idx.
         data_tests:
           - not_null
           - unique
+      - name: row_hash
+        description: >
+          Hash of tracked attributes (image_url, list_idx). Same name on Gold
+          brg_product_image for SCD2 change detection. Timestamps excluded.
+        data_tests:
+          - not_null
       - name: ingestion_hash
+        description: Hash of business key(s) + run_id.
         data_tests:
           - not_null
           - unique
       - name: run_id
+        description: Nexus run id from the winning parent product load.
         data_tests:
           - not_null
+      - name: _extracted_at
+        description: Extract time from the parent product load (for Gold valid_from).
+      - name: _dlt_parent_id
+        description: dlt FK to parent products._dlt_id in Bronze.
       - name: _dlt_id
+        description: dlt row id for this nested image row.
         data_tests:
           - not_null
           - unique
+      - name: _inserted_at
+        description: Silver build time (now64).
 
   - name: stg_route__products__subcategory
     description: >
-      Silver peer table for product subcategory — same FULL_LOAD parent Bronze scope;
-      children of winning parent _dlt_id only; dedupe by pk_hash.
+      Silver peer table for Route product subcategory[] membership. Same
+      FULL_LOAD parent scope and winning-parent join as images. Grain:
+      product_id + subcategory_id + list_idx. row_hash covers name, slug, and
+      parent_category_id for Gold brg_product_subcategory SCD2.
     config:
       tags: ["staging", "route", "products"]
+      meta:
+        load_type: full_load
+        layer: silver
+        bronze_nested_from: products
     columns:
       - name: product_id
+        description: Parent product business key from winning parent.
         data_tests:
           - not_null
           - relationships:
@@ -115,29 +192,58 @@ models:
                 to: ref("stg_route__products")
                 field: product_id
       - name: subcategory_id
+        description: Subcategory natural id from Bronze _id.
         data_tests:
           - not_null
+      - name: subcategory_name
+        description: Subcategory display name (in row_hash).
+      - name: subcategory_slug
+        description: Subcategory slug (in row_hash).
+      - name: parent_category_id
+        description: >
+          Parent category id of this subcategory from Bronze category field
+          (taxonomy parent, not product parent).
+      - name: list_idx
+        description: Array index from dlt _dlt_list_idx.
       - name: pk_hash
+        description: Hash of product_id + subcategory_id + list_idx.
         data_tests:
           - not_null
           - unique
+      - name: row_hash
+        description: >
+          Hash of subcategory_name, subcategory_slug, parent_category_id.
+          Same name on Gold bridge for SCD2. Timestamps excluded.
+        data_tests:
+          - not_null
       - name: ingestion_hash
+        description: Hash of business key(s) + run_id.
         data_tests:
           - not_null
           - unique
       - name: run_id
+        description: Nexus run id from the winning parent product load.
         data_tests:
           - not_null
+      - name: _extracted_at
+        description: Extract time from the parent product load.
+      - name: _dlt_parent_id
+        description: dlt FK to parent products._dlt_id in Bronze.
       - name: _dlt_id
+        description: dlt row id for this nested subcategory row.
         data_tests:
           - not_null
           - unique
+      - name: _inserted_at
+        description: Silver build time (now64).
 
 unit_tests:
   - name: test_stg_route__products_brand_flatten
-    description: brand___id maps to brand_id.
+    description: >
+      Ensures Bronze brand___id / brand__name flatten to silver brand_id /
+      brand_name (and category___id → category_id) so Gold and tests can rely
+      on clean nested-object naming without triple-underscore columns.
     model: stg_route__products
-    # Wide lookback so fixture _extracted_at never ages out of the default 15-day window.
     overrides:
       vars:
         lookback_days: 36500
@@ -178,4 +284,33 @@ unit_tests:
           brand_id: "b1"
           brand_name: "Brand"
           category_id: "c1"
+          run_id: "r1"
+
+  - name: test_stg_route__products__images_row_hash
+    description: >
+      Ensures nested image silver resolves product_id from the winning parent,
+      keeps image_url/list_idx, and emits a non-null row_hash (and extract
+      metadata) so Gold brg_product_image can SCD2 on the same column name.
+    model: stg_route__products__images
+    overrides:
+      vars:
+        lookback_days: 36500
+    given:
+      - input: source("route_raw", "products")
+        rows:
+          - id: "p1"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+            _dlt_id: "parent1"
+      - input: source("route_raw", "products__images")
+        rows:
+          - value: "https://img/a.jpg"
+            _dlt_list_idx: 0
+            _dlt_parent_id: "parent1"
+            _dlt_id: "img1"
+    expect:
+      rows:
+        - product_id: "p1"
+          image_url: "https://img/a.jpg"
+          list_idx: 0
           run_id: "r1"

@@ -1,0 +1,386 @@
+version: 2
+
+models:
+  - name: dim_product
+    description: >
+      Conformed SCD Type 2 product dimension in gold_{env}. One version row per
+      product_id whenever silver row_hash changes. Built from
+      stg_route__products (FULL_LOAD current grain). First-ever valid_from uses
+      source_created_at (else 1900-01-01). Attribute changes and reappear after
+      Pattern A delete open at scd_bound_at (new version SK); change closes prior
+      valid_to at the same bound. Deletes (key missing from latest silver) expire
+      the active row in place: is_active=0, is_deleted=1, valid_to=scd_bound_at —
+      no new tombstone version. Reappear may leave a gap after delete valid_to.
+      Filter is_active=1 for current products; as-of joins use valid_from/valid_to.
+      Bridges join on product_id + as-of (not dim_product_sk). Fact/mart
+      Version FK nuance: see docs/dbt-modeling.md when building marts.
+      Audit columns inserted_at/updated_at are Gold-only. source_updated_at
+      is informational and not in row_hash.
+    config:
+      tags: ["gold", "scd2", "products", "elementary", "dims"]
+      meta:
+        scd_type: 2
+        delete_pattern: expire_current
+        change_detection_column: row_hash
+        elementary:
+          timestamp_column: inserted_at
+    columns:
+      - name: dim_product_sk
+        description: >
+          Version surrogate key (hash of product_id + row_hash + valid_from
+          basis). Stable for one SCD2 version; new value when attributes change.
+        data_tests:
+          - not_null
+          - unique
+      - name: product_id
+        description: Natural product business key from Route (Bronze id).
+        data_tests:
+          - not_null
+          - unique:
+              config:
+                where: "is_active = 1"
+      - name: pk_hash
+        description: Stable hash of product_id only; identical across SCD2 versions for the same product.
+        data_tests:
+          - not_null
+      - name: row_hash
+        description: >
+          Same change-detection hash as silver stg_route__products.row_hash
+          (title, price, brand/category attrs, quantity, sold, ratings, etc.;
+          timestamps excluded). Compared across runs to open a new version.
+        data_tests:
+          - not_null
+      - name: title
+        description: Product display title from Route.
+        data_tests:
+          - not_null
+      - name: slug
+        description: URL slug from Route.
+      - name: description
+        description: Product body/description text from Route.
+      - name: quantity
+        description: Inventory quantity; included in row_hash for historical stock reporting.
+      - name: sold
+        description: Units sold counter; included in row_hash for historical sales reporting.
+      - name: price
+        description: List price; included in row_hash.
+      - name: price_after_discount
+        description: Discounted price when present; included in row_hash.
+      - name: has_discount
+        description: Integer/boolean-style flag from silver when price_after_discount < price.
+      - name: discount_amount
+        description: price - price_after_discount when discounted, else 0.
+      - name: image_cover
+        description: Primary cover image URL; included in row_hash.
+      - name: ratings_average
+        description: Average rating; included in row_hash for historical ratings reports.
+      - name: ratings_quantity
+        description: Number of ratings; included in row_hash.
+      - name: brand_id
+        description: Embedded brand id flattened on the product row (not a separate dim yet).
+      - name: brand_name
+        description: Embedded brand name at this version.
+      - name: brand_slug
+        description: Embedded brand slug at this version.
+      - name: brand_image
+        description: Embedded brand image URL at this version.
+      - name: category_id
+        description: Embedded category id flattened on the product row.
+      - name: category_name
+        description: Embedded category name at this version.
+      - name: category_slug
+        description: Embedded category slug at this version.
+      - name: category_image
+        description: Embedded category image URL at this version.
+      - name: source_created_at
+        description: >
+          Route createdAt. Drives valid_from on the first SCD2 version when
+          present; otherwise sentinel 1900-01-01. Not part of row_hash.
+      - name: source_updated_at
+        description: >
+          Route updatedAt carried for QA/reporting only. Not in row_hash and
+          does not open or close SCD windows.
+      - name: run_id
+        description: Nexus run_id from the silver row that supplied this version's attributes.
+        data_tests:
+          - not_null
+      - name: valid_from
+        description: >
+          Effective start of this version (DateTime64 UTC). First-ever key:
+          source_created_at or 1900-01-01. Attribute change or reappear after
+          delete: scd_bound_at (on change, equals prior version valid_to; on
+          reappear, may leave a gap after delete valid_to).
+        data_tests:
+          - not_null
+      - name: valid_to
+        description: >
+          Effective end of this version. Active rows use 9999-01-01 23:59:59.999;
+          closed rows use scd_bound_at (equals the next version's valid_from on
+          change; reappear after delete may start later than this bound).
+        data_tests:
+          - not_null
+      - name: is_active
+        description: >
+          Int8 flag: 1 = currently valid version for the product_id; 0 = closed
+          (superseded by a newer version or deleted from source). Prefer Int8
+          0/1 over Bool for ClickHouse filters and RAG/codegen consistency.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: is_deleted
+        description: >
+          Int8 flag: 1 = this version was closed because the product was absent
+          from the latest FULL_LOAD silver snapshot (Pattern A expire). 0 =
+          active or closed only because attributes changed. Does not insert a
+          separate tombstone row.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: inserted_at
+        description: >
+          Gold warehouse time when this version row was first written (now64).
+          Independent of silver _inserted_at.
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: >
+          Gold warehouse time of last write to this version row (set on insert
+          and when the version is expired).
+        data_tests:
+          - not_null
+
+unit_tests:
+  # Shared SCD incremental macro overrides (YAML anchor).
+  # Fixture anchors: &dim_stg_widget (silver), &dim_gold_p1_active / deleted (this).
+
+  - name: test_dim_product_initial_load_current
+    description: >
+      Verifies first (non-incremental) load of dim_product: one active SCD2
+      row per silver product, row_hash passed through unchanged from silver,
+      is_active=1, is_deleted=0, and open valid_to sentinel. Ensures Gold does
+      not invent a second hash column and treats Int8 flags correctly.
+    model: dim_product
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref("stg_route__products")
+        rows:
+          - &dim_stg_widget
+            product_id: "p1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            title: "Widget"
+            slug: "widget"
+            description: "d"
+            quantity: 2
+            sold: 1
+            price: 10.0
+            price_after_discount: null
+            has_discount: false
+            discount_amount: 0.0
+            image_cover: null
+            ratings_average: 4.0
+            ratings_quantity: 1
+            brand_id: "b1"
+            brand_name: "Brand"
+            brand_slug: "brand"
+            brand_image: null
+            category_id: "c1"
+            category_name: "Cat"
+            category_slug: "cat"
+            category_image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk1"
+          row_hash: "rh1"
+          title: "Widget"
+          is_active: 1
+          is_deleted: 0
+          run_id: "r1"
+
+  - name: test_dim_product_reappear_after_delete
+    description: >
+      Incremental reappear after Pattern A delete: pk_hash already in Gold with
+      no active row must open a new version at scd_bound_at (overridden), not
+      replay source_created_at. Expect is the delete+insert batch only (new
+      open row); historical deleted row stays in this and is not re-emitted.
+    model: dim_product
+    overrides:
+      macros: &dim_scd_incr_macros
+        is_incremental: true
+        scd2_bound_at: "cast('2026-09-12 12:00:00.000' as DateTime64(3, 'UTC'))"
+    given:
+      - input: this
+        rows:
+          - &dim_gold_p1_deleted
+            dim_product_sk: "sk_old"
+            product_id: "p1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            title: "Widget"
+            slug: "widget"
+            description: "d"
+            quantity: 2
+            sold: 1
+            price: 10.0
+            price_after_discount: null
+            has_discount: false
+            discount_amount: 0.0
+            image_cover: null
+            ratings_average: 4.0
+            ratings_quantity: 1
+            brand_id: "b1"
+            brand_name: "Brand"
+            brand_slug: "brand"
+            brand_image: null
+            category_id: "c1"
+            category_name: "Cat"
+            category_slug: "cat"
+            category_image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "2026-09-11T08:00:00.000Z"
+            is_active: 0
+            is_deleted: 1
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-11T08:00:00.000Z"
+      - input: ref("stg_route__products")
+        rows:
+          - <<: *dim_stg_widget
+            run_id: "r_reappear"
+            _extracted_at: "2026-09-12T11:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk1"
+          row_hash: "rh1"
+          title: "Widget"
+          run_id: "r_reappear"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_product_incremental_truly_new
+    description: >
+      Incremental brand-new key (pk_hash never in Gold): opens at
+      source_created_at, not scd_bound_at. Guards against treating every
+      new_rows path as reappear after the anti-join / reappear split.
+    model: dim_product
+    overrides:
+      macros: *dim_scd_incr_macros
+    given:
+      - input: this
+        rows: []
+      - input: ref("stg_route__products")
+        rows:
+          - <<: *dim_stg_widget
+            product_id: "p2"
+            pk_hash: "pk2"
+            row_hash: "rh2"
+            title: "Gadget"
+            slug: "gadget"
+            description: "d2"
+            quantity: 1
+            sold: 0
+            price: 20.0
+            ratings_average: 5.0
+            ratings_quantity: 2
+            source_created_at: "2026-08-01T00:00:00.000Z"
+            source_updated_at: "2026-08-02T00:00:00.000Z"
+            run_id: "r_new"
+            _extracted_at: "2026-09-12T11:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p2"
+          pk_hash: "pk2"
+          row_hash: "rh2"
+          title: "Gadget"
+          run_id: "r_new"
+          valid_from: "2026-08-01T00:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_product_incremental_pattern_a_delete
+    description: >
+      Pattern A delete: active Gold key absent from silver expires in place
+      (is_active=0, is_deleted=1, valid_to=scd_bound_at). No new tombstone row.
+    model: dim_product
+    overrides:
+      macros: *dim_scd_incr_macros
+    given:
+      - input: this
+        rows:
+          - &dim_gold_p1_active
+            <<: *dim_gold_p1_deleted
+            dim_product_sk: "sk_active"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            updated_at: "2026-09-01T00:00:00.000Z"
+      - input: ref("stg_route__products")
+        rows: []
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk1"
+          row_hash: "rh1"
+          dim_product_sk: "sk_active"
+          valid_from: "2026-09-01T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 1
+
+  - name: test_dim_product_incremental_attribute_change
+    description: >
+      Attribute change (row_hash differs): expire prior version and open new at
+      the same scd_bound_at (change seam). Expect is delete+insert batch only.
+    model: dim_product
+    overrides:
+      macros: *dim_scd_incr_macros
+    given:
+      - input: this
+        rows:
+          - *dim_gold_p1_active
+      - input: ref("stg_route__products")
+        rows:
+          - <<: *dim_stg_widget
+            row_hash: "rh2"
+            title: "Widget v2"
+            price: 12.0
+            source_updated_at: "2026-09-10T00:00:00.000Z"
+            run_id: "r_change"
+            _extracted_at: "2026-09-12T11:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          pk_hash: "pk1"
+          row_hash: "rh1"
+          title: "Widget"
+          run_id: "r_old"
+          valid_from: "2026-09-01T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 0
+        - product_id: "p1"
+          pk_hash: "pk1"
+          row_hash: "rh2"
+          title: "Widget v2"
+          run_id: "r_change"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          valid_to: "9999-01-01T23:59:59.999Z"
+          is_active: 1
+          is_deleted: 0
