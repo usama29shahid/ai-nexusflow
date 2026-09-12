@@ -58,13 +58,16 @@ models:
           - not_null
       - name: valid_from
         description: >
-          Effective start. First-ever membership uses silver _extracted_at;
-          change and reappear after delete use scd_bound_at (change equals prior
-          valid_to; reappear may leave a gap after delete).
+          Effective start. First-ever membership uses silver _extracted_at.
+          Change and reappear use scd_bound_at. A URL replace closes the old
+          key at the same extract as the new key opens. Reappear after delete
+          may leave a gap.
         data_tests:
           - not_null
       - name: valid_to
-        description: Effective end; open sentinel while is_active=1, else scd_bound_at.
+        description: >
+          Effective end. Open sentinel while is_active=1. Closed replace uses
+          product silver _extracted_at; full wipe uses scd_bound_at.
         data_tests:
           - not_null
       - name: is_active
@@ -156,13 +159,16 @@ models:
           - not_null
       - name: valid_from
         description: >
-          Effective start. First-ever membership uses silver _extracted_at;
-          change and reappear after delete use scd_bound_at (change equals prior
-          valid_to; reappear may leave a gap after delete).
+          Effective start. First-ever membership uses silver _extracted_at.
+          Change and reappear use scd_bound_at. A subcategory-id swap closes the
+          old key at the same extract as the new key opens. Reappear after
+          delete may leave a gap.
         data_tests:
           - not_null
       - name: valid_to
-        description: Effective end; open sentinel or scd_bound_at on expire.
+        description: >
+          Effective end. Open sentinel while is_active=1. Closed replace uses
+          product silver _extracted_at; full wipe uses scd_bound_at.
         data_tests:
           - not_null
       - name: is_active
@@ -274,8 +280,9 @@ unit_tests:
 
   - name: test_brg_product_image_incremental_truly_new
     description: >
-      Incremental brand-new gallery membership: valid_from uses _extracted_at,
-      not scd_bound_at.
+      Incremental brand-new gallery membership: valid_from uses _extracted_at
+      (first-ever key, same idea as dim_product source_created_at), not
+      scd_bound_at.
     model: brg_product_image
     overrides:
       macros: *brg_scd_incr_macros
@@ -335,10 +342,11 @@ unit_tests:
           is_active: 0
           is_deleted: 1
 
-  - name: test_brg_product_image_incremental_attribute_change
+  - name: test_brg_product_image_incremental_url_replace
     description: >
-      Gallery membership row_hash change: expire prior and open new at same
-      scd_bound_at.
+      Gallery URL edit changes pk_hash. Incremental batch is Pattern A expire
+      of the old key (is_deleted=1) plus a truly-new open row. Both sides use
+      silver _extracted_at so there is no extract-vs-bound overlap.
     model: brg_product_image
     overrides:
       macros: *brg_scd_incr_macros
@@ -351,24 +359,30 @@ unit_tests:
       - input: ref("stg_route__products__images")
         rows:
           - <<: *img_stg
+            image_url: "https://img/b.jpg"
+            pk_hash: "pk_img2"
             row_hash: "rh_img2"
-            run_id: "r_change"
+            run_id: "r_url"
             _extracted_at: "2026-09-12T11:00:00.000Z"
     expect:
       rows:
         - product_id: "p1"
+          image_url: "https://img/a.jpg"
+          list_idx: 0
           pk_hash: "pk_img1"
           row_hash: "rh_img1"
           run_id: "r_old"
           valid_from: "2026-09-06T00:00:00.000Z"
-          valid_to: "2026-09-12T12:00:00.000Z"
+          valid_to: "2026-09-12T11:00:00.000Z"
           is_active: 0
-          is_deleted: 0
+          is_deleted: 1
         - product_id: "p1"
-          pk_hash: "pk_img1"
+          image_url: "https://img/b.jpg"
+          list_idx: 0
+          pk_hash: "pk_img2"
           row_hash: "rh_img2"
-          run_id: "r_change"
-          valid_from: "2026-09-12T12:00:00.000Z"
+          run_id: "r_url"
+          valid_from: "2026-09-12T11:00:00.000Z"
           valid_to: "9999-01-01T23:59:59.999Z"
           is_active: 1
           is_deleted: 0
@@ -553,6 +567,51 @@ unit_tests:
           row_hash: "rh_sc2"
           run_id: "r_change"
           valid_from: "2026-09-12T12:00:00.000Z"
+          valid_to: "9999-01-01T23:59:59.999Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_brg_product_subcategory_incremental_id_replace
+    description: >
+      Subcategory id swap changes pk_hash. Incremental batch is Pattern A
+      expire of the old key plus a truly-new open row. Both sides use
+      silver _extracted_at so there is no extract-vs-bound overlap.
+    model: brg_product_subcategory
+    overrides:
+      macros: *brg_scd_incr_macros
+    given:
+      - input: ref("dim_product")
+        rows: []
+      - input: this
+        rows:
+          - *sc_gold_active
+      - input: ref("stg_route__products__subcategory")
+        rows:
+          - <<: *sc_stg
+            subcategory_id: "sc2"
+            subcategory_name: "Sub2"
+            subcategory_slug: "sub2"
+            pk_hash: "pk_sc2"
+            row_hash: "rh_sc2"
+            run_id: "r_swap"
+            _extracted_at: "2026-09-12T11:00:00.000Z"
+    expect:
+      rows:
+        - product_id: "p1"
+          subcategory_id: "sc1"
+          pk_hash: "pk_sc1"
+          row_hash: "rh_sc1"
+          run_id: "r_old"
+          valid_from: "2026-09-06T00:00:00.000Z"
+          valid_to: "2026-09-12T11:00:00.000Z"
+          is_active: 0
+          is_deleted: 1
+        - product_id: "p1"
+          subcategory_id: "sc2"
+          pk_hash: "pk_sc2"
+          row_hash: "rh_sc2"
+          run_id: "r_swap"
+          valid_from: "2026-09-12T11:00:00.000Z"
           valid_to: "9999-01-01T23:59:59.999Z"
           is_active: 1
           is_deleted: 0

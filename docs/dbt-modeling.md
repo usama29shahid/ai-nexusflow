@@ -195,8 +195,9 @@ Prefer **natural or hashed keys** over serial surrogates. SCD2 version rows also
 - Sentinels: unknown start `1900-01-01 00:00:00.000`; open end `9999-01-01 23:59:59.999` (macros `scd2_valid_from_unknown` / `scd2_valid_to_open`).
 - Materialization: `incremental` + `delete+insert` on the version surrogate. Do not use classic dbt snapshots.
 - **Change seam (required):** one `scd_bound_at` per dbt invocation via macro `scd2_bound_at()` (compile-time `DateTime64` literal from `run_started_at`, so every SQL reference is identical; override in unit tests). On `row_hash` change, prior `valid_to` and new `valid_from` both equal that bound (no gap/overlap). Do **not** use silver `_extracted_at` or wall-clock `now64(3)` as the change-seam.
-- **Delete (Pattern A):** key absent from FULL_LOAD silver → expire current row (`is_active=0`, `is_deleted=1`, `valid_to=scd_bound_at`). Do **not** insert a new tombstone version row.
-- **First version / brand-new key:** `valid_from` from source-created when available (else unknown sentinel); bridges may use `_extracted_at` for first membership only. Open `valid_to` sentinel. Only when `pk_hash` has **never** appeared in Gold.
+- **Delete (Pattern A):** key absent from FULL_LOAD silver → expire current row (`is_active=0`, `is_deleted=1`). Do **not** insert a new tombstone version row. `valid_to` is `scd_bound_at` on dim and on a bridge **full wipe** (no remaining silver membership for that product). On a bridge **membership replace** (sibling silver row still exists for the product), `valid_to` is that product's silver `_extracted_at` — see **Bridge membership replace** below.
+- **First version / brand-new key:** `valid_from` from source-created when available (else unknown sentinel); bridges use `_extracted_at` for first membership (full refresh and incremental truly-new). Open `valid_to` sentinel. Only when `pk_hash` has **never** appeared in Gold.
+- **Bridge membership replace:** Pattern A delete of one `pk_hash` plus truly-new of another (image URL or subcategory id). Close the old row at that product's current silver `_extracted_at` (same clock as the new open). If the product has no remaining silver membership, close at `scd_bound_at` (full wipe).
 - **Reappear after delete:** key present in silver, no `is_active=1` row, but `pk_hash` already exists in Gold → open a **new** version at `scd_bound_at` with a new version SK. Do **not** replay `source_created_at` / first-version `_extracted_at`. A gap between prior delete `valid_to` and reappear `valid_from` is correct (entity was absent).
 - **ClickHouse anti-joins:** use `LEFT ANTI JOIN` for “key missing from the other side” (new / delete / truly-new). Do **not** use `LEFT JOIN … WHERE right.key IS NULL` — with default `join_use_nulls=0`, non-Nullable `String` columns become `''` and the filter never matches.
 - Model SQL `config()` = materialization only; tags/meta/docs in YAML.
@@ -210,7 +211,7 @@ Prefer **natural or hashed keys** over serial surrogates. SCD2 version rows also
 
 Each SCD2 Gold table still has both a **durable natural key** and its **own version SK**. Image/subcategory membership are `brg_*` (multivalued history), not a product hierarchy — same join rules. Fact/mart Version FK details are deferred until those models are built; look them up here when creating facts/marts.
 
-Route products instance: `dim_product`, `brg_product_image`, `brg_product_subcategory` — [gold-products-cutover.md](gold-products-cutover.md). `dim_product` first-ever `valid_from` ← `source_created_at` (else sentinel); reappear and change use `scd_bound_at`; `source_updated_at` informational only.
+Route products instance: `dim_product`, `brg_product_image`, `brg_product_subcategory` — [gold-products-cutover.md](gold-products-cutover.md). `dim_product` first-ever `valid_from` ← `source_created_at` (else sentinel); reappear and change use `scd_bound_at`; `source_updated_at` informational only. Bridges first-ever ← `_extracted_at`; change/reappear ← `scd_bound_at`; membership replace close ← product silver extract.
 
 Facts and SCD2 are **not** required on every source. Entities + events are enough when that is the grain.
 

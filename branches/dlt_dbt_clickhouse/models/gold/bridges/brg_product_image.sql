@@ -9,7 +9,9 @@
 
 {% set _ensure_dim_product = ref("dim_product") %}
 
-{# SCD2 Pattern A: change/reappear use scd_bound_at; first-ever key uses _extracted_at. #}
+{# SCD2 Pattern A: first-ever key uses _extracted_at; change/reappear use scd_bound_at.
+   Pattern A delete valid_to uses the product's silver extract when a sibling row exists
+   (membership replace seam), else scd_bound_at (full wipe). #}
 
 {% if not is_incremental() %}
 
@@ -98,6 +100,14 @@ deleted_rows as (
         on g.pk_hash = s.pk_hash
 ),
 
+product_extract as (
+    select
+        product_id,
+        max(_extracted_at) as extract_at
+    from silver
+    group by product_id
+),
+
 changed_rows as (
     select
         s.*,
@@ -118,20 +128,22 @@ changed_rows as (
 
 expired_deleted as (
     select
-        brg_product_image_sk,
-        product_id,
-        image_url,
-        list_idx,
-        pk_hash,
-        row_hash,
-        run_id,
-        valid_from,
-        {{ scd2_bound_at() }} as valid_to,
+        d.brg_product_image_sk,
+        d.product_id,
+        d.image_url,
+        d.list_idx,
+        d.pk_hash,
+        d.row_hash,
+        d.run_id,
+        d.valid_from,
+        if(pe.product_id = d.product_id, pe.extract_at, {{ scd2_bound_at() }}) as valid_to,
         cast(0 as Int8) as is_active,
         cast(1 as Int8) as is_deleted,
-        inserted_at,
+        d.inserted_at,
         {{ scd2_bound_at() }} as updated_at
-    from deleted_rows
+    from deleted_rows as d
+    left join product_extract as pe
+        on d.product_id = pe.product_id
 ),
 
 expired_changed as (
