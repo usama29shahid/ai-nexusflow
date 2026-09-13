@@ -19,7 +19,7 @@ REST API
                       → optional published
 ```
 
-Until source DAGs exist, the same path runs on the host with `uv run` or via Airflow (Phase 1). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
+The same path runs on the host with `uv run` or via Airflow (`route_clickhouse_products`). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
 
 ---
 
@@ -123,7 +123,7 @@ Staging splits by **API**. Gold splits by **grain** (dims/facts/events), not by 
 
 A **dlt pipeline** is per REST **endpoint** (and per `{param}` only when schema/grain/auth/incremental **contract** differs). Same path, same schema, different id → one parameterized pipeline, not two Gold tables.
 
-A **source** (`route`, later others) groups those endpoint pipelines. Airflow later: **one DAG per source**, tasks per endpoint, then **one dbt run with selectors**.
+A **source** (`route`, later others) groups those endpoint pipelines. Airflow: **one DAG per source + target + endpoint** (layer tasks: bronze → silver → gold → observability). First job: `route_clickhouse_products`.
 
 **Gold is requirement-driven, shared by default:**
 
@@ -243,7 +243,7 @@ Pass the **same** `NEXUS_RUN_ID` (printed by the script, or `--run-id`) as `var(
 | ClickHouse RBAC (loader/transformer/reader/admin) | **Implemented** (dev) — [rbac.md](rbac.md), `./scripts/clickhouse-rbac-bootstrap.sh` |
 | Silver `stg_route__products*` peer tables | **Implemented** (dev) — [dbt-modeling.md](dbt-modeling.md), [bronze-silver-cutover.md](bronze-silver-cutover.md) |
 | Gold | `dim_product`, `brg_product_image`, `brg_product_subcategory` SCD2 — [gold-products-cutover.md](gold-products-cutover.md) |
-| Airflow source DAG | Not yet (smoke DAG only) |
+| Airflow endpoint DAG | **Implemented** — `route_clickhouse_products` (host `uv` via SSH) |
 
 Physical Bronze: `bronze_{env}.raw_route__products` (`dataset_table_separator=__`). RBAC: dlt=`nexus_loader`, dbt=`nexus_transformer`.
 

@@ -171,9 +171,9 @@ Airflow source DAG
         └── dbt documentation artifacts
 ```
 
-The repository standard is one DAG per source with endpoint-level dlt tasks,
-not one DAG per REST URL. Domain-only dbt work may use a dbt selector without
-creating another extraction pipeline.
+The repository standard is one DAG per source + target + endpoint, with
+layer tasks (bronze → silver → gold → observability). Domain-only dbt work
+may use a dbt selector without creating another extraction pipeline.
 
 ### Ownership and run identity
 
@@ -188,11 +188,9 @@ creating another extraction pipeline.
   environment variable must not be assumed to persist into another Airflow
   task.
 
-The future Airflow runtime topology must preserve the current development
-expectation that dlt and dbt run from the host while Airflow infrastructure
-runs in Docker. The exact host execution bridge is intentionally left for a
-later Airflow design decision; bind-mounting a developer `.venv` into a
-container is not the contract.
+Airflow runs in Docker. dlt and dbt run on the host via SSH to the Docker
+host (`./scripts/start.sh` / `uv`). Bind-mounting a developer `.venv` into a
+container is not the contract. A worker image may replace SSH later.
 
 ### SCD2 expectation
 

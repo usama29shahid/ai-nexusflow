@@ -20,7 +20,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 
 ## Current implementation priority
 
-Phase 1, Milestone 1 — warehouse branch first. Route **`products`** dlt (archive + Bronze + observability producers) is the **reference endpoint pipeline**; document and copy its norms for the next scripts. Still ahead in this milestone: dbt staging / Gold for products, Airflow source DAG, then catalog follow-ons.
+Phase 1, Milestone 1 — warehouse branch first. Route **`products`** dlt (archive + Bronze + observability producers) is the **reference endpoint pipeline**; document and copy its norms for the next scripts. Products silver / Gold and Airflow DAG `route_clickhouse_products` are in place. Still ahead: catalog follow-ons (`categories` / `brands`), then SigNoz / OpenMetadata look-and-feel.
 
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
@@ -70,10 +70,10 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 
 ## Orchestration and observability
 
-- Airflow is **Phase 1** orchestration, not a transformation backend. Use one DAG per source, endpoint-level dlt tasks, then dbt selectors; final `observability_publish` task for lake artifact upload.
+- Airflow is **Phase 1** orchestration, not a transformation backend. Use **one DAG per source + target + endpoint** with layer tasks (`assert_branch_enabled` → bronze → silver → gold → observability). Never `dbt build` (always `run` then `test`).
 - **Observability data lake:** MinIO `nexus-telemetry-{env}` is the system of record. Pipeline code uses `common/observability` only — never SigNoz, OpenMetadata, or Elementary directly.
 - Airflow owns task scheduling, retries, and remote stdout (`nexus-airflow-logs-{env}`); dlt owns load telemetry in warehouse `_dlt_*` tables; dbt owns local `target/` plus artifact copy to the lake.
-- Phase 1 requires full producers: lake summaries, OTLP when the collector is up, dbt artifact copy, Airflow remote logs. SigNoz, OpenMetadata, and Elementary are **readers** (Phase 2 product setup) with their own native DBs; ingest from the lake; do not replace their storage with MinIO.
+- Phase 1 requires full producers: lake summaries, OTLP when the collector is up, dbt artifact copy, Elementary HTML, Airflow remote logs. SigNoz and OpenMetadata are **readers** (product setup after the first Airflow E2E) with their own native DBs; ingest from the lake; do not replace their storage with MinIO. Pipeline code must not call those APIs.
 - Airflow DAG `run_id` = `NEXUS_RUN_ID` when orchestrated; `local-{timestamp}` for manual runs until then.
 - Do not build a custom logging service or use a ClickHouse table as the ops system of record.
 

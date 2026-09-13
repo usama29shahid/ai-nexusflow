@@ -129,3 +129,20 @@ def copy_dbt_artifacts(
         uploaded.append(f"s3://{bucket}/{key}")
 
     return uploaded
+
+
+def copy_file_to_lake(key: str, path: Path, *, content_type: str = "application/octet-stream") -> str:
+    """Upload one local file to the telemetry bucket. Returns s3:// URI."""
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    bucket = telemetry_bucket()
+    client = _s3_client()
+    extra: dict[str, str] = {"ContentType": content_type}
+    client.upload_file(str(path), bucket, key, ExtraArgs=extra)
+    return f"s3://{bucket}/{key}"
+
+
+def copy_elementary_report(branch: str, run_id: str, report_path: Path) -> str:
+    """Copy edr HTML to artifacts/elementary/{branch}/{run_id}/."""
+    key = f"artifacts/elementary/{branch}/{run_id}/elementary_report.html"
+    return copy_file_to_lake(key, report_path, content_type="text/html")

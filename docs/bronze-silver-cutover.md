@@ -42,6 +42,6 @@ Reason RBAC started with the rename: Bronze physical names and CH connection con
 - MinIO IAM policies
 - OM / SigNoz / Elementary **UI** product setup
 - Airflow source DAG, categories/brands endpoints
-- Full Terraform modules + GitHub Actions workflows (naming/RBAC already compatible)
+- Full Terraform modules + GitHub Actions workflows (additive: same names/RBAC; see [environments.md](environments.md) Phase 2 is additive)
 - `dlt_smoke` rename to new bronze pattern
 - Silver incremental / delta (FULL_LOAD only today)

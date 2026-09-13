@@ -148,7 +148,7 @@ SCD / soft-delete / hash-key enhancements are **not** part of the current contra
 
 When implemented:
 
-- Airflow: one DAG per source (e.g. `nexus_route_clickhouse`); tasks per endpoint; dbt selectors; final `observability_publish`
+- Airflow: one DAG per source + target + endpoint (e.g. `route_clickhouse_products`); layer tasks; final `observability`
 - DAG `run_id` = `NEXUS_RUN_ID` when orchestrated
 - Telemetry via `common/observability` → MinIO `nexus-telemetry-{env}` only
 
