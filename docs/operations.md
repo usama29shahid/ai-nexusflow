@@ -177,7 +177,7 @@ Plain `./scripts/setup.sh` / `uv sync` does **not** install `edr`. After enablin
 # Open: edr_target/elementary_report.html (WSL: open the path in Windows browser)
 ```
 
-`--profile-target` must match the dbt `--target` / `NEXUS_ENV` that wrote the tables (`elementary_dev` / `elementary_prd` in profiles). For shared or non-local viewing, add `--disable-samples` so failed-test sample rows (possible PII) are not embedded in the HTML.
+`--profile-target` must match the dbt `--target` / `NEXUS_ENV` that wrote the tables (`elementary_dev` / `elementary_prd` in profiles). For shared or non-local viewing, add `--disable-samples true` so failed-test sample rows (possible PII) are not embedded in the HTML.
 
 **First-time / empty index only** — build Elementary models, then run tests (or a normal project `dbt build`) so hooks populate history, then `edr report` as above:
 
@@ -213,5 +213,8 @@ Stop both readers   →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
 dlt smoke           →  ./scripts/start.sh smoke
+Airflow first time  →  orchestration/airflow/README.md (sshd + key + .env; once per machine)
+Airflow             →  ./scripts/start.sh airflow  (UI :8081; recreate if key/.env changed)
 Elementary report   →  uv sync --extra elementary; edr report --profile-target "$NEXUS_ENV" (see above)
+Public hostname     →  later: Caddy + subdomains — docs/edge-proxy.md (not in the Airflow slice)
 ```

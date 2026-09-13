@@ -31,6 +31,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+# Non-interactive SSH (Airflow host-exec) does not load ~/.bashrc; uv lives here.
+export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 
 # Profiles that map to execution branches (config/branches.yaml)
 BRANCH_PROFILES="clickhouse lakehouse"
@@ -186,9 +188,19 @@ ensure_vault() {
 }
 
 # Airflow is platform orchestration, not a branch.
+require_airflow_host_ssh_key() {
+  local key="${NEXUS_AIRFLOW_SSH_KEY:-${ROOT}/.nexusflow/airflow_ssh/id_ed25519}"
+  if [[ ! -f "${key}" ]]; then
+    echo "Missing Airflow host SSH key (${key})." >&2
+    echo "Run: ./scripts/airflow-host-ssh-setup.sh  and set NEXUS_HOST_USER / NEXUS_REPO_ROOT in .env" >&2
+    exit 1
+  fi
+}
+
 ensure_airflow() {
   echo "Starting Airflow (platform orchestration; independent of branches)..."
-  docker compose --profile airflow up -d
+  require_airflow_host_ssh_key
+  docker compose --profile airflow up -d --build
 }
 
 ensure_signoz() {
@@ -252,8 +264,18 @@ start_profiles() {
   # Always bring shared infra up first (explicit; not only via compose no-profile side effect).
   ensure_shared_infra
 
+  if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* ]]; then
+    require_airflow_host_ssh_key
+  fi
+
   if [[ -n "${COMPOSE_PROFILES}" ]]; then
-    docker compose up -d
+    # Rebuild when Airflow is in the profile set so docker/airflow/Dockerfile
+    # changes (openssh-client) are not skipped by a stale nexus-airflow image.
+    if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* ]]; then
+      docker compose up -d --build
+    else
+      docker compose up -d
+    fi
   fi
 }
 

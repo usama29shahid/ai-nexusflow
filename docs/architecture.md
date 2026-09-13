@@ -161,7 +161,7 @@ USER → PLANNER AGENT → RAG / Rules → ELT PLAN / SPECIFICATION
 | **Transformation** | **dlt_dbt_clickhouse**: dbt-clickhouse. **dlt_dbt_spark_iceberg**: dbt-spark, **Thrift default** for SQL models; PySpark only for complex `.py` models. |
 | **Branch / Platform** | ClickHouse warehouse → **dlt_dbt_clickhouse**. Open Iceberg lakehouse → **dlt_dbt_spark_iceberg**. |
 | **Validation** | Naming, layers, flattening, required tests, branch enabled, runtime available, schedule valid. Fail returns to planning/generation. |
-| **Workflow** | Airflow DAG from schedule plus org rules. **dlt_dbt_clickhouse**: **one DAG per source**, tasks per endpoint, dbt selectors. Not one DAG per URL. |
+| **Workflow** | Airflow DAG from schedule plus org rules. **One DAG per source + target + endpoint** (layer tasks: bronze → silver → gold → observability). |
 
 The two branches are **capabilities** (execution backends), not fixed pipelines. The generator considers target, scale, compute/storage, cost, org rules, and **enabled** branches.
 
@@ -222,7 +222,7 @@ Only enabled capabilities participate. Combinations can change over time (for ex
 
 ## Cross-cutting layers
 
-**Airflow (Phase 1)** orchestrates enabled capabilities. It is not another processing backend. **dlt_dbt_clickhouse**: **one DAG per source**, endpoint dlt tasks, then dbt with selectors. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). Pipeline telemetry goes to the observability data lake (`nexus-telemetry-{env}`). See [observability.md](observability.md).
+**Airflow (Phase 1)** orchestrates enabled capabilities. It is not another processing backend. **One DAG per source + target + endpoint** (e.g. `route_clickhouse_products`) with layer tasks. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). Pipeline telemetry goes to the observability data lake (`nexus-telemetry-{env}`). See [observability.md](observability.md).
 
 ```text
 Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
@@ -230,7 +230,7 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 
 **Observability producers (Phase 1)** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`.
 
-**Terraform, GitHub Actions, reader tools (Phase 2)** — env promotion (`dev`/`prd`), CI, and SigNoz / OpenMetadata / Elementary product setup so those tools ingest from the lake. Readers do not replace the lake write contract.
+**Terraform, GitHub Actions, reader tools (Phase 2)** — **additive** env promotion (`dev`/`prd`), CI, and SigNoz / OpenMetadata / Elementary product setup so those tools ingest from the lake. Terraform creates the names already in [environments.md](environments.md); Actions call `./scripts/start.sh` (lint/test/deploy), they do not become a second ELT runner. Readers do not replace the lake write contract.
 
 **LLM / RAG / Streamlit (Phase 3)** — agents that select and generate against enabled capabilities.
 

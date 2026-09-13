@@ -15,7 +15,12 @@ include:
   - path: ./docker/openmetadata/compose.yml
 
 x-airflow-common: &airflow-common
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.5-python3.12}
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  image: ${AIRFLOW_IMAGE_NAME:-nexus-airflow:2.10.5-python3.12}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   environment: &airflow-common-env
     # Must match Compose `user:` so init chown and runtime UID stay aligned.
     AIRFLOW_UID: ${AIRFLOW_UID:-1000}
@@ -27,7 +32,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY:?Set AIRFLOW__WEBSERVER__SECRET_KEY in .env — run ./scripts/setup.sh or see .env.example}
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
     AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: minio_logs
@@ -36,6 +41,11 @@ x-airflow-common: &airflow-common
     AIRFLOW_CONN_MINIO_LOGS: >-
       aws://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin123}@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=${AWS_REGION:-us-east-1}
     NEXUS_ENV: ${NEXUS_ENV:-dev}
+    NEXUS_HOST: ${NEXUS_HOST:-host.docker.internal}
+    NEXUS_HOST_USER: ${NEXUS_HOST_USER:-}
+    NEXUS_HOST_PORT: ${NEXUS_HOST_PORT:-22}
+    NEXUS_REPO_ROOT: ${NEXUS_REPO_ROOT:-}
+    NEXUS_AIRFLOW_SSH_KEY_PATH: /opt/airflow/.ssh/id_ed25519
     # Avoid writing __pycache__ into host-owned dags/plugins bind mounts.
     PYTHONDONTWRITEBYTECODE: "1"
     # Official image already includes amazon provider (MinIO S3 remote logs).
@@ -45,6 +55,7 @@ x-airflow-common: &airflow-common
     - ./orchestration/airflow/dags:/opt/airflow/dags
     - ./orchestration/airflow/plugins:/opt/airflow/plugins
     - airflow_logs:/opt/airflow/logs
+    - ${NEXUS_AIRFLOW_SSH_KEY:-./.nexusflow/airflow_ssh/id_ed25519}:/opt/airflow/.ssh/id_ed25519:ro
   user: "${AIRFLOW_UID:-1000}:0"
   depends_on:
     airflow-postgres:

@@ -234,7 +234,7 @@ CloudBeaver opens at `http://localhost:8978`. Its users, settings, and saved con
 curl --fail http://127.0.0.1:8081/health
 ```
 
-UI login uses `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` (example default `admin` / `change-me`, local WSL only — change on shared hosts). `AIRFLOW__CORE__FERNET_KEY` and `AIRFLOW__WEBSERVER__SECRET_KEY` are required; `./scripts/setup.sh` generates them when blank. Trigger manual DAG `nexus_airflow_smoke` to verify the scheduler and MinIO remote task logs (`nexus-airflow-logs-dev`). Details: [orchestration/airflow/README.md](../orchestration/airflow/README.md).
+UI login uses `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` (example default `admin` / `change-me`, local WSL only — change on a VPS). `AIRFLOW__CORE__FERNET_KEY` and `AIRFLOW__WEBSERVER__SECRET_KEY` are required; `./scripts/setup.sh` generates them when blank. **First time on WSL or a VPS:** follow the checklist in [orchestration/airflow/README.md](../orchestration/airflow/README.md) (`.env` host user/path, sshd, key, `uv sync --extra elementary`, then `./scripts/start.sh airflow`). Trigger `nexus_airflow_smoke` to verify the scheduler; trigger `route_clickhouse_products` for the first ELT job.
 
 ---
 

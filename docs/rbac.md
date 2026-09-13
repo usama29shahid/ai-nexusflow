@@ -85,7 +85,11 @@ Keep existing `clickhouse` and `minio` secrets for Compose/bootstrap as needed.
 
 ## Terraform / GitHub Actions
 
-Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`; GHA ingest job injects loader secrets; transform job injects transformer secrets. Terraform (later) can create users/GRANTs and write Vault siblings.
+Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`. Phase 2 is **additive** — see [environments.md](environments.md) (Phase 2 is additive).
+
+- **Airflow** (or a host `./scripts/start.sh` command) runs ingest and transform. The loader process already uses `CLICKHOUSE_LOADER_*`; dbt already uses `CLICKHOUSE_TRANSFORMER_*`.
+- **GitHub Actions** lints, tests, and optionally deploys the VPS. It does **not** become a second ingest or transform runner. If a workflow injects secrets, it injects those same env vars into `start.sh`.
+- **Terraform** (later) can create the same ClickHouse users/GRANTs and write the existing Vault sibling paths. It does not invent new role names that would force dlt/dbt credential rewrites.
 
 ---
 

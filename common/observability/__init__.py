@@ -6,6 +6,8 @@ from common.observability.config import (
 )
 from common.observability.lake import (
     copy_dbt_artifacts,
+    copy_elementary_report,
+    copy_file_to_lake,
     publish_pipeline_event,
     publish_run_summary,
     write_json_object,
@@ -14,6 +16,8 @@ from common.observability.otel import emit_event, get_tracer, record_dlt_load
 
 __all__ = [
     "copy_dbt_artifacts",
+    "copy_elementary_report",
+    "copy_file_to_lake",
     "emit_event",
     "get_tracer",
     "otlp_endpoint",

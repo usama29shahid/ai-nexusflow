@@ -35,6 +35,7 @@ nexus-telemetry-{env}/
 ├── artifacts/dbt/
 │   ├── dlt_dbt_clickhouse/{run_id}/ # manifest.json, run_results.json, catalog.json
 │   └── dlt_dbt_spark_iceberg/{run_id}/
+├── artifacts/elementary/{branch}/{run_id}/  # elementary_report.html
 └── summaries/runs/{run_id}.json     # per-run rollup (manual or Airflow)
 ```
 
@@ -114,15 +115,19 @@ Pass the **same** `NEXUS_RUN_ID` into dlt (Bronze column), dbt `var('run_id')`, 
 
 ## Airflow DAG grain (Phase 1)
 
-**One DAG per source** per enabled branch (e.g. `nexus_route_clickhouse`, `nexus_route_lakehouse`):
+**One DAG per source + target + endpoint** (e.g. `route_clickhouse_products`). Each file appears in the Airflow UI. Only **enabled** capabilities in [config/branches.yaml](../config/branches.yaml) may run (`assert_branch_enabled`).
 
-1. Task(s) per endpoint dlt pipeline (archive + Bronze).
-2. One `dbt run` / `dbt test` with **selectors** for downstream models.
-3. `observability_publish` — artifact upload to lake, run summary, optional Elementary `edr report` when implemented.
+Layer tasks (never `dbt build`):
 
-Not one DAG per REST URL. Domain marts: dbt selector only. Only **enabled** branches in [config/branches.yaml](../config/branches.yaml) get DAGs.
+1. `assert_branch_enabled`
+2. `bronze` — that endpoint’s dlt pipeline (archive + Bronze, extract once)
+3. `silver` — `dbt run` then `dbt test` for that endpoint’s staging tags
+4. `gold` — `dbt run` then `dbt test` for that endpoint’s gold tags
+5. `mart` — only when mart models exist
+6. `observability` — on success: `dbt docs generate`, Elementary `edr report`, lake artifact copy, `airflow.dag.completed`
+7. `observability_failed` — `trigger_rule=one_failed`: lake summary `airflow.dag.failed` (no docs/edr). Runs if any layer or the success closer fails.
 
-Compose profile: `airflow`. Smoke DAG: `nexus_airflow_smoke` in [orchestration/airflow/dags/](../orchestration/airflow/dags/). Host dlt/dbt run via task commands — no `.venv` bind-mount in Airflow containers.
+Compose profile: `airflow`. Smoke DAG: `nexus_airflow_smoke`. Host dlt/dbt via SSH to the Docker host — no `.venv` bind-mount in Airflow containers. See [orchestration/airflow/README.md](../orchestration/airflow/README.md).
 
 The future LLM workflow agent should emit this DAG shape.
 
@@ -168,9 +173,9 @@ Milestone 1 implements the lake + instrumentation for the ClickHouse branch; lak
 
 ---
 
-## Reader tools (Phase 2)
+## Reader tools (after first Airflow E2E)
 
-SigNoz, OpenMetadata, and Elementary Compose profiles may exist locally. **Product setup** (each tool’s native config, lake→index ingest, dashboards) is Phase 2. Phase 1 still requires full lake writes via `common/observability` whether or not those UIs are running.
+SigNoz and OpenMetadata Compose profiles exist locally. **Product setup** (native config, lake→index ingest, dashboards) comes **after** the first endpoint DAG (`route_clickhouse_products`) so you can inspect a full producer run. Terraform / GitHub Actions / `prd` stay Phase 2. Phase 1 still requires full lake writes via `common/observability` whether or not those UIs are running. Pipeline code must not call those APIs.
 
 ## Phase 3 UI and agents (future)
 

@@ -6,8 +6,13 @@ import os
 import sys
 from pathlib import Path
 
-from common.observability.lake import copy_dbt_artifacts, publish_pipeline_event, publish_run_summary
-from common.observability.otel import record_dlt_load
+from common.observability.lake import (
+    copy_dbt_artifacts,
+    copy_elementary_report,
+    publish_pipeline_event,
+    publish_run_summary,
+)
+from common.observability.otel import get_tracer, record_dlt_load
 
 
 _BRANCH_BY_PROJECT = {
@@ -146,6 +151,85 @@ def after_dbt_cli(argv: list[str] | None = None, *, exit_code: int = 0) -> None:
         print(f"Observability lake: {summary_uri}")
     for uri in uploaded:
         print(f"Observability lake: {uri}")
+
+
+def publish_orchestrated_run(
+    project_dir: Path,
+    *,
+    run_id: str | None = None,
+    dag_id: str | None = None,
+    status: str = "ok",
+    elementary_report: Path | None = None,
+) -> tuple[list[str], str | None]:
+    """Copy dbt + Elementary artifacts and write the final Airflow run summary."""
+    branch = branch_for_project_dir(project_dir.resolve())
+    if branch is None:
+        return [], None
+
+    rid = run_id or os.environ.get("NEXUS_RUN_ID", "local-unknown")
+    dag = dag_id or os.environ.get("NEXUS_DAG_ID")
+    uploaded, _ = publish_dbt_run(project_dir, status=status, run_id=rid)
+
+    report = elementary_report
+    if report is None:
+        report = Path("edr_target/elementary_report.html")
+    if report.is_file():
+        uploaded.append(copy_elementary_report(branch, rid, report))
+
+    extra: dict[str, object] = {
+        "phase": "airflow",
+        "phases": (
+            ["dlt", "dbt", "docs", "elementary"]
+            if status == "ok"
+            else ["airflow"]
+        ),
+        "artifact_count": len(uploaded),
+        "artifacts": uploaded,
+    }
+    if dag:
+        extra["nexus.dag_id"] = dag
+
+    event_type = "airflow.dag.completed" if status == "ok" else "airflow.dag.failed"
+    publish_pipeline_event(
+        rid,
+        branch=branch,
+        component="airflow",
+        event_type=event_type,
+        attributes={"status": status, "nexus.dag_id": dag, "artifact_count": len(uploaded)},
+    )
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        tracer = get_tracer("nexusflow.airflow")
+        attrs = {
+            "nexus.run_id": rid,
+            "nexus.branch": branch,
+            "nexus.component": "airflow",
+            "status": status,
+        }
+        if dag:
+            attrs["nexus.dag_id"] = dag
+        with tracer.start_as_current_span(event_type, attributes=attrs) as span:
+            span.set_status(
+                Status(StatusCode.OK) if status == "ok" else Status(StatusCode.ERROR, status)
+            )
+        from common.observability import otel as otel_mod
+
+        otel_mod._force_flush()
+    except Exception as exc:  # noqa: BLE001 — lake write is the required path
+        print(
+            f"WARNING: OTLP emit failed (collector down or misconfigured): {exc}",
+            file=sys.stderr,
+        )
+
+    summary_uri = publish_run_summary(
+        rid,
+        branch=branch,
+        component="airflow",
+        status=status,
+        extra=extra,
+    )
+    return uploaded, summary_uri
 
 
 if __name__ == "__main__":

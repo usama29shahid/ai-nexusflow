@@ -155,7 +155,7 @@ Always run `dbt docs generate` after run/test (OpenMetadata-compatible artifacts
 ### Packages (day one, warehouse)
 
 - `dbt-labs/dbt_utils` (required)
-- `elementary-data/elementary` (`>=0.25.0,<0.26.0`, same minor as host `edr`) → `+schema: elementary` → `elementary_{env}` (package registers `on-run-end` hooks). Local UI: after dbt, `uv sync --extra elementary` then `edr report --profile-target "$NEXUS_ENV"` (optional `--disable-samples` for shared HTML); see [operations.md](operations.md)
+- `elementary-data/elementary` (`>=0.25.0,<0.26.0`, same minor as host `edr`) → `+schema: elementary` → `elementary_{env}` (package registers `on-run-end` hooks). Local UI: after dbt, `uv sync --extra elementary` then `edr report --profile-target "$NEXUS_ENV"` (optional `--disable-samples true` for shared HTML); see [operations.md](operations.md)
 - `calogica/dbt_expectations` (use when native tests insufficient)
 
 Gold models that participate in Elementary observability use tags including `elementary` and `meta.elementary.timestamp_column` (typically `inserted_at`).

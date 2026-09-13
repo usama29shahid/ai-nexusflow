@@ -247,6 +247,7 @@ unit_tests:
     overrides:
       vars:
         lookback_days: 36500
+        run_id: r1
     given:
       - input: source("route_raw", "products")
         rows:
@@ -295,6 +296,7 @@ unit_tests:
     overrides:
       vars:
         lookback_days: 36500
+        run_id: r1
     given:
       - input: source("route_raw", "products")
         rows:
