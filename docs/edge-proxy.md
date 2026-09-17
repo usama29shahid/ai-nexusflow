@@ -1,6 +1,6 @@
 # Edge proxy (Caddy + subdomains)
 
-**Status: designed, not implemented.** Do not mix this into the Airflow host-exec PR. Implement as a **separate** slice after `route_clickhouse_products` is closed. Test on WSL first (`*.localhost`), then the VPS.
+**Status: designed, not implemented.** Do not mix this into the Airflow ELT-job-image PR. Implement as a **separate** slice after `route_clickhouse_products` is closed on the job image. Test on WSL first (`*.localhost`), then the VPS.
 
 Public hostname for the capstone is an intentional goal. That does **not** mean raw Compose ports on the VPS IP.
 
@@ -12,7 +12,7 @@ Public hostname for the capstone is an intentional goal. That does **not** mean 
 - Compose profile **`proxy`** (platform, not a data branch). Prefer Docker DNS to the service (`airflow-webserver:8080`), or `127.0.0.1:<port>` if Caddy is on the host.
 - Keep current localhost binds (Airflow `:8081`, Vault, OTel, CloudBeaver, SigNoz, OM). When the proxy lands, bind ClickHouse / MinIO / Trino host ports to `127.0.0.1` as well. Firewall on VPS: **22, 80, 443** only.
 - Airflow does **not** need a rewrite. When Caddy is up, set `AIRFLOW__WEBSERVER__BASE_URL` (and ProxyFix / `COOKIE_SECURE` on HTTPS). Subdomain → `https://airflow.yourdomain.com` (no `/airflow` path).
-- Host-exec (container SSH → host `./scripts/start.sh`) stays. Restricted `authorized_keys` is already in place. Public Airflow still requires a strong unique admin password.
+- Host-exec (legacy SSH) is retired for DAGs; ELT runs in `nexus-elt` job containers from the **scheduler** only (`docker.sock` is not mounted on the webserver). Public Airflow still requires a strong unique admin password.
 
 ```text
 Local:  http://airflow.localhost
@@ -41,7 +41,7 @@ OTel `:4317`/`:4318`, ClickHouse native `:9000`, Spark Thrift, MinIO **S3 API** 
 
 ## Secrets / VPS
 
-Do not copy WSL `.env` or `.nexusflow/` keys. Generate Vault, Airflow Fernet, and the host-exec SSH key **on that machine**. `.env.example` stays placeholders. `NEXUS_SECRETS_BACKEND=vault` on the VPS.
+Do not copy WSL `.env` or `.nexusflow/` keys. Generate Vault and Airflow Fernet **on that machine**. Set `NEXUS_REPO_ROOT` to that clone path. `.env.example` stays placeholders. `NEXUS_SECRETS_BACKEND=vault` on the VPS.
 
 ## Sequence
 

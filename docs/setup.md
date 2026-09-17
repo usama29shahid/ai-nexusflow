@@ -2,11 +2,13 @@
 
 Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker Engine + uv.
 
-> **Infrastructure is containerized. Python stays on the host.**
+> **Infrastructure is containerized. Python stays on the host for Cursor.**
+
+Airflow is Dockerized; DAG tasks run an ephemeral **`nexus-elt`** job container (`docker run` on the Compose network) with the same scripts as a manual `uv` run. Do **not** install dlt/dbt into the Airflow image. Locked decision: [architecture.md](architecture.md) (Airflow execution runtime), [orchestration/airflow/README.md](../orchestration/airflow/README.md).
 
 Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running. ClickHouse RBAC (loader / transformer / reader / admin) is **implemented** — bootstrap via `./scripts/clickhouse-rbac-bootstrap.sh`; MinIO IAM stays deferred — see [rbac.md](rbac.md).
 
-Docker Compose runs **MinIO and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`.
+Docker Compose runs **MinIO and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`. On a **16 GB / 4-core** VPS, keep profiles strict (ClickHouse + Airflow day-to-day); do not start every stack at once.
 
 ```text
 git clone

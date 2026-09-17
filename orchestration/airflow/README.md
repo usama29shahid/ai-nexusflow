@@ -2,55 +2,43 @@
 
 On-demand orchestration for enabled capabilities. Not a data branch.
 
-Airflow runs in Docker (same Compose profile on WSL and VPS). dlt/dbt/`uv` stay on the **host**. Endpoint DAGs SSH to the Docker host and run `./scripts/start.sh` — they do not bind-mount `.venv`.
+Airflow runs in Docker (same Compose profile on WSL and VPS). Endpoint DAGs start an ephemeral **`nexus-elt`** container (`docker run` on the Compose network) that runs the same scripts as a manual host `uv` run. They do not bind-mount the developer `.venv` and do not SSH to the host.
+
+## Runtime (locked)
+
+| Now | Never |
+| --- | --- |
+| Thin Airflow + ephemeral ELT job image ([docker/elt/](../../docker/elt/)) | Install dlt/dbt into the Airflow image; standing dlt/dbt services; SSH host-exec for new DAGs |
+
+Helper: [`dags/nexus_elt_exec.py`](dags/nexus_elt_exec.py). Copy `route_clickhouse_products` for the next endpoint. One UI lists every branch’s DAGs. Contract: [docs/architecture.md](../../docs/architecture.md).
 
 ## First time on this machine (WSL or VPS)
 
 Do these once per machine (clone path / Linux user). Same list on the first VPS deploy.
 
-1. **`.env` host-exec vars** — Compose does **not** expand `$(id -un)`. Use the real login name and the absolute clone path:
+1. **`.env` ELT vars** — Compose does **not** expand `$(pwd)`. Use the absolute clone path:
 
    ```bash
-   NEXUS_HOST_USER=india
    NEXUS_REPO_ROOT=/home/india/projects/ai-nexusflow
    ```
 
-   On a VPS, change both to that server’s user and clone path. Optional: `NEXUS_HOST=host.docker.internal`, `NEXUS_HOST_PORT=22`.
+   Optional: `DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)`, `NEXUS_ELT_IMAGE=nexus-elt:latest`, `NEXUS_COMPOSE_NETWORK=ai-nexusflow_default`.
 
-2. **sshd** — tasks connect to port 22. A VPS usually already has this. WSL often does not:
+2. **Docker socket** — only **`airflow-scheduler`** mounts `/var/run/docker.sock` (LocalExecutor runs ELT tasks there). The webserver does **not** get the socket, so a public `airflow.` UI later has a smaller blast radius. Your host user must still be able to run `docker` (Docker Desktop WSL or `docker` group on a VPS). Set `DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)` if tasks cannot talk to the daemon.
 
-   ```bash
-   sudo apt-get install -y openssh-server
-   sudo service ssh start
-   ```
+3. **Elementary CLI in the job image** — included via `uv sync --extra elementary` inside `docker/elt/Dockerfile`. No host `uv sync --extra elementary` required for Airflow tasks (still useful for local `edr report`).
 
-   After a WSL reboot, start sshd again if it is not enabled as a service (`sudo service ssh start`). Do not re-run the key script for that.
-
-3. **SSH key** (once per machine):
-
-   ```bash
-   ./scripts/airflow-host-ssh-setup.sh
-   ```
-
-   Creates `.nexusflow/airflow_ssh/id_ed25519` and writes a **restricted** `authorized_keys` line: `command=` [`scripts/airflow-host-ssh-command.sh`](../../scripts/airflow-host-ssh-command.sh) (only this repo’s `./scripts/start.sh` allowlist) plus `from=` private Docker/RFC1918 ranges so a leaked key is not an internet login. Re-run after pulling this change so an older unrestricted line is replaced. Re-run also if the key, user, or machine changes. The key path must be a **file**, not a directory (if Compose started before the key existed, remove the path, run this script, then recreate Airflow). If SSH fails after restrict, set `NEXUS_AIRFLOW_SSH_FROM` to the Docker source CIDR and re-run the script.
-
-4. **Elementary CLI** (once, or after `uv lock` refresh) — not a DAG task; the `observability` task runs `edr report`:
-
-   ```bash
-   uv sync --extra elementary
-   ```
-
-`./scripts/start.sh` prepends `$HOME/.local/bin` so `uv` is found over SSH (login PATH is not loaded).
-
-5. **Start Airflow when you want the UI** (not one-time):
+4. **Start Airflow when you want the UI** (not one-time):
 
    ```bash
    ./scripts/start.sh airflow
    ```
 
-   If Airflow was already running **before** the key or `.env` host-exec vars existed, recreate it with the same command so containers pick up the key mount, `openssh-client` image, and env.
+   Builds `nexus-elt` and `nexus-airflow`, writes `.nexusflow/airflow_elt.env`, and starts the profile. If Airflow was already running under the old SSH host-exec setup, recreate with the same command so containers pick up `docker.sock`, the elt env mount, and image. After Vault password rotation, re-run this command so the host rewrites `airflow_elt.env` (the scheduler mounts only that file, not all of `.nexusflow`).
 
 Fernet key, web secret, and admin password must already be in `.env` (`./scripts/setup.sh` once on a new clone). Change `AIRFLOW_ADMIN_PASSWORD` on a VPS.
+
+Compose project name follows the repo directory (default network `ai-nexusflow_default`). `start.sh` can detect the network; override with `NEXUS_COMPOSE_NETWORK` only if you renamed the project.
 
 ## Start / stop
 
@@ -59,7 +47,7 @@ Fernet key, web secret, and admin password must already be in `.env` (`./scripts
 docker compose --profile airflow stop
 ```
 
-`start.sh airflow` builds `docker/airflow/Dockerfile` (official image + `openssh-client`) and exits if the host SSH key file is missing.
+`start.sh airflow` builds `docker/airflow/Dockerfile` (official image + docker CLI) and `docker/elt/Dockerfile`, and exits if `NEXUS_REPO_ROOT` or the Docker socket is missing. Do not start with bare `docker compose --profile airflow up` — Compose bind-mounts `.nexusflow/airflow_elt.env`, which only `start.sh` creates.
 
 | | |
 | --- | --- |
@@ -69,6 +57,7 @@ docker compose --profile airflow stop
 | Remote logs | MinIO bucket `nexus-airflow-logs-{NEXUS_ENV}` |
 | DAGs | `orchestration/airflow/dags/` (host-owned) |
 | Plugins | `orchestration/airflow/plugins/` |
+| ELT image | `nexus-elt:latest` |
 
 `airflow-init` only adjusts ownership of the **logs** named volume. Set `AIRFLOW_UID` to your host UID (`id -u`) in `.env`.
 
@@ -76,10 +65,10 @@ docker compose --profile airflow stop
 
 | DAG | Purpose |
 | --- | --- |
-| `nexus_airflow_smoke` | In-container smoke (no host `uv`) |
+| `nexus_airflow_smoke` | In-container smoke (no ELT image) |
 | `route_clickhouse_products` | Route `/products` → Bronze → silver → gold → observability |
 
-Grain: **one DAG per source + target + endpoint**. Tasks: `assert_branch_enabled` → `bronze` → `silver` (`dbt run` then `dbt test`) → `gold` (same) → `observability`. `observability_failed` runs on `one_failed` and writes the lake closer with `airflow.dag.failed`. Never `dbt build`. `NEXUS_RUN_ID` is the Airflow `run_id`.
+Grain: **one DAG per source + target + endpoint**. Tasks: `assert_branch_enabled` → `bronze` → `silver` (`dbt run` then `dbt test`) → `gold` (same) → `observability`. `observability_failed` runs on `one_failed` and writes the lake closer with `airflow.dag.failed`. Never `dbt build`. `NEXUS_RUN_ID` is the Airflow `run_id` (keep it free of `'` — `nexus_elt_exec` passes it via shell-single-quoted `-e`).
 
 Unpause the DAG, trigger it, confirm the three Bronze tables share that `run_id` and lake objects exist under `nexus-telemetry-{env}`.
 

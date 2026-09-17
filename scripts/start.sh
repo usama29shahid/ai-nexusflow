@@ -31,7 +31,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
-# Non-interactive SSH (Airflow host-exec) does not load ~/.bashrc; uv lives here.
+# Host uv may live outside a login shell PATH (CI / non-interactive).
 export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 
 # Profiles that map to execution branches (config/branches.yaml)
@@ -188,18 +188,51 @@ ensure_vault() {
 }
 
 # Airflow is platform orchestration, not a branch.
-require_airflow_host_ssh_key() {
-  local key="${NEXUS_AIRFLOW_SSH_KEY:-${ROOT}/.nexusflow/airflow_ssh/id_ed25519}"
-  if [[ ! -f "${key}" ]]; then
-    echo "Missing Airflow host SSH key (${key})." >&2
-    echo "Run: ./scripts/airflow-host-ssh-setup.sh  and set NEXUS_HOST_USER / NEXUS_REPO_ROOT in .env" >&2
+require_airflow_elt_ready() {
+  local repo="${NEXUS_REPO_ROOT:-}"
+  if [[ -z "${repo}" ]]; then
+    echo "Set NEXUS_REPO_ROOT in .env to the absolute clone path (host path for docker run -v)." >&2
+    echo "Example: NEXUS_REPO_ROOT=${ROOT}" >&2
     exit 1
   fi
+  if [[ ! -d "${repo}" ]]; then
+    echo "NEXUS_REPO_ROOT does not exist: ${repo}" >&2
+    exit 1
+  fi
+  chmod +x scripts/airflow-write-elt-env.sh
+  ./scripts/airflow-write-elt-env.sh
+  local sock="${DOCKER_SOCK:-/var/run/docker.sock}"
+  if [[ ! -S "${sock}" ]]; then
+    echo "Docker socket not found at ${sock}. Set DOCKER_SOCK if your daemon uses another path." >&2
+    exit 1
+  fi
+  if [[ -z "${DOCKER_GID:-}" ]]; then
+    export DOCKER_GID
+    DOCKER_GID="$(stat -c '%g' "${sock}" 2>/dev/null || echo 0)"
+  fi
+  # Match the Compose project network (directory name by default: ai-nexusflow_default).
+  if [[ -z "${NEXUS_COMPOSE_NETWORK:-}" ]]; then
+    local project
+    project="$(docker compose config --format json 2>/dev/null \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name") or "")' 2>/dev/null || true)"
+    if [[ -z "${project}" ]]; then
+      project="$(basename "${ROOT}")"
+    fi
+    export NEXUS_COMPOSE_NETWORK="${project}_default"
+  fi
+  export NEXUS_ELT_IMAGE="${NEXUS_ELT_IMAGE:-nexus-elt:latest}"
+}
+
+build_nexus_elt_image() {
+  local image="${NEXUS_ELT_IMAGE:-nexus-elt:latest}"
+  echo "Building ELT job image (${image})..."
+  docker build -f docker/elt/Dockerfile -t "${image}" .
 }
 
 ensure_airflow() {
-  echo "Starting Airflow (platform orchestration; independent of branches)..."
-  require_airflow_host_ssh_key
+  echo "Starting Airflow (platform orchestration; ELT via nexus-elt job image)..."
+  require_airflow_elt_ready
+  build_nexus_elt_image
   docker compose --profile airflow up -d --build
 }
 
@@ -265,12 +298,13 @@ start_profiles() {
   ensure_shared_infra
 
   if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* ]]; then
-    require_airflow_host_ssh_key
+    require_airflow_elt_ready
+    build_nexus_elt_image
   fi
 
   if [[ -n "${COMPOSE_PROFILES}" ]]; then
     # Rebuild when Airflow is in the profile set so docker/airflow/Dockerfile
-    # changes (openssh-client) are not skipped by a stale nexus-airflow image.
+    # changes (docker CLI) are not skipped by a stale nexus-airflow image.
     if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* ]]; then
       docker compose up -d --build
     else

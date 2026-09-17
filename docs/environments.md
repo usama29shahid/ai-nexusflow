@@ -83,6 +83,6 @@ Rules:
 - **Same names.** Terraform creates the databases and buckets already listed above. It does not introduce `prod` suffixes or `raw_*_prd` table names.
 - **Same secrets contract.** Apps read `os.environ` / dbt `env_var`. They never call Vault or the GitHub API. If CI injects credentials, they are still `CLICKHOUSE_LOADER_*` / `CLICKHOUSE_TRANSFORMER_*` into `start.sh`.
 
-VPS deploy uses the same Compose + host `uv` model as WSL ([setup.md](setup.md), [orchestration/airflow/README.md](../orchestration/airflow/README.md)). Set `NEXUS_HOST_USER` / `NEXUS_REPO_ROOT` to that machine’s user and clone path.
+VPS deploy uses the same Compose + host `uv` model as WSL ([setup.md](setup.md), [orchestration/airflow/README.md](../orchestration/airflow/README.md)). Set `NEXUS_REPO_ROOT` to that machine’s absolute clone path.
 
-Public UIs on a hostname (capstone): **Caddy + subdomains**, designed in [edge-proxy.md](edge-proxy.md). Not implemented yet. Do not add a Caddyfile to the Airflow host-exec commit.
+Public UIs on a hostname (capstone): **Caddy + subdomains**, designed in [edge-proxy.md](edge-proxy.md). Not implemented yet. Do not add a Caddyfile to the Airflow ELT-job-image commit.

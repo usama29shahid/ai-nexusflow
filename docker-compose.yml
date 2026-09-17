@@ -8,7 +8,9 @@
 # Always (no profile): MinIO, minio-init, otel-collector
 # Optional readers: signoz, openmetadata (add to COMPOSE_PROFILES or ./scripts/start.sh observability)
 # Airflow: add airflow to COMPOSE_PROFILES or: docker compose --profile airflow up -d
-# Python/dlt/dbt run on the host — not in this file.
+# Cursor Python/dlt/dbt stay on the host. Orchestrated ELT uses image nexus-elt (docker/elt).
+# Project name defaults to the directory (ai-nexusflow). Do not set top-level `name:` —
+# fixed container_name values conflict if the project is renamed while stacks are up.
 
 include:
   - path: ./docker/signoz/compose.yml
@@ -41,11 +43,11 @@ x-airflow-common: &airflow-common
     AIRFLOW_CONN_MINIO_LOGS: >-
       aws://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin123}@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=${AWS_REGION:-us-east-1}
     NEXUS_ENV: ${NEXUS_ENV:-dev}
-    NEXUS_HOST: ${NEXUS_HOST:-host.docker.internal}
-    NEXUS_HOST_USER: ${NEXUS_HOST_USER:-}
-    NEXUS_HOST_PORT: ${NEXUS_HOST_PORT:-22}
-    NEXUS_REPO_ROOT: ${NEXUS_REPO_ROOT:-}
-    NEXUS_AIRFLOW_SSH_KEY_PATH: /opt/airflow/.ssh/id_ed25519
+    # Host clone path for docker run -v (Docker daemon resolves host paths).
+    NEXUS_REPO_ROOT: ${NEXUS_REPO_ROOT:?Set NEXUS_REPO_ROOT in .env to the absolute clone path}
+    NEXUS_ELT_IMAGE: ${NEXUS_ELT_IMAGE:-nexus-elt:latest}
+    NEXUS_COMPOSE_NETWORK: ${NEXUS_COMPOSE_NETWORK:-ai-nexusflow_default}
+    NEXUS_AIRFLOW_ELT_ENV_PATH: /opt/airflow/nexus_elt.env
     # Avoid writing __pycache__ into host-owned dags/plugins bind mounts.
     PYTHONDONTWRITEBYTECODE: "1"
     # Official image already includes amazon provider (MinIO S3 remote logs).
@@ -55,7 +57,8 @@ x-airflow-common: &airflow-common
     - ./orchestration/airflow/dags:/opt/airflow/dags
     - ./orchestration/airflow/plugins:/opt/airflow/plugins
     - airflow_logs:/opt/airflow/logs
-    - ${NEXUS_AIRFLOW_SSH_KEY:-./.nexusflow/airflow_ssh/id_ed25519}:/opt/airflow/.ssh/id_ed25519:ro
+    # docker.sock + elt env file: only on airflow-scheduler (LocalExecutor runs tasks there).
+    # Do not mount the socket on the webserver — needed when Airflow UI is public later.
   user: "${AIRFLOW_UID:-1000}:0"
   depends_on:
     airflow-postgres:
@@ -531,6 +534,16 @@ services:
     restart: unless-stopped
     profiles: [airflow]
     command: scheduler
+    # LocalExecutor runs BashOperators here — only this service needs Docker + elt env.
+    # Mount only airflow_elt.env (not all of .nexusflow — vault-init/AppRole stay off this container).
+    volumes:
+      - ./orchestration/airflow/dags:/opt/airflow/dags
+      - ./orchestration/airflow/plugins:/opt/airflow/plugins
+      - airflow_logs:/opt/airflow/logs
+      - ${NEXUS_AIRFLOW_ELT_ENV:-./.nexusflow/airflow_elt.env}:/opt/airflow/nexus_elt.env:ro
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    group_add:
+      - ${DOCKER_GID:-0}
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
       interval: 30s
