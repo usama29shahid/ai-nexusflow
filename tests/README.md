@@ -16,5 +16,6 @@ Shared `common/` SDK:
 uv run python tests/unit/common/test_observability_publish.py
 uv run python tests/unit/common/test_observability_otel.py
 uv run python tests/unit/common/test_branches.py
-uv run python tests/unit/orchestration/test_nexus_host_exec.py
+uv run python tests/unit/orchestration/test_nexus_elt_exec.py
+uv run python tests/unit/orchestration/test_airflow_write_elt_env.py
 ```

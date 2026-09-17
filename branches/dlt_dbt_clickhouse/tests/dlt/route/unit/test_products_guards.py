@@ -249,6 +249,12 @@ class ResolveRunIdTest(unittest.TestCase):
         args = self.products._parse_args([])
         self.assertIsNone(args.run_id)
 
+    def test_main_uses_shared_load_runtime_env(self) -> None:
+        src = Path(self.products.__file__).read_text(encoding="utf-8")
+        self.assertIn("from common.runtime_env import load_runtime_env", src)
+        self.assertIn("load_runtime_env(REPO_ROOT)", src)
+        self.assertNotIn("def _load_runtime_env", src)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

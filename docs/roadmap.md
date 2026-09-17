@@ -44,9 +44,10 @@ Implementation order within Phase 1: telemetry bucket + Collector + SDK first; *
 Source → DLT → MinIO archive (JSONL) + ClickHouse raw (Bronze, append)
       → dbt stg_* / Gold (ClickHouse)
       → telemetry lake (every run)
-Airflow → one DAG per source + target + endpoint (host uv via SSH)
+Airflow → one DAG per source + target + endpoint (nexus-elt job image via docker run)
 ```
 
+- Ephemeral **`nexus-elt`** job image is the **current** worker bridge (not SSH, not a fat Airflow image). Decision: [architecture.md](architecture.md). Copy `route_clickhouse_products` for the next endpoint.
 - One stable REST source: **Route API** (`route`) — catalog-first (`products`, `categories`, `brands`); see [route-ingestion.md](route-ingestion.md)
 - DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-dev`) + ClickHouse `raw_{source}_dev`
 - **Done:** Route `products` full-refresh dlt → archive + Bronze + lake events/OTLP (reference pipeline in [dlt-extraction.md](dlt-extraction.md))
@@ -143,7 +144,8 @@ dbt-clickhouse  1.10.2
 - [x] dbt silver / Gold + tests for Route products — Phase 1 (see [gold-products-cutover.md](gold-products-cutover.md))
 - [ ] Catalog follow-on dlt endpoints (`categories`, `brands`) — Phase 1
 - [ ] MinIO archive + Iceberg / Polaris / dbt-spark / Trino (dlt_dbt_spark_iceberg) — Phase 1
-- [x] Airflow endpoint DAG `route_clickhouse_products` (profile + smoke + host-exec) — Phase 1
+- [x] Airflow endpoint DAG `route_clickhouse_products` (profile + smoke + ELT job image) — Phase 1
+- [x] Airflow ELT job image (`nexus-elt` via `docker run`) — Phase 1 — [architecture.md](architecture.md), [docker/elt/README.md](../docker/elt/README.md)
 - [x] Engine RBAC (ClickHouse loader/transformer/reader/admin) — **implemented (dev)** — [rbac.md](rbac.md), [bronze-silver-cutover.md](bronze-silver-cutover.md)
 - [x] Products Bronze → `bronze_{env}` + silver peer tables — [bronze-silver-cutover.md](bronze-silver-cutover.md), [dbt-modeling.md](dbt-modeling.md)
 - [ ] Terraform dev/prod — Phase 2

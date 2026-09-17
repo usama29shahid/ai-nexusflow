@@ -9,6 +9,6 @@ One DAG per source + target + endpoint. Group folders by source+target. Filename
 | `nexus_airflow_smoke` | `nexus_airflow_smoke.py` | Compose profile smoke (in-container) |
 | `route_clickhouse_products` | `route_clickhouse/products.py` | Route products warehouse ELT |
 
-`nexus_host_exec.py` is a helper, not a DAG.
+`nexus_elt_exec.py` is a helper (not a DAG): wraps `docker run` of `nexus-elt`. Copy that pattern for the next endpoint.
 
 Do not add stub DAGs for endpoints that have no dlt script yet.

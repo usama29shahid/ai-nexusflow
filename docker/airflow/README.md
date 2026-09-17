@@ -1,8 +1,8 @@
 # Airflow image
 
-Thin wrapper around `apache/airflow:2.10.5-python3.12` that adds `openssh-client`.
+Thin wrapper around `apache/airflow:2.10.5-python3.12` that adds the **docker CLI** so LocalExecutor tasks can `docker run` the ELT job image.
 
-dlt/dbt/`uv` stay on the **host**. DAG tasks SSH to the Docker host and run `./scripts/start.sh`. Do not install the project `.venv` in this image.
+dlt/dbt stay in [`docker/elt/`](../elt/). Do not install the project `.venv` or ELT deps in this image.
 
 Rebuild when the Dockerfile changes:
 

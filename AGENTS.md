@@ -25,7 +25,7 @@ Phase 1, Milestone 1 — warehouse branch first. Route **`products`** dlt (archi
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
               → observability data lake (MinIO nexus-telemetry-{env})
-Airflow DAG → same dlt/dbt on host (DAG run_id = NEXUS_RUN_ID)
+Airflow DAG → same dlt/dbt via nexus-elt job image (DAG run_id = NEXUS_RUN_ID)
 ```
 
 Implement and verify `dlt_dbt_clickhouse` with full observability producers (lake writes on every run) before starting Spark/Iceberg, Terraform/CI, reader-tool dashboards, or LLM/RAG. Warehouse Bronze/RBAC/silver for products is implemented — see [docs/bronze-silver-cutover.md](docs/bronze-silver-cutover.md). Airflow smoke/source DAGs are part of Milestone 1. Do not fill future-phase folders with speculative implementations. MinIO IAM and lakehouse RBAC stay deferred.
@@ -71,10 +71,12 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 ## Orchestration and observability
 
 - Airflow is **Phase 1** orchestration, not a transformation backend. Use **one DAG per source + target + endpoint** with layer tasks (`assert_branch_enabled` → bronze → silver → gold → observability). Never `dbt build` (always `run` then `test`).
+- **Airflow runtime (locked):** Dockerized Airflow; dlt/dbt in ephemeral **`nexus-elt`** job containers (`docker run` on the Compose network). Cursor still uses host `uv`. Never install dlt/dbt into the Airflow image. One UI for all branches. Do not bind-mount `.venv`. See [docs/architecture.md](docs/architecture.md), [docker/elt/README.md](docker/elt/README.md).
 - **Observability data lake:** MinIO `nexus-telemetry-{env}` is the system of record. Pipeline code uses `common/observability` only — never SigNoz, OpenMetadata, or Elementary directly.
 - Airflow owns task scheduling, retries, and remote stdout (`nexus-airflow-logs-{env}`); dlt owns load telemetry in warehouse `_dlt_*` tables; dbt owns local `target/` plus artifact copy to the lake.
 - Phase 1 requires full producers: lake summaries, OTLP when the collector is up, dbt artifact copy, Elementary HTML, Airflow remote logs. SigNoz and OpenMetadata are **readers** (product setup after the first Airflow E2E) with their own native DBs; ingest from the lake; do not replace their storage with MinIO. Pipeline code must not call those APIs.
 - Airflow DAG `run_id` = `NEXUS_RUN_ID` when orchestrated; `local-{timestamp}` for manual runs until then.
+- **`nexus_elt_exec` env quoting:** `docker run -e NEXUS_RUN_ID='{{ run_id }}'` (and DAG/task id) assumes Airflow ids have **no single quote**. Default / manual Airflow `run_id`s are fine. Do not introduce custom run ids with `'`; the remote `bash -lc` fragment is `shlex.quote`d, but those `-e` lines are not. See `orchestration/airflow/dags/nexus_elt_exec.py`.
 - Do not build a custom logging service or use a ClickHouse table as the ops system of record.
 
 ## Future LLM/RAG behavior

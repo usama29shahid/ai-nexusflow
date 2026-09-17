@@ -27,6 +27,8 @@ from dlt.destinations import clickhouse, filesystem
 from dlt.sources.helpers.rest_client import RESTClient
 from dlt.sources.helpers.rest_client.paginators import PageNumberPaginator
 
+from common.runtime_env import load_runtime_env
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ROUTE_BASE_URL = "https://ecommerce.routemisr.com/api/v1"
 SOURCE_ID = "route"
@@ -35,22 +37,6 @@ PIPELINE_NAME = "route_products"
 # Safe for MinIO key segments and Airflow-style run_ids (no / or ..).
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+-]*$")
 _RUN_ID_MAX_LEN = 128
-
-
-def _load_dotenv(path: Path, *, overwrite: bool = False) -> None:
-    if not path.is_file():
-        return
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip("'").strip('"')
-        if overwrite:
-            os.environ[key] = value
-        else:
-            os.environ.setdefault(key, value)
 
 
 def _required(name: str) -> str:
@@ -275,10 +261,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
-    _load_dotenv(REPO_ROOT / ".env")
-    secrets_file = REPO_ROOT / ".nexusflow" / "secrets.env"
-    if os.environ.get("NEXUS_SECRETS_BACKEND", "env") == "vault" and secrets_file.is_file():
-        _load_dotenv(secrets_file, overwrite=True)
+    load_runtime_env(REPO_ROOT)
 
     env = os.environ.get("NEXUS_ENV", "dev")
     now = datetime.now(timezone.utc)

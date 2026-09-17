@@ -188,9 +188,10 @@ may use a dbt selector without creating another extraction pipeline.
   environment variable must not be assumed to persist into another Airflow
   task.
 
-Airflow runs in Docker. dlt and dbt run on the host via SSH to the Docker
-host (`./scripts/start.sh` / `uv`). Bind-mounting a developer `.venv` into a
-container is not the contract. A worker image may replace SSH later.
+Airflow runs in Docker. Orchestrated dlt and dbt run in an ephemeral ELT job
+image (`nexus-elt` via `docker run` on the Compose network). Bind-mounting a
+developer `.venv` into Airflow is not the contract. Do not install dlt/dbt into
+the Airflow image. See [architecture.md](architecture.md).
 
 ### SCD2 expectation
 
@@ -342,6 +343,9 @@ The following decisions remain intentionally open:
 - What is the final versioned ELT specification schema?
 - How are generated artifacts reviewed, diffed, committed, and rolled back?
 - How does Dockerized Airflow securely invoke host-based dlt/dbt execution?
+  **Decided:** ephemeral `nexus-elt` job image via `docker run` on the Compose
+  network ([architecture.md](architecture.md)). Fat Airflow image and SSH
+  host-exec for new DAGs are rejected.
 - How are pipeline ownership and lifecycle states represented?
 - What ClickHouse-specific SCD2 strategy is verified for generated models?
 - Which dbt artifacts and dlt metadata should be retained in MinIO?

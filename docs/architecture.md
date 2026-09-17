@@ -256,6 +256,22 @@ Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `air
 
 **Production (later):** optional CI image for Python. Terraform in Phase 2. Not part of Phase 1.
 
+### Airflow execution runtime (locked)
+
+Infra in Compose and dlt/dbt as short jobs is the right split. Do **not** add standing dlt/dbt Compose services. Do **not** bind-mount the developer `.venv` into Airflow. Do **not** install dlt/dbt into the Airflow image.
+
+| Now | Never |
+| --- | --- |
+| Thin Airflow + ephemeral **ELT job image** (`docker run` on Compose network `ai-nexusflow_default`). Same image for later GitHub Actions build/test. Cursor still uses host `uv`. | Fat Airflow image with every adapter; standing dlt/dbt containers; SSH host-exec for new DAGs |
+
+Setup: [orchestration/airflow/README.md](../orchestration/airflow/README.md), [docker/elt/README.md](../docker/elt/README.md). Reference DAG: `route_clickhouse_products`.
+
+**One Airflow UI for all capabilities.** New branches add DAG files under `orchestration/airflow/dags/`; they appear in the same webserver (`http://127.0.0.1:8081` today; later `airflow.` via [edge-proxy.md](edge-proxy.md)). Never one Airflow per branch.
+
+**Lab VPS (≈16 GB / 4 cores):** keep Compose profiles strict — ClickHouse + Airflow (+ Vault) day-to-day; start `lakehouse` / SigNoz / OpenMetadata only when needed. Do not `./scripts/start.sh all`. One DAG at a time. Optional ops agents (OpenClaw or Hermes) are **ops assistants**, not a second orchestrator; prefer one, API-backed, loopback access. When Airflow is public later, keep `docker.sock` on the **scheduler only** (not the webserver).
+
+**Phase 2/3 fit:** Terraform creates names only. Actions lint/test/deploy (and build the ELT image) — not a second ingest runner. LLM/Streamlit/FastAPI consume enabled branches and Airflow status; they do not change this worker contract.
+
 ---
 
 ## Dependency boundary
