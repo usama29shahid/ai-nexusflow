@@ -17,7 +17,7 @@
 
 {$NEXUS_CADDY_SITE_SCHEME}airflow.{$NEXUS_PUBLIC_HOST} {
 	import encode_headers
-	reverse_proxy airflow-webserver:8080
+	reverse_proxy airflow-api-server:8080
 }
 
 {$NEXUS_CADDY_SITE_SCHEME}cloudbeaver.{$NEXUS_PUBLIC_HOST} {

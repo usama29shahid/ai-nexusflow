@@ -238,9 +238,30 @@ build_nexus_elt_image() {
 }
 
 ensure_airflow() {
-  echo "Starting Airflow (platform orchestration; ELT via nexus-elt job image)..."
+  echo "Starting Airflow 3.3 (platform orchestration; ELT via nexus-elt job image)..."
+  if [[ "${NEXUS_SECRETS_BACKEND:-env}" != "vault" ]] && [[ -f .env ]]; then
+    if ! grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=.\+' .env; then
+      local jwt
+      jwt="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+      if grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=' .env; then
+        sed -i "s|^AIRFLOW__API_AUTH__JWT_SECRET=.*|AIRFLOW__API_AUTH__JWT_SECRET=${jwt}|" .env
+      else
+        printf '\nAIRFLOW__API_AUTH__JWT_SECRET=%s\n' "${jwt}" >> .env
+      fi
+      echo "Generated AIRFLOW__API_AUTH__JWT_SECRET in .env"
+      set -a
+      # shellcheck source=/dev/null
+      source .env
+      set +a
+    fi
+  fi
   require_airflow_elt_ready
   build_nexus_elt_image
+  # Airflow 3 renamed webserver → api-server. A leftover 2.x container holds :8081.
+  if docker inspect airflow-webserver >/dev/null 2>&1; then
+    echo "Removing leftover Airflow 2 container airflow-webserver (frees :8081)..."
+    docker rm -f airflow-webserver
+  fi
   docker compose --profile airflow up -d --build
 }
 
@@ -397,7 +418,7 @@ case "${cmd}" in
     ensure_airflow
     echo "Airflow up: http://127.0.0.1:${AIRFLOW_WEBSERVER_PORT:-8081}"
     if [[ -n "${NEXUS_PUBLIC_HOST:-}" ]]; then
-      echo "  Via proxy (if up): ${AIRFLOW__WEBSERVER__BASE_URL:-http://airflow.${NEXUS_PUBLIC_HOST}}"
+      echo "  Via proxy (if up): ${AIRFLOW__API__BASE_URL:-${AIRFLOW__WEBSERVER__BASE_URL:-http://airflow.${NEXUS_PUBLIC_HOST}}}"
     fi
     ;;
   proxy)

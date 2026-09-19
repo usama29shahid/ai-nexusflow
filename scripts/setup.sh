@@ -18,7 +18,7 @@ fi
 
 # Fill Airflow crypto secrets when blank (Compose requires them; never commit real values).
 ensure_airflow_secrets() {
-  local fernet secret
+  local fernet secret jwt
   if ! grep -q '^AIRFLOW__CORE__FERNET_KEY=.\+' .env; then
     fernet="$(python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
     if grep -q '^AIRFLOW__CORE__FERNET_KEY=' .env; then
@@ -36,6 +36,15 @@ ensure_airflow_secrets() {
       printf '\nAIRFLOW__WEBSERVER__SECRET_KEY=%s\n' "${secret}" >> .env
     fi
     echo "Generated AIRFLOW__WEBSERVER__SECRET_KEY in .env"
+  fi
+  if ! grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=.\+' .env; then
+    jwt="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    if grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=' .env; then
+      sed -i "s|^AIRFLOW__API_AUTH__JWT_SECRET=.*|AIRFLOW__API_AUTH__JWT_SECRET=${jwt}|" .env
+    else
+      printf '\nAIRFLOW__API_AUTH__JWT_SECRET=%s\n' "${jwt}" >> .env
+    fi
+    echo "Generated AIRFLOW__API_AUTH__JWT_SECRET in .env"
   fi
   if ! grep -q '^AIRFLOW_ADMIN_PASSWORD=.\+' .env; then
     if grep -q '^AIRFLOW_ADMIN_PASSWORD=' .env; then

@@ -289,11 +289,17 @@ else
 fi
 if kv_secret_exists "${kv_base}/airflow"; then
   echo "  KV exists: ${kv_base}/airflow (skip seed)"
+  if ! vault_exec kv get -field=jwt_secret "${kv_base}/airflow" >/dev/null 2>&1; then
+    echo "  Patching jwt_secret on ${kv_base}/airflow (Airflow 3)"
+    vault_exec kv patch "${kv_base}/airflow" \
+      jwt_secret="$(generate_if_blank AIRFLOW__API_AUTH__JWT_SECRET "python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")"
+  fi
 else
   echo "  Seeding: ${kv_base}/airflow"
   vault_exec kv put "${kv_base}/airflow" \
     fernet_key="$(generate_if_blank AIRFLOW__CORE__FERNET_KEY "python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'")" \
     web_secret="$(generate_if_blank AIRFLOW__WEBSERVER__SECRET_KEY "python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")" \
+    jwt_secret="$(generate_if_blank AIRFLOW__API_AUTH__JWT_SECRET "python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")" \
     admin_password="$(read_env_default AIRFLOW_ADMIN_PASSWORD change-me)"
 fi
 

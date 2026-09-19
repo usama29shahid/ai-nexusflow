@@ -29,5 +29,6 @@ POLARIS_CLIENT_SECRET={{ .Data.data.client_secret }}
 {{- with secret (printf "secret/data/nexusflow/%s/airflow" $env) }}
 AIRFLOW__CORE__FERNET_KEY={{ .Data.data.fernet_key }}
 AIRFLOW__WEBSERVER__SECRET_KEY={{ .Data.data.web_secret }}
+AIRFLOW__API_AUTH__JWT_SECRET={{ .Data.data.jwt_secret }}
 AIRFLOW_ADMIN_PASSWORD={{ .Data.data.admin_password }}
 {{- end }}

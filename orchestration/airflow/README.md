@@ -24,7 +24,7 @@ Do these once per machine (clone path / Linux user). Same list on the first VPS 
 
    Optional: `DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)`, `NEXUS_ELT_IMAGE=nexus-elt:latest`, `NEXUS_COMPOSE_NETWORK=ai-nexusflow_default`.
 
-2. **Docker socket** — only **`airflow-scheduler`** mounts `/var/run/docker.sock` (LocalExecutor runs ELT tasks there). The webserver does **not** get the socket, so a public `airflow.` UI later has a smaller blast radius. Your host user must still be able to run `docker` (Docker Desktop WSL or `docker` group on a VPS). Set `DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)` if tasks cannot talk to the daemon.
+2. **Docker socket** — only **`airflow-scheduler`** mounts `/var/run/docker.sock` (LocalExecutor runs ELT tasks there). The api-server does **not** get the socket, so a public `airflow.` UI later has a smaller blast radius. Your host user must still be able to run `docker` (Docker Desktop WSL or `docker` group on a VPS). Set `DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)` if tasks cannot talk to the daemon.
 
 3. **Elementary CLI in the job image** — included via `uv sync --extra elementary` inside `docker/elt/Dockerfile`. No host `uv sync --extra elementary` required for Airflow tasks (still useful for local `edr report`).
 
@@ -34,9 +34,11 @@ Do these once per machine (clone path / Linux user). Same list on the first VPS 
    ./scripts/start.sh airflow
    ```
 
-   Builds `nexus-elt` and `nexus-airflow`, writes `.nexusflow/airflow_elt.env`, and starts the profile. If Airflow was already running under the old SSH host-exec setup, recreate with the same command so containers pick up `docker.sock`, the elt env mount, and image. After Vault password rotation, re-run this command so the host rewrites `airflow_elt.env` (the scheduler mounts only that file, not all of `.nexusflow`).
+   Builds `nexus-elt` and `nexus-airflow` (Airflow **3.3.2**), writes `.nexusflow/airflow_elt.env`, and starts the profile. Recreate with the same command after Vault password rotation so the host rewrites `airflow_elt.env` (the scheduler mounts only that file, not all of `.nexusflow`).
 
-Fernet key, web secret, and admin password must already be in `.env` (`./scripts/setup.sh` once on a new clone). Change `AIRFLOW_ADMIN_PASSWORD` on a VPS.
+Fernet key, web/API secret, JWT secret, and admin password must already be in `.env` (`./scripts/setup.sh` once on a new clone; `./scripts/start.sh airflow` also fills a missing JWT). Change `AIRFLOW_ADMIN_PASSWORD` on a VPS.
+
+**Upgrading from Airflow 2.x:** `./scripts/start.sh airflow` removes a leftover `airflow-webserver` container (frees `:8081`). Do not pass Compose `--remove-orphans` on the airflow profile — other stacks (ClickHouse, Vault) can look like orphans. Wipe the metadata volume (`docker volume rm ai-nexusflow_airflow_postgres_data`) so 3.x can migrate; warehouse/MinIO data stay. With Vault, the same command patches missing `jwt_secret` (via `vault-ensure.sh`) and recreates the Agent so `secrets.env` has JWT before Compose starts.
 
 Compose project name follows the repo directory (default network `ai-nexusflow_default`). `start.sh` can detect the network; override with `NEXUS_COMPOSE_NETWORK` only if you renamed the project.
 
@@ -51,9 +53,9 @@ docker compose --profile airflow stop
 
 | | |
 | --- | --- |
-| UI | http://127.0.0.1:8081 |
+| UI | http://127.0.0.1:8081 (`airflow-api-server`) |
 | Login | `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` (example default `admin` / `change-me`, **local WSL only**) |
-| Config UI | Off (`AIRFLOW__WEBSERVER__EXPOSE_CONFIG=false`) — do not turn on behind a public hostname |
+| Config UI | Off (`AIRFLOW__API__EXPOSE_CONFIG=false`) — do not turn on behind a public hostname |
 | Remote logs | MinIO bucket `nexus-airflow-logs-{NEXUS_ENV}` |
 | DAGs | `orchestration/airflow/dags/` (host-owned) |
 | Plugins | `orchestration/airflow/plugins/` |

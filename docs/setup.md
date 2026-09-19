@@ -233,10 +233,10 @@ CloudBeaver opens at `http://localhost:8978`. Its users, settings, and saved con
 **Airflow** (when `airflow` profile is active):
 
 ```bash
-curl --fail http://127.0.0.1:8081/health
+curl --fail http://127.0.0.1:8081/api/v2/monitor/health
 ```
 
-UI login uses `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` (example default `admin` / `change-me`, local WSL only — change on a VPS). `AIRFLOW__CORE__FERNET_KEY` and `AIRFLOW__WEBSERVER__SECRET_KEY` are required; `./scripts/setup.sh` generates them when blank. **First time on WSL or a VPS:** follow the checklist in [orchestration/airflow/README.md](../orchestration/airflow/README.md) (`.env` host user/path, sshd, key, `uv sync --extra elementary`, then `./scripts/start.sh airflow`). Trigger `nexus_airflow_smoke` to verify the scheduler; trigger `route_clickhouse_products` for the first ELT job.
+UI login uses `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` (example default `admin` / `change-me`, local WSL only — change on a VPS). `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY`, and `AIRFLOW__API_AUTH__JWT_SECRET` are required; `./scripts/setup.sh` generates them when blank. **First time on WSL or a VPS:** follow the checklist in [orchestration/airflow/README.md](../orchestration/airflow/README.md) (`.env` host user/path, then `./scripts/start.sh airflow`). Trigger `nexus_airflow_smoke` to verify the scheduler; trigger `route_clickhouse_products` for the first ELT job. Airflow is **3.3.2** (api-server + dag-processor; not 2.x).
 
 ---
 
