@@ -16,6 +16,7 @@
 #   ./scripts/start.sh                 # secrets + MinIO/OTel + branch profiles + Vault if needed
 #   ./scripts/start.sh vault           # Vault only (platform)
 #   ./scripts/start.sh airflow         # Airflow only (platform, on-demand)
+#   ./scripts/start.sh proxy           # Caddy edge proxy (*.NEXUS_PUBLIC_HOST)
 #   ./scripts/start.sh signoz          # SigNoz reader (platform, on-demand)
 #   ./scripts/start.sh openmetadata    # OpenMetadata reader (platform, on-demand)
 #   ./scripts/start.sh observability   # MinIO + OTel + SigNoz + OpenMetadata readers
@@ -37,7 +38,7 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 # Profiles that map to execution branches (config/branches.yaml)
 BRANCH_PROFILES="clickhouse lakehouse"
 # Profiles for platform tooling (not a data branch)
-PLATFORM_PROFILES="vault airflow cloudbeaver signoz openmetadata"
+PLATFORM_PROFILES="vault airflow cloudbeaver signoz openmetadata proxy"
 
 usage() {
   cat <<'EOF'
@@ -51,6 +52,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   minio         Start MinIO + OTel Collector only (always-on shared infra)
   vault         Start + bootstrap HashiCorp Vault (platform; secrets)
   airflow       Start Airflow profile only (platform; on-demand)
+  proxy         Start Caddy edge proxy (http://*.NEXUS_PUBLIC_HOST)
   signoz        Start SigNoz reader profile (trace UI)
   openmetadata  Start OpenMetadata reader profile (data catalog)
   observability Start shared infra + SigNoz + OpenMetadata readers
@@ -126,6 +128,12 @@ load_env() {
   if [[ -z "${NEXUS_RUN_ID:-}" ]]; then
     export NEXUS_RUN_ID="local-$(date -u +%Y%m%dT%H%M%SZ)"
   fi
+
+  # Backend host publishes (ClickHouse/MinIO/Polaris/Spark/Trino).
+  # Fail before compose up (Caddy entrypoint also rejects; this avoids publishing first).
+  # shellcheck source=scripts/nexus_publish_bind.sh
+  source "${ROOT}/scripts/nexus_publish_bind.sh"
+  nexus_resolve_publish_bind || exit 1
 }
 
 # Source Agent-rendered secrets.env when backend is vault. Call only when a command needs credentials.
@@ -236,6 +244,13 @@ ensure_airflow() {
   docker compose --profile airflow up -d --build
 }
 
+ensure_proxy() {
+  echo "Starting Caddy edge proxy (profile proxy)..."
+  echo "  Host: ${NEXUS_CADDY_SITE_SCHEME:-http://}*.${NEXUS_PUBLIC_HOST:-localhost.com}"
+  echo "  Hosts: ./scripts/proxy-hosts.sh install   # required for *.localhost.com"
+  docker compose --profile proxy up -d
+}
+
 ensure_signoz() {
   echo "Starting SigNoz reader (profile signoz)..."
   docker compose --profile signoz up -d signoz
@@ -311,12 +326,17 @@ start_profiles() {
       docker compose up -d
     fi
   fi
+
+  # proxy is optional platform; start when listed in COMPOSE_PROFILES
+  if [[ ",${COMPOSE_PROFILES}," == *",proxy,"* ]]; then
+    ensure_proxy
+  fi
 }
 
 stop_all() {
   echo "Stopping all stacks (branch + platform + vault)..."
   # Every profile must be enabled on down — otherwise Compose leaves profiled services running.
-  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,airflow,signoz,openmetadata,openmetadata-ingestion \
+  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,airflow,signoz,openmetadata,openmetadata-ingestion,proxy \
     docker compose \
       --profile vault \
       --profile clickhouse \
@@ -326,6 +346,7 @@ stop_all() {
       --profile signoz \
       --profile openmetadata \
       --profile openmetadata-ingestion \
+      --profile proxy \
       down
   echo "Stopped. Data volumes kept (no -v)."
 }
@@ -375,6 +396,18 @@ case "${cmd}" in
     ensure_minio
     ensure_airflow
     echo "Airflow up: http://127.0.0.1:${AIRFLOW_WEBSERVER_PORT:-8081}"
+    if [[ -n "${NEXUS_PUBLIC_HOST:-}" ]]; then
+      echo "  Via proxy (if up): ${AIRFLOW__WEBSERVER__BASE_URL:-http://airflow.${NEXUS_PUBLIC_HOST}}"
+    fi
+    ;;
+  proxy)
+    load_env
+    ensure_minio
+    ensure_proxy
+    echo "Caddy up on :${NEXUS_PROXY_HTTP_PORT:-80}"
+    echo "  Examples: http://airflow.${NEXUS_PUBLIC_HOST:-localhost.com}"
+    echo "            http://minio.${NEXUS_PUBLIC_HOST:-localhost.com}"
+    echo "  Hosts:    ./scripts/proxy-hosts.sh install"
     ;;
   signoz)
     load_env_and_secrets

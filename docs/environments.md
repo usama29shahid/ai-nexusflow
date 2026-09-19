@@ -70,19 +70,23 @@ Worked example: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-i
 
 Phase 2 **adds** workflow files and Terraform modules. It does **not** rewrite dlt, dbt, DAGs, or `./scripts/start.sh`. If a later change would rename Bronze tables, invent a second ELT runner, or fork the repo per env, the design is wrong.
 
+**CI/CD intent (locked):** GitHub Actions is the primary path for lint, test, build, Terraform, and VPS deploy. Local stays production-shaped so day-one cutover is automation — see [ci-cd.md](ci-cd.md).
+
 | Phase 2 adds | Reuses (already locked) |
 | --- | --- |
-| `.github/workflows/` (lint, test, optional VPS deploy) | `uv run`, existing tests, `./scripts/start.sh` |
+| `.github/workflows/` (lint, test, build, terraform, VPS deploy) | `uv run`, existing tests, `./scripts/start.sh`, image Dockerfiles |
 | Terraform modules (create `bronze_{env}`, `silver_{env}`, `{purpose}-{env}` buckets, ClickHouse users) | Names in this document; [rbac.md](rbac.md) `nexus_loader` / `nexus_transformer` |
 | Secret injection on the VPS or in CI | Same env var names Vault Agent already renders ([vault.md](vault.md)) |
+| Edge / public hostname (`NEXUS_EDGE_MODE=vps`, DNS, HTTPS Caddy, `127.0.0.1` binds) | Contract in [edge-proxy.md](edge-proxy.md) — **separate from local** hosts + HTTP |
 
 Rules:
 
-- **One execution path.** Airflow (or a manual host command) runs `./scripts/start.sh` → dlt / dbt / observability. GitHub Actions **lints, tests, and optionally deploys** (`git pull` + `start.sh` on the VPS). Actions is not a second place that runs ingest or transform.
+- **One execution path.** Airflow (or a manual host command) runs `./scripts/start.sh` → dlt / dbt / observability. GitHub Actions **lints, tests, builds, applies Terraform, and deploys** (`git pull` + `start.sh` on the VPS). Actions is not a second place that runs ingest or transform.
 - **One codebase.** `NEXUS_ENV` / dbt `--target` select `dev` or `prd`. Do not add a `prd` git branch or a second Compose “prod stack.”
 - **Same names.** Terraform creates the databases and buckets already listed above. It does not introduce `prod` suffixes or `raw_*_prd` table names.
 - **Same secrets contract.** Apps read `os.environ` / dbt `env_var`. They never call Vault or the GitHub API. If CI injects credentials, they are still `CLICKHOUSE_LOADER_*` / `CLICKHOUSE_TRANSFORMER_*` into `start.sh`.
+- **Edge modes stay separate.** Local = hosts file + HTTP. VPS = DNS + HTTPS + Vault + auth gate. Terraform/deploy must set `NEXUS_EDGE_MODE=vps` and must not copy WSL `.env` ([edge-proxy.md](edge-proxy.md)).
 
 VPS deploy uses the same Compose + host `uv` model as WSL ([setup.md](setup.md), [orchestration/airflow/README.md](../orchestration/airflow/README.md)). Set `NEXUS_REPO_ROOT` to that machine’s absolute clone path.
 
-Public UIs on a hostname (capstone): **Caddy + subdomains**, designed in [edge-proxy.md](edge-proxy.md). Not implemented yet. Do not add a Caddyfile to the Airflow ELT-job-image commit.
+Public UIs: **Caddy + subdomains** — [edge-proxy.md](edge-proxy.md). Local and VPS are different rows in that doc’s contract table; Phase 2 owns the VPS row via Actions + Terraform ([ci-cd.md](ci-cd.md)).

@@ -1,0 +1,7 @@
+# VPS edge — HTTPS via Let's Encrypt (NEXUS_EDGE_MODE=vps). Selected by docker/caddy/docker-entrypoint.sh.
+# Set NEXUS_CADDY_ACME_EMAIL (Terraform/Actions). Leave NEXUS_CADDY_SITE_SCHEME empty so hostnames are bare domains.
+{
+	email {$NEXUS_CADDY_ACME_EMAIL}
+}
+
+import /etc/caddy/sites.caddy

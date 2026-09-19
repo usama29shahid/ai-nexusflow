@@ -230,7 +230,7 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 
 **Observability producers (Phase 1)** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`.
 
-**Terraform, GitHub Actions, reader tools (Phase 2)** — **additive** env promotion (`dev`/`prd`), CI, and SigNoz / OpenMetadata / Elementary product setup so those tools ingest from the lake. Terraform creates the names already in [environments.md](environments.md); Actions call `./scripts/start.sh` (lint/test/deploy), they do not become a second ELT runner. Readers do not replace the lake write contract.
+**Terraform, GitHub Actions, reader tools (Phase 2)** — **additive** env promotion (`dev`/`prd`), **CI/CD via GitHub Actions** (lint/test/build/terraform/deploy), and SigNoz / OpenMetadata / Elementary product setup. Terraform owns environment identity and VPS edge settings; Actions is the only primary CI/CD path and calls `./scripts/start.sh` on deploy — it does **not** become a second ELT runner. Local stays production-shaped so day-one deploy is automation, not a rewrite ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
 
 **LLM / RAG / Streamlit (Phase 3)** — agents that select and generate against enabled capabilities.
 
@@ -251,10 +251,11 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 | `signoz` | SigNoz | Pipeline trace reader (Phase 2 product setup) |
 | `openmetadata` | OpenMetadata | Data catalog reader (Phase 2 product setup) |
 | `vault` | HashiCorp Vault + Agent | Secrets — [vault.md](vault.md) |
+| `proxy` | Caddy edge | Public/local hostnames — [edge-proxy.md](edge-proxy.md) |
 
-Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, or comma-separated). Airflow is optional; start with `docker compose --profile airflow up -d` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
+Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, `proxy`, or comma-separated). Airflow and proxy are optional; start with `./scripts/start.sh airflow` / `./scripts/start.sh proxy` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
 
-**Production (later):** optional CI image for Python. Terraform in Phase 2. Not part of Phase 1.
+**Production cutover (Phase 2):** GitHub Actions + Terraform per [ci-cd.md](ci-cd.md). Same Compose + host `uv` model; `NEXUS_EDGE_MODE=vps`. Not part of Phase 1 implementation, but Phase 1 must stay deploy-shaped.
 
 ### Airflow execution runtime (locked)
 

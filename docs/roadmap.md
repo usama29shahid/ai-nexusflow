@@ -79,15 +79,18 @@ Open-source lakehouse. Folder: `branches/dlt_dbt_spark_iceberg`. Standards: [dlt
 
 ## Phase 2 — Terraform, GitHub Actions, and reader tools
 
-Compose already exists for local services. This phase is **env promotion**, **CI**, and **reader product setup**. It **adds** workflow files and Terraform modules that reuse Phase 1 names and `./scripts/start.sh` — it does not rewrite dlt, dbt, or DAGs ([environments.md](environments.md)).
+Compose already exists for local services. This phase is **env promotion**, **CI/CD**, and **reader product setup**. It **adds** workflow files and Terraform modules that reuse Phase 1 names and `./scripts/start.sh` — it does not rewrite dlt, dbt, or DAGs ([environments.md](environments.md), [ci-cd.md](ci-cd.md)).
+
+**Locked intent:** GitHub Actions is the primary CI/CD path (lint, test, build, `terraform plan/apply`, VPS deploy). Terraform handles environment identity (`dev`/`prd`), DNS/edge server settings, and related infra. Day-one deploy should be **automated** because local is already production-shaped — not a manual rewrite of the platform.
 
 - Terraform **dev** and **prd** (prd is when `-prd` buckets and `*_prd` databases are created — same patterns as `dev`)
-- GitHub Actions for lint/test/deploy as appropriate (not a second ingest/transform runner)
+- GitHub Actions for lint/test/build/deploy (not a second ingest/transform runner)
 - Repeatable ClickHouse / MinIO / Airflow / observability stack wiring
 - Secrets and networking; no keys in git
+- **Edge / public hostname:** VPS row of [edge-proxy.md](edge-proxy.md) (`NEXUS_EDGE_MODE=vps`, DNS, HTTPS Caddy, `127.0.0.1` binds, auth gate) — separate from local hosts + HTTP; [infrastructure/terraform/README.md](../infrastructure/terraform/README.md)
 - SigNoz, OpenMetadata, and Elementary: each tool’s install/config and lake→native-store ingest so dashboards work ([observability.md](observability.md))
 
-Phase 1 already writes the lake; Phase 2 makes the reader UIs useful.
+Phase 1 already writes the lake; Phase 2 makes deploy + reader UIs automatic and useful.
 
 ---
 
