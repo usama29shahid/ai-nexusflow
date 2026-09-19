@@ -1,0 +1,6 @@
+# Local edge — HTTP only (NEXUS_EDGE_MODE=local). Selected by docker/caddy/docker-entrypoint.sh.
+{
+	auto_https off
+}
+
+import /etc/caddy/sites.caddy

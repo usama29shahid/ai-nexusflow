@@ -4,10 +4,12 @@
 #   cloudbeaver — CloudBeaver web IDE
 #   airflow     — Airflow (on-demand orchestration)
 #   vault       — HashiCorp Vault + Agent (NEXUS_SECRETS_BACKEND=vault)
+#   proxy       — Caddy edge (*.NEXUS_PUBLIC_HOST); see docs/edge-proxy.md
 #
 # Always (no profile): MinIO, minio-init, otel-collector
 # Optional readers: signoz, openmetadata (add to COMPOSE_PROFILES or ./scripts/start.sh observability)
 # Airflow: add airflow to COMPOSE_PROFILES or: docker compose --profile airflow up -d
+# Proxy:   docker compose --profile proxy up -d  (or ./scripts/start.sh proxy)
 # Cursor Python/dlt/dbt stay on the host. Orchestrated ELT uses image nexus-elt (docker/elt).
 # Project name defaults to the directory (ai-nexusflow). Do not set top-level `name:` —
 # fixed container_name values conflict if the project is renamed while stacks are up.
@@ -35,6 +37,9 @@ x-airflow-common: &airflow-common
     AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY:?Set AIRFLOW__WEBSERVER__SECRET_KEY in .env — run ./scripts/setup.sh or see .env.example}
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+    # When using profile proxy: http://airflow.${NEXUS_PUBLIC_HOST} (+ ENABLE_PROXY_FIX=True).
+    AIRFLOW__WEBSERVER__BASE_URL: ${AIRFLOW__WEBSERVER__BASE_URL:-http://127.0.0.1:8081}
+    AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: ${AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX:-False}
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
     AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: minio_logs
@@ -152,8 +157,8 @@ services:
     profiles: [clickhouse]
 
     ports:
-      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
-      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
 
     environment:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-warehouse}
@@ -190,12 +195,14 @@ services:
     command: server /data --console-address ":9001"
 
     ports:
-      - "${MINIO_API_PORT:-9002}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${MINIO_API_PORT:-9002}:9000"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
 
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      # When profile proxy serves the console: http://minio.${NEXUS_PUBLIC_HOST}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
 
     volumes:
       - minio_data:/data
@@ -275,8 +282,8 @@ services:
     profiles: [lakehouse]
 
     ports:
-      - "${POLARIS_HTTP_PORT:-8181}:8181"
-      - "${POLARIS_MGMT_PORT:-8182}:8182"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${POLARIS_HTTP_PORT:-8181}:8181"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${POLARIS_MGMT_PORT:-8182}:8182"
 
     environment:
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -352,8 +359,8 @@ services:
     profiles: [lakehouse]
 
     ports:
-      - "${SPARK_THRIFT_PORT:-10000}:10000"
-      - "${SPARK_UI_PORT:-4040}:4040"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${SPARK_THRIFT_PORT:-10000}:10000"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${SPARK_UI_PORT:-4040}:4040"
 
     environment:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
@@ -415,7 +422,7 @@ services:
     profiles: [lakehouse]
 
     ports:
-      - "${TRINO_PORT:-8080}:8080"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${TRINO_PORT:-8080}:8080"
 
     environment:
       POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID:-root}
@@ -558,6 +565,37 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # ============================================================
+  # Caddy — edge reverse proxy (profile: proxy)
+  # ============================================================
+  caddy:
+    image: caddy:2.9-alpine
+    container_name: nexus-caddy
+    restart: unless-stopped
+    profiles: [proxy]
+    ports:
+      - "${NEXUS_PROXY_HTTP_PORT:-80}:80"
+      - "${NEXUS_PROXY_HTTPS_PORT:-443}:443"
+    environment:
+      # local | vps — selects Caddyfile.local vs Caddyfile.vps (TLS). Terraform/Actions set vps.
+      NEXUS_EDGE_MODE: ${NEXUS_EDGE_MODE:-local}
+      NEXUS_PUBLIC_HOST: ${NEXUS_PUBLIC_HOST:-localhost.com}
+      # local entrypoint defaults to http:// if empty. vps: leave empty for HTTPS hostnames.
+      NEXUS_CADDY_SITE_SCHEME: ${NEXUS_CADDY_SITE_SCHEME:-}
+      NEXUS_CADDY_ACME_EMAIL: ${NEXUS_CADDY_ACME_EMAIL:-}
+      # Checked on vps (must not be 0.0.0.0). Compose defaults backends to 127.0.0.1.
+      NEXUS_PUBLISH_BIND: ${NEXUS_PUBLISH_BIND:-127.0.0.1}
+    entrypoint: ["/bin/sh", "/templates/docker-entrypoint.sh"]
+    volumes:
+      - ./docker/caddy:/templates:ro
+      - ./branches/dlt_dbt_clickhouse/target:/srv/dbt-docs:ro
+      - ./edr_target:/srv/elementary:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      minio:
+        condition: service_healthy
+
 # ==============================================================
 # Persistent Volumes
 # ==============================================================
@@ -570,3 +608,5 @@ volumes:
   cloudbeaver_workspace:
   airflow_postgres_data:
   airflow_logs:
+  caddy_data:
+  caddy_config:

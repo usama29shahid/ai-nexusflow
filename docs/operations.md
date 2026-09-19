@@ -216,5 +216,5 @@ dlt smoke           →  ./scripts/start.sh smoke
 Airflow first time  →  orchestration/airflow/README.md (sshd + key + .env; once per machine)
 Airflow             →  ./scripts/start.sh airflow  (UI :8081; recreate if key/.env changed)
 Elementary report   →  uv sync --extra elementary; edr report --profile-target "$NEXUS_ENV" (see above)
-Public hostname     →  later: Caddy + subdomains — docs/edge-proxy.md (not in the Airflow slice)
+Edge proxy (local)  →  ./scripts/proxy-hosts.sh install; ./scripts/start.sh proxy — docs/edge-proxy.md
 ```

@@ -1,0 +1,76 @@
+# Shared site blocks for local + VPS Caddyfiles (imported from Caddyfile.local / Caddyfile.vps).
+# Scheme: {$NEXUS_CADDY_SITE_SCHEME} — local entrypoint defaults to http:// ; vps leaves empty for HTTPS.
+# Do not publish OTel, ClickHouse native :9000, MinIO S3 API, Spark Thrift, or Vault unseal.
+
+(encode_headers) {
+	encode gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer-when-downgrade
+	}
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}minio.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy minio:9001
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}airflow.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy airflow-webserver:8080
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}cloudbeaver.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy cloudbeaver:8978
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}vault.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy vault:8200
+}
+
+# ClickHouse HTTP + Play UI (local showcase). Native :9000 stays off the edge.
+{$NEXUS_CADDY_SITE_SCHEME}clickhouse.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy clickhouse:8123
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}polaris.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy polaris:8181
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}trino.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy trino:8080
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}spark.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy spark-thrift:4040
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}signoz.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy signoz:8080
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}openmetadata.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy openmetadata-server:8585
+}
+
+# Static artifacts (regenerate on the host; do not run `dbt docs serve`)
+{$NEXUS_CADDY_SITE_SCHEME}docs.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	root * /srv/dbt-docs
+	file_server
+}
+
+{$NEXUS_CADDY_SITE_SCHEME}elementary.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	root * /srv/elementary
+	rewrite / /elementary_report.html
+	file_server
+}

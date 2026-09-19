@@ -11,6 +11,8 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 - `docs/setup.md` — local development and service topology.
 - `docs/operations.md` — daily start/stop, all services, lakehouse restore.
 - `docs/vault.md` — HashiCorp Vault secrets (KV paths, Agent injection, VPS ops). Read before changing secrets or bootstrap scripts.
+- `docs/edge-proxy.md` — Caddy edge; local vs VPS modes; deploy checklist for Actions/Terraform. When Caddy exits or VPS ports look wrong, use the **Debug: Caddy exit / NEXUS_PUBLISH_BIND** section before inventing a new failure mode.
+- `docs/ci-cd.md` — GitHub Actions + Terraform intent; production-shaped local; day-one deploy.
 - `docs/rbac.md` — ClickHouse loader/transformer/reader/admin (accepted; implement with Bronze cutover). MinIO IAM held.
 - `docs/bronze-silver-cutover.md` — implementation record for warehouse Bronze rename, RBAC, and silver peer tables (canonical rules in environments / dbt-modeling / dlt-dbt-clickhouse / rbac).
 - `docs/dlt-dbt-clickhouse.md` and `docs/dlt-extraction.md` — warehouse ingestion rules.
