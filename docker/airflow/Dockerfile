@@ -1,6 +1,6 @@
-FROM apache/airflow:2.10.5-python3.12
+FROM apache/airflow:3.3.2-python3.12
 
-# Thin scheduler/web image: docker CLI only so tasks can `docker run` nexus-elt.
+# Thin scheduler/UI image: docker CLI only so LocalExecutor tasks can `docker run` nexus-elt.
 # Do not install dlt/dbt here (see docker/elt/).
 USER root
 ARG TARGETARCH
@@ -17,4 +17,12 @@ RUN case "${TARGETARCH}" in \
       | tar -xz -C /usr/local/bin --strip-components=1 docker/docker \
     && rm -rf /var/lib/apt/lists/* \
     && docker --version
+
 USER airflow
+# BashOperator, MinIO S3 remote logs, FAB login (keeps AIRFLOW_ADMIN_*).
+ARG AIRFLOW_CONSTRAINTS_URL="https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt"
+RUN pip install --no-cache-dir \
+      "apache-airflow-providers-standard==1.19.0" \
+      "apache-airflow-providers-amazon==9.36.0" \
+      "apache-airflow-providers-fab==3.9.0" \
+      --constraint "${AIRFLOW_CONSTRAINTS_URL}"

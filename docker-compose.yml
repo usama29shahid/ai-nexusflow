@@ -22,24 +22,29 @@ x-airflow-common: &airflow-common
   build:
     context: .
     dockerfile: docker/airflow/Dockerfile
-  image: ${AIRFLOW_IMAGE_NAME:-nexus-airflow:2.10.5-python3.12}
+  image: ${AIRFLOW_IMAGE_NAME:-nexus-airflow:3.3.2-python3.12}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   environment: &airflow-common-env
     # Must match Compose `user:` so init chown and runtime UID stay aligned.
     AIRFLOW_UID: ${AIRFLOW_UID:-1000}
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg://airflow:airflow@airflow-postgres/airflow
     # Required in .env (never empty). ./scripts/setup.sh generates if missing.
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?Set AIRFLOW__CORE__FERNET_KEY in .env — run ./scripts/setup.sh or see .env.example}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
-    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY:?Set AIRFLOW__WEBSERVER__SECRET_KEY in .env — run ./scripts/setup.sh or see .env.example}
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:?Set AIRFLOW__API_AUTH__JWT_SECRET in .env — run ./scripts/setup.sh or see .env.example}
+    # Reuse the existing .env web secret for API + FAB (Airflow 3 renamed [webserver]).
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY:?Set AIRFLOW__WEBSERVER__SECRET_KEY in .env — run ./scripts/setup.sh or see .env.example}
+    AIRFLOW__FAB__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY:?Set AIRFLOW__WEBSERVER__SECRET_KEY in .env — run ./scripts/setup.sh or see .env.example}
+    AIRFLOW__API__EXPOSE_CONFIG: "false"
     # When using profile proxy: http://airflow.${NEXUS_PUBLIC_HOST} (+ ENABLE_PROXY_FIX=True).
-    AIRFLOW__WEBSERVER__BASE_URL: ${AIRFLOW__WEBSERVER__BASE_URL:-http://127.0.0.1:8081}
-    AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: ${AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX:-False}
+    AIRFLOW__API__BASE_URL: ${AIRFLOW__API__BASE_URL:-${AIRFLOW__WEBSERVER__BASE_URL:-http://127.0.0.1:8081}}
+    AIRFLOW__API__ENABLE_PROXY_FIX: ${AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX:-False}
+    AIRFLOW__FAB__ENABLE_PROXY_FIX: ${AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX:-False}
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
     AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: minio_logs
@@ -55,7 +60,6 @@ x-airflow-common: &airflow-common
     NEXUS_AIRFLOW_ELT_ENV_PATH: /opt/airflow/nexus_elt.env
     # Avoid writing __pycache__ into host-owned dags/plugins bind mounts.
     PYTHONDONTWRITEBYTECODE: "1"
-    # Official image already includes amazon provider (MinIO S3 remote logs).
     # Do not set _PIP_ADDITIONAL_REQUIREMENTS on airflow-init (runs as root).
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
   volumes:
@@ -63,7 +67,7 @@ x-airflow-common: &airflow-common
     - ./orchestration/airflow/plugins:/opt/airflow/plugins
     - airflow_logs:/opt/airflow/logs
     # docker.sock + elt env file: only on airflow-scheduler (LocalExecutor runs tasks there).
-    # Do not mount the socket on the webserver — needed when Airflow UI is public later.
+    # Do not mount the socket on the api-server — needed when Airflow UI is public later.
   user: "${AIRFLOW_UID:-1000}:0"
   depends_on:
     airflow-postgres:
@@ -498,7 +502,10 @@ services:
         # dags/plugins — those stay host-owned so developers can add DAGs.
         mkdir -p /sources/logs
         chown -R "${AIRFLOW_UID:-1000}:0" /sources/logs
-        exec /entrypoint airflow version
+        /entrypoint airflow version
+        # Airflow 3 Task SDK reads connections from the metadata DB.
+        /entrypoint airflow connections delete minio_logs >/dev/null 2>&1 || true
+        /entrypoint airflow connections add minio_logs --conn-uri "$${AIRFLOW_CONN_MINIO_LOGS}"
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: "true"
@@ -513,16 +520,40 @@ services:
       - airflow_logs:/sources/logs
       # dags/plugins are not mounted here — init must not touch host repo trees
 
-  airflow-webserver:
+  airflow-api-server:
     <<: *airflow-common
-    container_name: airflow-webserver
+    container_name: airflow-api-server
     restart: unless-stopped
     profiles: [airflow]
-    command: webserver
+    command: api-server
     ports:
       - "127.0.0.1:${AIRFLOW_WEBSERVER_PORT:-8081}:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: airflow-dag-processor
+    restart: unless-stopped
+    profiles: [airflow]
+    command: dag-processor
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -562,6 +593,8 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+      airflow-api-server:
+        condition: service_healthy
       minio-init:
         condition: service_completed_successfully
 

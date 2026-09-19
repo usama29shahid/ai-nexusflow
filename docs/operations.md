@@ -12,7 +12,7 @@ Quick reference when you forget start/stop steps. For first-time install see [se
 | **Branch — warehouse** | `clickhouse` | ClickHouse |
 | **Branch — lakehouse** | `lakehouse` | Polaris, polaris-setup, Spark Thrift, Trino |
 | **Platform** | `cloudbeaver` | CloudBeaver |
-| **Platform** | `airflow` | Airflow (postgres, webserver, scheduler) — Phase 1 orchestration |
+| **Platform** | `airflow` | Airflow (postgres, api-server, dag-processor, scheduler) — Phase 1 orchestration |
 | **Platform** | `signoz` | SigNoz — pipeline trace reader |
 | **Platform** | `openmetadata` | OpenMetadata — data catalog reader |
 | **Platform** | `vault` | Vault, vault-agent (when `NEXUS_SECRETS_BACKEND=vault`) |
@@ -139,7 +139,7 @@ docker compose ps
 
 curl http://localhost:8123/ping                    # ClickHouse → Ok.
 curl http://localhost:8080/v1/info                 # Trino
-curl http://127.0.0.1:8081/health                  # Airflow
+curl http://127.0.0.1:8081/api/v2/monitor/health   # Airflow 3 api-server
 curl "http://127.0.0.1:8200/v1/sys/health?sealedcode=200"   # Vault
 curl --fail http://localhost:8182/q/health         # Polaris
 ```
@@ -213,7 +213,7 @@ Stop both readers   →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
 dlt smoke           →  ./scripts/start.sh smoke
-Airflow first time  →  orchestration/airflow/README.md (sshd + key + .env; once per machine)
+Airflow first time  →  orchestration/airflow/README.md (.env host path; once per machine)
 Airflow             →  ./scripts/start.sh airflow  (UI :8081; recreate if key/.env changed)
 Elementary report   →  uv sync --extra elementary; edr report --profile-target "$NEXUS_ENV" (see above)
 Edge proxy (local)  →  ./scripts/proxy-hosts.sh install; ./scripts/start.sh proxy — docs/edge-proxy.md

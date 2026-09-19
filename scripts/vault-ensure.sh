@@ -60,6 +60,66 @@ secrets_file_ready() {
     && grep -q '^MINIO_ROOT_USER=' "${secrets_file}"
 }
 
+jwt_secret_in_file() {
+  [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
+    && grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=.\+' "${secrets_file}"
+}
+
+vault_root_token() {
+  python3 -c "import json; print(json.load(open('${INIT_FILE}'))['root_token'])"
+}
+
+vault_exec_auth() {
+  docker exec \
+    -e VAULT_ADDR=http://127.0.0.1:8200 \
+    -e VAULT_TOKEN="$(vault_root_token)" \
+    "${VAULT_CONTAINER}" vault "$@"
+}
+
+# Airflow 3 needs jwt_secret. Existing KV (seeded on 2.x) has no field; patch and
+# recreate Agent so secrets.env is complete before Compose interpolates.
+ensure_airflow_jwt_secret() {
+  if jwt_secret_in_file; then
+    return 0
+  fi
+  if [[ ! -f "${INIT_FILE}" ]]; then
+    echo "Cannot patch jwt_secret: missing ${INIT_FILE}" >&2
+    return 1
+  fi
+  local kv_base="secret/nexusflow/${NEXUS_ENV:-dev}"
+  echo "Ensuring jwt_secret on ${kv_base}/airflow (Airflow 3)..."
+  if ! vault_exec_auth kv get "${kv_base}/airflow" >/dev/null 2>&1; then
+    echo "Airflow KV missing at ${kv_base}/airflow; running full bootstrap..."
+    run_full_bootstrap
+  fi
+  if ! vault_exec_auth kv get -field=jwt_secret "${kv_base}/airflow" >/dev/null 2>&1; then
+    local jwt=""
+    local line
+    line="$(grep -E '^AIRFLOW__API_AUTH__JWT_SECRET=' .env 2>/dev/null | tail -1 || true)"
+    if [[ -n "${line}" ]]; then
+      jwt="${line#*=}"
+      jwt="${jwt%$'\r'}"
+    fi
+    if [[ -z "${jwt}" ]]; then
+      jwt="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    fi
+    echo "  Patching jwt_secret on ${kv_base}/airflow"
+    vault_exec_auth kv patch "${kv_base}/airflow" jwt_secret="${jwt}"
+  fi
+  echo "Recreating Vault Agent so secrets.env picks up JWT..."
+  docker compose --profile vault up -d --no-deps --force-recreate vault-agent
+  local i
+  for i in $(seq 1 30); do
+    if jwt_secret_in_file; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for AIRFLOW__API_AUTH__JWT_SECRET in ${secrets_file}." >&2
+  echo "  docker compose logs vault-agent" >&2
+  exit 1
+}
+
 vault_agent_running() {
   docker compose --profile vault ps vault-agent --status running -q 2>/dev/null | grep -q .
 }
@@ -126,6 +186,7 @@ if secrets_file_ready; then
     docker compose --profile vault up -d vault-agent
     wait_for_secrets_file 10 || true
   fi
+  ensure_airflow_jwt_secret
   exit 0
 fi
 
@@ -133,6 +194,7 @@ echo "Starting Vault Agent..."
 docker compose --profile vault up -d vault-agent
 
 if wait_for_secrets_file 30; then
+  ensure_airflow_jwt_secret
   exit 0
 fi
 

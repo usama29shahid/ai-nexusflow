@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.providers.standard.operators.bash import BashOperator
+from airflow.sdk import DAG
 from airflow.utils.trigger_rule import TriggerRule
 
 from nexus_elt_exec import elt_bash_command, elt_dbt_layer

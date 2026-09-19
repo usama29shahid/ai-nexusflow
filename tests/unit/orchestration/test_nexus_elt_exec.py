@@ -136,9 +136,104 @@ class EltExecTest(unittest.TestCase):
         self.assertIn("nexus_elt_exec", text)
         self.assertIn("elt_bash_command", text)
         self.assertNotIn("nexus_host_exec", text)
+        self.assertIn("from airflow.sdk import DAG", text)
+        self.assertIn("airflow.providers.standard.operators.bash", text)
+        self.assertNotIn("airflow.operators.bash", text)
         self.assertIn("observability_failed", text)
         self.assertIn("TriggerRule.ONE_FAILED", text)
         self.assertIn("observability-publish-run.sh failed", text)
+
+    def test_compose_uses_airflow_3_api_server(self) -> None:
+        compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn("nexus-airflow:3.3.2-python3.12", compose)
+        self.assertIn("airflow-api-server", compose)
+        self.assertIn("airflow-dag-processor", compose)
+        self.assertIn("command: api-server", compose)
+        self.assertNotIn("airflow-webserver", compose)
+        self.assertNotIn("command: webserver", compose)
+        dockerfile = (REPO_ROOT / "docker" / "airflow" / "Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("apache/airflow:3.3.2-python3.12", dockerfile)
+
+    def test_caddy_proxies_airflow_api_server(self) -> None:
+        sites = (REPO_ROOT / "docker" / "caddy" / "sites.caddy").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("airflow-api-server:8080", sites)
+        self.assertNotIn("airflow-webserver", sites)
+
+    def test_start_cleans_legacy_webserver_and_vault_jwt(self) -> None:
+        start = (REPO_ROOT / "scripts" / "start.sh").read_text(encoding="utf-8")
+        self.assertIn("docker inspect airflow-webserver", start)
+        self.assertIn("docker rm -f airflow-webserver", start)
+        self.assertNotIn("--remove-orphans", start)
+        ops = (REPO_ROOT / "docs" / "operations.md").read_text(encoding="utf-8")
+        self.assertNotIn("sshd", ops)
+        smoke = (
+            REPO_ROOT / "orchestration" / "airflow" / "dags" / "nexus_airflow_smoke.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("from airflow.sdk import DAG", smoke)
+        self.assertIn("airflow.providers.standard.operators.bash", smoke)
+
+    def test_vault_jwt_must_land_in_secrets_env(self) -> None:
+        """Empty JWT in secrets.env is not ready; wait loop must fail closed."""
+        import subprocess
+        import tempfile
+
+        ensure = (REPO_ROOT / "scripts" / "vault-ensure.sh").read_text(
+            encoding="utf-8"
+        )
+        tpl = (
+            REPO_ROOT / "docker" / "vault" / "templates" / "secrets.env.tpl"
+        ).read_text(encoding="utf-8")
+        compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        bootstrap = (REPO_ROOT / "scripts" / "vault-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "AIRFLOW__API_AUTH__JWT_SECRET={{ .Data.data.jwt_secret }}", tpl
+        )
+        self.assertRegex(
+            compose,
+            r"AIRFLOW__API_AUTH__JWT_SECRET:\s*\$\{AIRFLOW__API_AUTH__JWT_SECRET:\?",
+        )
+        self.assertIn("jwt_secret=", bootstrap)
+        self.assertIn("kv patch", bootstrap)
+
+        fn = ensure.split("ensure_airflow_jwt_secret() {", 1)[1].split(
+            "\nvault_agent_running()", 1
+        )[0]
+        self.assertLess(fn.find("kv patch"), fn.find("force-recreate vault-agent"))
+        self.assertLess(
+            fn.find("force-recreate vault-agent"),
+            fn.rfind("jwt_secret_in_file"),
+        )
+        self.assertIn("exit 1", fn)
+        self.assertIn("Timed out waiting for AIRFLOW__API_AUTH__JWT_SECRET", fn)
+        self.assertIn(
+            "grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=.\\+'",
+            ensure,
+        )
+
+        def landed(body: str) -> bool:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as fh:
+                fh.write(body)
+                path = fh.name
+            try:
+                return (
+                    subprocess.run(
+                        ["grep", "-q", r"^AIRFLOW__API_AUTH__JWT_SECRET=.\+", path],
+                        check=False,
+                    ).returncode
+                    == 0
+                )
+            finally:
+                Path(path).unlink(missing_ok=True)
+
+        self.assertFalse(landed("CLICKHOUSE_PASSWORD=x\nMINIO_ROOT_USER=minio\n"))
+        self.assertFalse(landed("AIRFLOW__API_AUTH__JWT_SECRET=\n"))
+        self.assertTrue(landed("AIRFLOW__API_AUTH__JWT_SECRET=token-value\n"))
 
 
 if __name__ == "__main__":

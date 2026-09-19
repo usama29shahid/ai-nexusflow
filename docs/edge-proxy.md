@@ -7,9 +7,9 @@ Public hostname for the capstone is intentional. That does **not** mean raw Comp
 ## Locked decisions (both modes)
 
 - **Caddy**, not nginx (unless you already know nginx). Subdomains, not paths (`airflow.…`, never `/airflow`).
-- Compose profile **`proxy`** (platform, not a data branch). Upstreams use Docker DNS (`airflow-webserver:8080`, `minio:9001`, …).
-- Airflow needs `AIRFLOW__WEBSERVER__BASE_URL` + `ENABLE_PROXY_FIX` when behind Caddy; strong unique admin password when public.
-- ELT runs in `nexus-elt` from the **scheduler** only (`docker.sock` not on the webserver).
+- Compose profile **`proxy`** (platform, not a data branch). Upstreams use Docker DNS (`airflow-api-server:8080`, `minio:9001`, …).
+- Airflow 3 needs `AIRFLOW__API__BASE_URL` (or `AIRFLOW__WEBSERVER__BASE_URL` fallback) + `ENABLE_PROXY_FIX` when behind Caddy; strong unique admin password when public.
+- ELT runs in `nexus-elt` from the **scheduler** only (`docker.sock` not on the api-server).
 - **Never publish:** OTel, ClickHouse native `:9000`, Spark Thrift, MinIO S3 API, OM Postgres/ES/ingestion, Polaris mgmt `:8182`, Airflow Postgres, Vault unseal/root.
 
 ## Local vs VPS (keep separate)
@@ -41,6 +41,7 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 #       NEXUS_PUBLIC_HOST=localhost.com
 #       NEXUS_CADDY_SITE_SCHEME=   # empty → entrypoint uses http://
 # Add proxy to COMPOSE_PROFILES (or ./scripts/start.sh proxy), then uncomment:
+#       AIRFLOW__API__BASE_URL=http://airflow.localhost.com
 #       AIRFLOW__WEBSERVER__BASE_URL=http://airflow.localhost.com
 #       AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX=True
 #       MINIO_BROWSER_REDIRECT_URL=http://minio.localhost.com
@@ -82,8 +83,8 @@ When implementing `infrastructure/terraform/` and VPS deploy Actions, satisfy al
 4. **Enable HTTPS via mode, not a hand-edit:** set `NEXUS_EDGE_MODE=vps` (entrypoint loads `Caddyfile.vps`), leave `NEXUS_CADDY_SITE_SCHEME` empty (entrypoint **exits** if it is `http://`), set `NEXUS_CADDY_ACME_EMAIL` (required), open **80/443** for ACME; firewall denies other app ports from the internet.
 5. **Bind backends to `127.0.0.1`:** Compose defaults `NEXUS_PUBLISH_BIND` to `127.0.0.1` (safe for raw `docker compose` on a VPS). `./scripts/start.sh` keeps that on vps and opens `0.0.0.0` only for local. Both **`start.sh` (before compose up)** and the Caddy entrypoint **exit** if `vps` + `NEXUS_PUBLISH_BIND=0.0.0.0`. Caddy keeps public 80/443.
 6. **Include profile `proxy`** in the VPS Compose profile set used by deploy/`start.sh`.
-7. **Render Airflow/MinIO public URLs** for HTTPS, e.g. `AIRFLOW__WEBSERVER__BASE_URL=https://airflow.${NEXUS_PUBLIC_HOST}`, `ENABLE_PROXY_FIX=True`, `MINIO_BROWSER_REDIRECT_URL=https://minio.${NEXUS_PUBLIC_HOST}`.
-8. **Secrets:** `NEXUS_SECRETS_BACKEND=vault`; generate Fernet/admin passwords on that machine — do not copy WSL `.env` ([vault.md](vault.md)).
+7. **Render Airflow/MinIO public URLs** for HTTPS, e.g. `AIRFLOW__API__BASE_URL=https://airflow.${NEXUS_PUBLIC_HOST}` (Compose also accepts `AIRFLOW__WEBSERVER__BASE_URL`), `ENABLE_PROXY_FIX=True`, `MINIO_BROWSER_REDIRECT_URL=https://minio.${NEXUS_PUBLIC_HOST}`.
+8. **Secrets:** `NEXUS_SECRETS_BACKEND=vault`; generate Fernet, JWT, and admin passwords on that machine — do not copy WSL `.env` ([vault.md](vault.md)).
 9. **Auth gate** for `docs.` / `elementary.` / home must exist before pointing public DNS at the box.
 10. **Same execution path:** Actions deploy = `git pull` + `./scripts/start.sh` (or documented equivalent). Actions is not a second ELT runner.
 
