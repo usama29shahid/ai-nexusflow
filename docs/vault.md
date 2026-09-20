@@ -122,11 +122,14 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 | `clickhouse_reader` | `username`, `password` | `CLICKHOUSE_READER_*` | consumers |
 | `clickhouse_admin` | `username`, `password` | `CLICKHOUSE_ADMIN_*` | break-glass |
 | `minio` | `root_user`, `root_password` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Compose, dlt archive |
+| *(file, not KV)* | AIStor Free license | `.nexusflow/minio.license` (gitignored bind-mount) | MinIO AIStor server — **not** Agent-rendered |
 | `polaris` | `client_secret` | `POLARIS_CLIENT_SECRET` | lakehouse profile |
 | `airflow` | `fernet_key`, `web_secret`, `jwt_secret`, `admin_password` | `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY`, `AIRFLOW__API_AUTH__JWT_SECRET`, `AIRFLOW_ADMIN_PASSWORD` | airflow profile |
 | *(future)* `route` | JWT / demo-user secrets when authenticated entities are implemented | TBD | dlt Route user entities — **not required for catalog-only** |
 
 `jwt_secret` is required for Airflow 3. Existing Vault paths seeded before this field get it on `./scripts/start.sh airflow` (`vault-ensure.sh` `kv patch` + Agent recreate) or on `vault-bootstrap.sh`. Do not copy a WSL JWT onto the VPS.
+
+The AIStor Free license is **not** in KV and is **not** written by Vault Agent. Place `.nexusflow/minio.license` on each host (same path as local). See [docker/minio/README.md](../docker/minio/README.md).
 
 Catalog-first Route ingestion needs no Vault path. Do not seed unused source secrets.
 

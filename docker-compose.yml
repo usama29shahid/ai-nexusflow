@@ -6,7 +6,8 @@
 #   vault       — HashiCorp Vault + Agent (NEXUS_SECRETS_BACKEND=vault)
 #   proxy       — Caddy edge (*.NEXUS_PUBLIC_HOST); see docs/edge-proxy.md
 #
-# Always (no profile): MinIO, minio-init, otel-collector
+# Always (no profile): MinIO AIStor Free, minio-init, otel-collector
+# License (gitignored): .nexusflow/minio.license — see docker/minio/README.md
 # Optional readers: signoz, openmetadata (add to COMPOSE_PROFILES or ./scripts/start.sh observability)
 # Airflow: add airflow to COMPOSE_PROFILES or: docker compose --profile airflow up -d
 # Proxy:   docker compose --profile proxy up -d  (or ./scripts/start.sh proxy)
@@ -189,14 +190,15 @@ services:
       retries: 5
 
   # ============================================================
-  # MinIO — shared object store (always on; not a profile)
+  # MinIO AIStor Free — shared object store (always on; not a profile)
+  # Standalone only (one node). Pin the image; do not use :latest.
   # ============================================================
   minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE:-quay.io/minio/aistor/minio:RELEASE.2026-08-07T18-34-35Z}
     container_name: minio
     restart: unless-stopped
 
-    command: server /data --console-address ":9001"
+    command: server /data --console-address ":9001" --license /minio.license
 
     ports:
       - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${MINIO_API_PORT:-9002}:9000"
@@ -210,24 +212,19 @@ services:
 
     volumes:
       - minio_data:/data
+      - ${MINIO_LICENSE_FILE:-.nexusflow/minio.license}:/minio.license:ro
 
     healthcheck:
-      test:
-        [
-          "CMD",
-          "curl",
-          "-f",
-          "http://localhost:9000/minio/health/live"
-        ]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 12
 
   # ============================================================
   # MinIO buckets — both capabilities (always; one-shot)
   # ============================================================
   minio-init:
-    image: minio/mc:latest
+    image: ${MINIO_MC_IMAGE:-quay.io/minio/aistor/mc:RELEASE.2026-09-06T02-44-40Z}
     container_name: minio-init
     restart: "no"
 

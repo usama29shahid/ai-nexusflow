@@ -170,7 +170,10 @@ sync_otel_collector_config() {
 }
 
 ensure_shared_infra() {
-  echo "Starting shared infra (MinIO + otel-collector; no profile)..."
+  echo "Starting shared infra (MinIO AIStor Free + otel-collector; no profile)..."
+  # shellcheck source=scripts/minio_license.sh
+  source "${ROOT}/scripts/minio_license.sh"
+  require_minio_license || exit 1
   docker compose up -d minio minio-init
   sync_otel_collector_config
 }

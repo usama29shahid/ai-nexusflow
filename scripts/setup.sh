@@ -108,6 +108,10 @@ else
   echo "Secrets backend: env (.env)"
 fi
 
+# shellcheck source=scripts/minio_license.sh
+source "${ROOT}/scripts/minio_license.sh"
+require_minio_license || exit 1
+
 echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES}; MinIO + OTel always)..."
 docker compose up -d
 

@@ -42,8 +42,8 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 ## Local development
 
 - Run Python, `uv`, dlt, and dbt on the host from the repository root; do not run `uv sync` in a bind-mounted Compose container.
-- Docker Compose runs infrastructure: MinIO + OTel Collector always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow on-demand via `airflow`; CloudBeaver via `cloudbeaver`; SigNoz / OpenMetadata via `signoz` / `openmetadata`.
-- Use `.env` for local configuration; secrets on the VPS come from HashiCorp Vault via Agent (see `docs/vault.md`). Local WSL may use `NEXUS_SECRETS_BACKEND=env` until Vault is running. Never commit `.env`, `profiles.yml`, credentials, API keys, or tokens.
+- Docker Compose runs infrastructure: MinIO AIStor Free + OTel Collector always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow on-demand via `airflow`; CloudBeaver via `cloudbeaver`; SigNoz / OpenMetadata via `signoz` / `openmetadata`.
+- Use `.env` for local configuration; secrets on the VPS come from HashiCorp Vault via Agent (see `docs/vault.md`). Local WSL may use `NEXUS_SECRETS_BACKEND=env` until Vault is running. Never commit `.env`, `profiles.yml`, credentials, API keys, tokens, or `.nexusflow/minio.license`.
 - Default environment is `NEXUS_ENV=dev`. `prd` is a Phase 2/Terraform naming contract, not a second local stack.
 - dbt does not load `.env` itself; source it before dbt commands. Keep dbt `--target` equal to `NEXUS_ENV`.
 

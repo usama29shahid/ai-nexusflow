@@ -8,18 +8,20 @@ Airflow is Dockerized; DAG tasks run an ephemeral **`nexus-elt`** job container 
 
 Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running. ClickHouse RBAC (loader / transformer / reader / admin) is **implemented** — bootstrap via `./scripts/clickhouse-rbac-bootstrap.sh`; MinIO IAM stays deferred — see [rbac.md](rbac.md).
 
-Docker Compose runs **MinIO and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`. On a **16 GB / 4-core** VPS, keep profiles strict (ClickHouse + Airflow day-to-day); do not start every stack at once.
+Docker Compose runs **MinIO AIStor Free and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). Copy the Free license to `.nexusflow/minio.license` before the first start ([docker/minio/README.md](../docker/minio/README.md)). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`. On a **16 GB / 4-core** VPS, keep profiles strict (ClickHouse + Airflow day-to-day); do not start every stack at once.
 
 ```text
 git clone
 cp .env.example .env          # or paste your .env
+mkdir -p .nexusflow
+cp /path/to/aistor-license .nexusflow/minio.license   # gitignored; see docker/minio/README.md
 ./scripts/setup.sh            # docker compose up -d && uv sync
 ```
 
 | Component | Purpose | Where it runs |
 | --- | --- | --- |
 | Python, uv, DLT, dbt | App / ELT | Host |
-| MinIO | Shared object store (no profile) | Docker |
+| MinIO AIStor Free | Shared S3 object store (no profile; license `.nexusflow/minio.license`) | Docker |
 | OTel Collector | Observability gateway → `nexus-telemetry-{env}` (always on) | Docker |
 | SigNoz | Trace UI reader (`profile: signoz`) | Docker |
 | OpenMetadata | Data catalog reader (`profile: openmetadata`) | Docker |
@@ -105,7 +107,9 @@ MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin123
 ```
 
-On the **VPS**, move passwords and tokens into Vault KV (see [vault.md](vault.md)). Keep only configuration in `.env` when `NEXUS_SECRETS_BACKEND=vault`.
+**AIStor Free license:** copy the downloaded file to **`.nexusflow/minio.license`** (gitignored). Never commit it. See [docker/minio/README.md](../docker/minio/README.md).
+
+On the **VPS**, move passwords and tokens into Vault KV (see [vault.md](vault.md)). Keep only configuration in `.env` when `NEXUS_SECRETS_BACKEND=vault`. Keep the license as that same file path on the VPS clone.
 
 ---
 
@@ -115,8 +119,8 @@ Full standard: [vault.md](vault.md).
 
 | Mode | `NEXUS_SECRETS_BACKEND` | Where secrets live |
 | --- | --- | --- |
-| Local WSL (default) | `env` | `.env` (gitignored) |
-| Hostinger VPS (target) | `vault` | Vault KV v2 → Agent → `.nexusflow/secrets.env` |
+| Local WSL (default) | `env` | `.env` (gitignored); AIStor license → `.nexusflow/minio.license` |
+| Hostinger VPS (target) | `vault` | Vault KV v2 → Agent → `.nexusflow/secrets.env`; AIStor license stays `.nexusflow/minio.license` |
 
 Prefer `./scripts/start.sh` — it loads secrets, unseals Vault when needed, and starts Compose:
 
@@ -126,12 +130,14 @@ Prefer `./scripts/start.sh` — it loads secrets, unseals Vault when needed, and
 ./scripts/start.sh dbt debug --project-dir branches/dlt_dbt_clickhouse
 ```
 
-Or manually:
+Or manually (license file must already exist as a **file**, not a directory):
 
 ```bash
 source scripts/load-secrets.sh
 docker compose up -d
 ```
+
+Prefer `./scripts/start.sh` / `./scripts/setup.sh` — those refuse to start if `.nexusflow/minio.license` is missing. Bare `docker compose up` does **not** check; see [docker/minio/README.md](../docker/minio/README.md).
 
 When `NEXUS_SECRETS_BACKEND=env`, `load-secrets.sh` sources `.env` only.
 
@@ -141,11 +147,11 @@ Never commit `.env`, Vault root token, unseal keys, or Agent credentials.
 
 ## Docker Compose
 
-One file at the repo root. **Profiles name stacks**, not every container. MinIO has no profile so it always starts. Isolation between capabilities is buckets on that MinIO, not a second Compose project. Design: [architecture.md](architecture.md).
+One file at the repo root. **Profiles name stacks**, not every container. MinIO AIStor Free has no profile so it always starts (license: `.nexusflow/minio.license`). Isolation between capabilities is buckets on that store, not a second Compose project. Design: [architecture.md](architecture.md).
 
 | Profile | Starts | Maps to |
 | --- | --- | --- |
-| *(none)* | MinIO, otel-collector | Shared object store + observability gateway |
+| *(none)* | MinIO AIStor Free, otel-collector | Shared object store + observability gateway |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `cloudbeaver` | CloudBeaver web database IDE | Database administration and SQL exploration |
@@ -170,10 +176,11 @@ COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver
 COMPOSE_PROFILES=clickhouse,lakehouse,airflow
 ```
 
-From the repo root:
+From the repo root, **start with `./scripts/start.sh`** (checks `.nexusflow/minio.license`). Use Compose directly only for inspect / one-off profiles after the license file already exists:
 
 ```bash
-docker compose up -d
+./scripts/start.sh              # daily start — license guard + profiles from .env
+
 docker compose ps
 docker compose logs
 docker compose logs clickhouse
@@ -185,9 +192,11 @@ docker compose down          # keeps named volumes
 # docker compose down -v     # deletes ClickHouse/MinIO data — avoid
 ```
 
+Do **not** pair `./scripts/start.sh` with a second `docker compose up -d` in the same step. Bare `docker compose up -d` does not check the license.
+
 Switching stacks: change `COMPOSE_PROFILES` and `docker compose up -d`. Do **not** use `down -v` to switch — that wipes MinIO buckets. `down` without `-v` stops containers and keeps `minio_data` / `clickhouse_data`.
 
-If `.env` has no `COMPOSE_PROFILES`, a bare `docker compose up -d` starts **MinIO only**. `./scripts/setup.sh` defaults to `clickhouse` when the variable is unset.
+If `.env` has no `COMPOSE_PROFILES`, a bare `docker compose up -d` starts **MinIO AIStor Free only**. `./scripts/setup.sh` defaults to `clickhouse` when the variable is unset. Bare Compose still requires `.nexusflow/minio.license` as a file; a missing path can become a directory — [docker/minio/README.md](../docker/minio/README.md).
 
 There is no application `docker compose build` for Python. Images are pulled. The Airflow image includes the amazon provider used for MinIO remote task logging.
 

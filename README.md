@@ -11,7 +11,7 @@ User request → LLM + RAG (org rules) → select enabled branch → Airflow →
 | Capability | Pattern | Primary output |
 | --- | --- | --- |
 | **dlt_dbt_clickhouse** | dlt → ClickHouse → dbt | ClickHouse |
-| **dlt_dbt_spark_iceberg** | dlt → Iceberg (Polaris) → dbt-spark → Trino | Iceberg on MinIO |
+| **dlt_dbt_spark_iceberg** | dlt → Iceberg (Polaris) → dbt-spark → Trino | Iceberg on MinIO (AIStor Free) |
 
 Platform design: [docs/architecture.md](docs/architecture.md). Warehouse: [docs/dlt-dbt-clickhouse.md](docs/dlt-dbt-clickhouse.md). Lakehouse: [docs/dlt-dbt-spark-iceberg.md](docs/dlt-dbt-spark-iceberg.md).
 
@@ -31,15 +31,15 @@ Details and checklists: [docs/roadmap.md](docs/roadmap.md).
 
 ## Current status
 
-**Environment and repo skeleton are ready.** Pipelines are not.
+**Phase 1 Milestone 1 is in progress.** Route `products` warehouse ELT (dlt archive + ClickHouse Bronze/silver/Gold + Airflow DAG + lake producers) is live. Other catalog endpoints and the lakehouse branch are still ahead. Details: [docs/roadmap.md](docs/roadmap.md).
 
 - Host uv (Python 3.12, DLT, dbt-clickhouse) — not inside Docker
-- Docker Compose: MinIO always; `COMPOSE_PROFILES=clickhouse,lakehouse` (ClickHouse + Polaris + Spark Thrift + Trino)
+- Docker Compose: MinIO AIStor Free always (license `.nexusflow/minio.license`); `COMPOSE_PROFILES=clickhouse,lakehouse` (ClickHouse + Polaris + Spark Thrift + Trino)
 - dbt project: `branches/dlt_dbt_clickhouse`
 - Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until M2)
 - Branch switches: `config/branches.yaml`
 
-**Next:** Phase 1 Milestone 1 — first **dlt_dbt_clickhouse** pipeline.
+**Next:** remaining Route catalog endpoints (`categories` / `brands`), then SigNoz / OpenMetadata look-and-feel.
 
 ---
 
@@ -50,11 +50,13 @@ Same on **WSL**, **Hostinger VPS**, and **AWS EC2**. Copy `.env`, then bootstrap
 ```bash
 cd ~/projects/ai-nexusflow
 cp .env.example .env          # or paste your existing .env
+mkdir -p .nexusflow
+cp /path/to/aistor-license .nexusflow/minio.license   # gitignored
 chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
-That is `docker compose up -d` (profiles from `.env`) plus `uv sync` on the host. Python/DLT/dbt never run inside Compose.
+That is `docker compose up -d` (profiles from `.env`) plus `uv sync` on the host. Python/DLT/dbt never run inside Compose. The AIStor license must exist as a file before `setup.sh` — [docs/setup.md](docs/setup.md), [docker/minio/README.md](docker/minio/README.md).
 
 ```bash
 curl http://localhost:8123/ping

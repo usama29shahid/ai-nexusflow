@@ -238,13 +238,13 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 
 ## Development vs production
 
-**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. **Secrets on the VPS:** HashiCorp Vault (KV v2) + Vault Agent → env injection — see [vault.md](vault.md). ClickHouse RBAC is **implemented**; MinIO IAM and lakehouse RBAC stay deferred — see [rbac.md](rbac.md). See [setup.md](setup.md).
+**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. **Secrets on the VPS:** HashiCorp Vault (KV v2) + Vault Agent → env injection — see [vault.md](vault.md). The AIStor license stays a **host file** (`.nexusflow/minio.license`), not a Vault KV value. ClickHouse RBAC is **implemented**; MinIO IAM and lakehouse RBAC stay deferred — see [rbac.md](rbac.md). See [setup.md](setup.md).
 
-**Compose profiles** (one file at the repo root). Name profiles after **stacks**, not every container. MinIO has **no** profile so it always starts. Isolation between capabilities is buckets and catalogs on that MinIO, not a second Compose project.
+**Compose profiles** (one file at the repo root). Name profiles after **stacks**, not every container. **MinIO AIStor Free** has **no** profile so it always starts (standalone; license file `.nexusflow/minio.license` — [setup.md](setup.md), [docker/minio/README.md](../docker/minio/README.md)). Isolation between capabilities is buckets and catalogs on that store, not a second Compose project.
 
 | Profile | Starts | Capability |
 | --- | --- | --- |
-| *(none)* | MinIO | Shared object store |
+| *(none)* | MinIO AIStor Free | Shared S3 object store |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `airflow` | Airflow (on-demand) | Orchestration (Phase 1) |

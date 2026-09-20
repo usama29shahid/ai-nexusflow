@@ -151,6 +151,11 @@ activemq-data/
 .env
 .envrc
 .nexusflow/
+
+# MinIO AIStor Free license (canonical path is .nexusflow/minio.license)
+*.license
+minio.license
+license.minio
 .venv
 env/
 venv/

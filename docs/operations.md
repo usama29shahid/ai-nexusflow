@@ -8,7 +8,7 @@ Quick reference when you forget start/stop steps. For first-time install see [se
 
 | Kind | Compose profile | Services |
 | --- | --- | --- |
-| **Always** | *(none)* | MinIO, minio-init, otel-collector |
+| **Always** | *(none)* | MinIO AIStor Free, minio-init, otel-collector |
 | **Branch — warehouse** | `clickhouse` | ClickHouse |
 | **Branch — lakehouse** | `lakehouse` | Polaris, polaris-setup, Spark Thrift, Trino |
 | **Platform** | `cloudbeaver` | CloudBeaver |
