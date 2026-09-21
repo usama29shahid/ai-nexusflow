@@ -2,7 +2,7 @@
 
 AI-NexusFlow is a **multi-branch data engineering execution platform**. The same ingestion requirement can be routed to the most appropriate implementation. It is one platform with two selectable backends, not a pile of unrelated pipelines.
 
-The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. It is built in **Phase 3**, after Phase 1 (two capabilities, Airflow, and observability producers) is runnable and Phase 2 (Terraform, CI, reader tools) supports the ops story.
+The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. Build order is [backlog.md](backlog.md) (RAG / Streamlit = items **11–12** after semantic layer and platform ops). Portfolio phase labels in [roadmap.md](roadmap.md) are not hard gates.
 
 End state:
 
@@ -222,23 +222,23 @@ Only enabled capabilities participate. Combinations can change over time (for ex
 
 ## Cross-cutting layers
 
-**Airflow (Phase 1)** orchestrates enabled capabilities. It is not another processing backend. **One DAG per source + target + endpoint** (e.g. `route_clickhouse_products`) with layer tasks. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). Pipeline telemetry goes to the observability data lake (`nexus-telemetry-{env}`). See [observability.md](observability.md).
+**Airflow** orchestrates enabled capabilities. It is not another processing backend. **One DAG per source + target + endpoint** (e.g. `route_clickhouse_products`) with layer tasks. Remote task logs in MinIO (`nexus-airflow-logs-{env}`). Pipeline telemetry goes to the observability data lake (`nexus-telemetry-{env}`). See [observability.md](observability.md).
 
 ```text
 Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 ```
 
-**Observability producers (Phase 1)** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`.
+**Observability producers** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`. Warehouse `products` path already does this (backlog item **0**).
 
-**Terraform, GitHub Actions, reader tools (Phase 2)** — **additive** env promotion (`dev`/`prd`), **CI/CD via GitHub Actions** (lint/test/build/terraform/deploy), and SigNoz / OpenMetadata / Elementary product setup. Terraform owns environment identity and VPS edge settings; Actions is the only primary CI/CD path and calls `./scripts/start.sh` on deploy — it does **not** become a second ELT runner. Local stays production-shaped so day-one deploy is automation, not a rewrite ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
+**Readers, IAM, Terraform, VPS** — order in [backlog.md](backlog.md): SigNoz/OM product setup (**2–3**), MinIO IAM (**4**), local Terraform (**5**), Iceberg parity (**6**), …, VPS + GitHub Actions (**10**). Local Terraform configures API resources against Compose; Actions + VPS Terraform own edge/DNS/`prd` and deploy (`git pull` + `./scripts/start.sh`) — Actions is **not** a second ELT runner ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
 
-**LLM / RAG / Streamlit (Phase 3)** — agents that select and generate against enabled capabilities.
+**LLM / RAG / Streamlit** — backlog items **11–12**; agents select and generate against enabled capabilities.
 
 ---
 
 ## Development vs production
 
-**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. **Secrets on the VPS:** HashiCorp Vault (KV v2) + Vault Agent → env injection — see [vault.md](vault.md). The AIStor license stays a **host file** (`.nexusflow/minio.license`), not a Vault KV value. ClickHouse RBAC is **implemented**; MinIO IAM and lakehouse RBAC stay deferred — see [rbac.md](rbac.md). See [setup.md](setup.md).
+**Development and VPS/EC2:** infrastructure in Docker; Python, uv, DLT, and dbt on the **host** (WSL locally, Ubuntu on Hostinger or EC2). Same `./scripts/setup.sh`. **Secrets on the VPS:** HashiCorp Vault (KV v2) + Vault Agent → env injection — see [vault.md](vault.md). The AIStor license stays a **host file** (`.nexusflow/minio.license`), not a Vault KV value. ClickHouse RBAC is **implemented**; MinIO IAM is backlog item **4**; lakehouse RBAC with Iceberg (item **6**) — see [rbac.md](rbac.md). See [setup.md](setup.md).
 
 **Compose profiles** (one file at the repo root). Name profiles after **stacks**, not every container. **MinIO AIStor Free** has **no** profile so it always starts (standalone; license file `.nexusflow/minio.license` — [setup.md](setup.md), [docker/minio/README.md](../docker/minio/README.md)). Isolation between capabilities is buckets and catalogs on that store, not a second Compose project.
 
@@ -247,15 +247,15 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 | *(none)* | MinIO AIStor Free | Shared S3 object store |
 | `clickhouse` | ClickHouse | `dlt_dbt_clickhouse` |
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
-| `airflow` | Airflow (on-demand) | Orchestration (Phase 1) |
-| `signoz` | SigNoz | Pipeline trace reader (Phase 2 product setup) |
-| `openmetadata` | OpenMetadata | Data catalog reader (Phase 2 product setup) |
+| `airflow` | Airflow (on-demand) | Orchestration |
+| `signoz` | SigNoz | Pipeline trace reader (product setup: backlog **2**) |
+| `openmetadata` | OpenMetadata | Data catalog reader (product setup: backlog **3**) |
 | `vault` | HashiCorp Vault + Agent | Secrets — [vault.md](vault.md) |
 | `proxy` | Caddy edge | Public/local hostnames — [edge-proxy.md](edge-proxy.md) |
 
 Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, `proxy`, or comma-separated). Airflow and proxy are optional; start with `./scripts/start.sh airflow` / `./scripts/start.sh proxy` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
 
-**Production cutover (Phase 2):** GitHub Actions + Terraform per [ci-cd.md](ci-cd.md). Same Compose + host `uv` model; `NEXUS_EDGE_MODE=vps`. Not part of Phase 1 implementation, but Phase 1 must stay deploy-shaped.
+**Production cutover (backlog item 10):** GitHub Actions + Terraform per [ci-cd.md](ci-cd.md). Same Compose + host `uv` model; `NEXUS_EDGE_MODE=vps`. Local stays deploy-shaped before that item.
 
 ### Airflow execution runtime (locked)
 
@@ -271,7 +271,7 @@ Setup: [orchestration/airflow/README.md](../orchestration/airflow/README.md), [d
 
 **Lab VPS (≈16 GB / 4 cores):** keep Compose profiles strict — ClickHouse + Airflow (+ Vault) day-to-day; start `lakehouse` / SigNoz / OpenMetadata only when needed. Do not `./scripts/start.sh all`. One DAG at a time. Optional ops agents (OpenClaw or Hermes) are **ops assistants**, not a second orchestrator; prefer one, API-backed, loopback access. When Airflow is public later, keep `docker.sock` on the **scheduler only** (not the api-server).
 
-**Phase 2/3 fit:** Terraform creates names only. Actions lint/test/deploy (and build the ELT image) — not a second ingest runner. LLM/Streamlit/FastAPI consume enabled branches and Airflow status; they do not change this worker contract.
+**Backlog fit:** Local Terraform (item **5**) and VPS Terraform (item **10**) create locked names only. Actions lint/test/deploy (and build the ELT image) — not a second ingest runner. LLM/Streamlit/FastAPI (items **11–12**) consume enabled branches and Airflow status; they do not change this worker contract.
 
 ---
 
@@ -327,9 +327,9 @@ ai-nexusflow/
 | `branches/dlt_dbt_clickhouse/` | Warehouse ELT (dlt + dbt-clickhouse) |
 | `branches/dlt_dbt_spark_iceberg/` | Lakehouse ELT (dlt + dbt-spark + Iceberg) |
 | `orchestration/airflow/` | DAGs for enabled branches |
-| `agents/` | Planner, router, generator, validator, executor (Phase 3) |
-| `ui/` | Streamlit (Phase 3) |
+| `agents/` | Planner, router, generator, validator, executor (backlog **12**) |
+| `ui/` | Streamlit (backlog **11**) |
 | `docker/` | Init scripts; Compose file stays at root (profiles in that file) |
-| `infrastructure/` | Terraform (Phase 2) |
+| `infrastructure/` | Terraform (local **5**, VPS **10**) |
 | `config/` | Env and branch activation |
-| `docs/` | Platform architecture, warehouse, lakehouse, dlt, dbt, observability, environments, roadmap, setup |
+| `docs/` | Platform architecture, warehouse, lakehouse, dlt, dbt, observability, environments, [backlog](backlog.md), roadmap, setup |

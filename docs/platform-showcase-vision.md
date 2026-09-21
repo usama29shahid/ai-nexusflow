@@ -8,16 +8,17 @@
 
 ## Purpose and status
 
-This document is a future reference for the Phase 3 LLM/RAG capability. It
+This document is a future reference for the LLM/RAG capability ([backlog.md](backlog.md) item **12**). It
 describes the intended logic for turning a natural-language ELT requirement
 into reviewed, validated, and executable artifacts, plus the information a
-future Streamlit portfolio/control dashboard may present.
+future Streamlit portfolio/control dashboard may present (item **11**).
 
 This is a vision document, not an implementation specification. The existing
-architecture, branch, extraction, modeling, environment, observability, and
+architecture, branch, extraction, modeling, environment, observability, backlog, and
 roadmap documents remain authoritative:
 
 - [Architecture](architecture.md)
+- [Backlog](backlog.md)
 - [Roadmap](roadmap.md)
 - [dlt extraction](dlt-extraction.md)
 - [ClickHouse ELT](dlt-dbt-clickhouse.md)
@@ -25,7 +26,7 @@ roadmap documents remain authoritative:
 - [Observability](observability.md)
 - [Environments](environments.md)
 
-The capability depends on the earlier phases being runnable. Phase 1 delivers the data branches, Airflow orchestration, and the observability data lake. This vision must not delay the first working ELT vertical slice.
+The capability depends on earlier backlog items being runnable ([backlog.md](backlog.md)). Warehouse producers and Airflow are already live (item **0**). This vision must not jump ahead of items **1–10**.
 
 ## Illustrative user requirement
 
@@ -313,15 +314,15 @@ The dashboard may link to:
 - generated artifact preview;
 - dbt Docs, Airflow, CloudBeaver, and MinIO.
 
-## Phase boundaries
+## Backlog boundaries
 
-This vision belongs to **Phase 3** (LLM) and must not pull future work into the current vertical slice.
+This vision belongs to backlog items **11–12** (Streamlit / RAG) and must not pull future work ahead of [backlog.md](backlog.md) items **1–10**.
 
 ### Before this capability
 
-- Verify `dlt_dbt_clickhouse` end to end with observability lake writes.
-- Verify the lakehouse capability according to the roadmap.
-- Airflow orchestration over enabled capabilities (Phase 1).
+- Verify `dlt_dbt_clickhouse` end to end with observability lake writes (done — backlog **0**).
+- Readers, MinIO IAM, local Terraform, Iceberg parity, endpoints, semantic layer, docs auth, VPS — backlog **1–10**.
+- Airflow orchestration over enabled capabilities.
 - Establish stable dlt, dbt, run-ID, artifact, and observability contracts.
 
 ### Deferred by this document

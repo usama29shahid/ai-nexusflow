@@ -9,19 +9,19 @@ Do **not** build a custom logging UI or a ClickHouse “ops log” table. Pipeli
 | Did transforms and tests succeed? | **dbt** | `target/` on host; **artifacts copied** to the observability lake after each run |
 | Pipeline traces, metrics, structured events | **OpenTelemetry** → OTel Collector → lake | MinIO `nexus-telemetry-{env}/otel/` |
 | Data catalog / lineage (read) | **OpenMetadata** (current) | OM Postgres + Elasticsearch — **index** fed by lake + warehouse connectors |
-| Pipeline trace UI (read) | **SigNoz** (current) | SigNoz internal store — **index** fed by lake replay |
+| Pipeline trace UI (read) | **SigNoz** (current) | SigNoz internal store — **index** fed by **live OTLP** (collector forward) and **lake replay** (backlog item **2**; `observability-ingest.sh signoz`) |
 | dbt DQ history (read) | **Elementary** (current) | `elementary_{env}` in warehouse — **index**; lake holds `run_results.json` archives |
 | Which rows came from which run? | **data** | `run_id` on Bronze, carried in dbt where needed |
 
 A pipeline run is **not complete** until it writes to the observability lake (`summaries/runs/{run_id}.json`, dbt artifacts when dbt ran, OTLP batches when the collector is up). SigNoz, OpenMetadata, and Elementary **do not need to be running** during the run.
 
-See also: [architecture.md](architecture.md), [roadmap.md](roadmap.md), [environments.md](environments.md).
+See also: [architecture.md](architecture.md), [backlog.md](backlog.md), [roadmap.md](roadmap.md), [environments.md](environments.md).
 
 ---
 
 ## Observability data lake (system of record)
 
-**Bucket:** `nexus-telemetry-{env}` (e.g. `nexus-telemetry-dev` until Terraform).
+**Bucket:** `nexus-telemetry-{env}` (e.g. `nexus-telemetry-dev` until `prd` / backlog **10**).
 
 **Role:** Durable, vendor-neutral archive for migration. If SigNoz, OpenMetadata, or Elementary are replaced later, replay or re-ingest from this bucket — **do not** change dlt/dbt/Airflow emit code.
 
@@ -169,19 +169,28 @@ Milestone 1 implements the lake + instrumentation for the ClickHouse branch; lak
 | `nexus-airflow-logs-{env}` | Airflow task stdout — **ops logs** |
 | **`nexus-telemetry-{env}`** | **Observability data lake** |
 
-`prd` suffixes after Terraform.
+`prd` suffixes after backlog item **10**.
 
 ---
 
-## Reader tools (after first Airflow E2E)
+## Reader tools (backlog items 2–3)
 
-SigNoz and OpenMetadata Compose profiles exist locally. **Product setup** (native config, lake→index ingest, dashboards) comes **after** the first endpoint DAG (`route_clickhouse_products`) so you can inspect a full producer run. Terraform / GitHub Actions / `prd` stay Phase 2. Phase 1 still requires full lake writes via `common/observability` whether or not those UIs are running. Pipeline code must not call those APIs.
+SigNoz and OpenMetadata Compose profiles exist locally. **Product setup** is backlog items **2–3**.
 
-## Phase 3 UI and agents (future)
+**SigNoz (item 2) includes both:**
 
-- **Supabase** — user auth and session memory (not pipeline telemetry).
-- **Qdrant** — RAG over org standards in `docs/` (not pipeline telemetry).
-- **Streamlit** — summarizes lake `summaries/` and links to Airflow, SigNoz, OpenMetadata, Elementary; does not replace them.
+1. **Live OTLP** — collector forwards to SigNoz while the profile is up ([docker/otel/](../docker/otel/)).
+2. **Lake → SigNoz** — implement `./scripts/observability-ingest.sh signoz` to project `nexus-telemetry-{env}` into SigNoz’s native store (backfill / SigNoz-was-down). Today that script exits “not implemented.”
+
+OpenMetadata (item **3**) similarly gets warehouse connectors + catalog views; its lake projection can follow the same ingest script pattern (`openmetadata` target) when that item runs.
+
+Local Terraform is backlog **5**; GitHub Actions / VPS / `prd` are backlog **10**. Lake writes via `common/observability` remain required whether or not those UIs are running. Pipeline code must not call those APIs. Order: [backlog.md](backlog.md).
+
+## App UI and agents (backlog 11–12)
+
+- **Supabase** — user auth and session memory (not pipeline telemetry) — backlog **11**.
+- **Qdrant** — RAG over org standards in `docs/` (not pipeline telemetry) — backlog **12**.
+- **Streamlit** — summarizes lake `summaries/` and links to Airflow, SigNoz, OpenMetadata, Elementary; does not replace them — backlog **11**.
 
 Validation agents must reject generated pipelines that omit `common/observability` hooks or lake artifact upload.
 

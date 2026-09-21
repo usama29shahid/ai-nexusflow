@@ -21,7 +21,7 @@ REST API
             → Trino reads Iceberg (BI / analysts)
 ```
 
-Until source DAGs exist, the path runs on the host with `uv run` or via Airflow (Phase 1) against Docker Spark/Thrift (Milestone 2). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
+Until source DAGs exist, the path runs on the host with `uv run` or via Airflow against Docker Spark/Thrift (backlog item **6**). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until `prd` / backlog item 10**.
 
 Spark writes and maintains Iceberg (industry lakehouse pattern). Trino does **not** run dbt. Do not use the dbt-trino adapter on this capability.
 
@@ -54,8 +54,8 @@ Until Terraform, only `-dev` exists.
 | `nexus-dlt-dbt-clickhouse-dev` | Branch 1 JSONL archive. Not this capability. |
 | `nexus-dlt-dbt-spark-iceberg-archive-dev` | This capability’s raw API archive (replay). Not Iceberg. |
 | `nexus-dlt-dbt-spark-iceberg-dev` | Iceberg warehouse root for Polaris catalog `nexus_dev`. |
-| `nexus-airflow-logs-dev` | Airflow remote task logs (Phase 1). Not data. |
-| `nexus-telemetry-dev` | Observability data lake (Phase 1). Not raw API archive. |
+| `nexus-airflow-logs-dev` | Airflow remote task logs. Not data. |
+| `nexus-telemetry-dev` | Observability data lake. Not raw API archive. |
 
 Archive keys (same logic as the warehouse capability; different bucket):
 
@@ -125,13 +125,13 @@ Same logical table vs ClickHouse:
 
 ## dbt-spark
 
-Project `nexus_lakehouse`. Profile target = `NEXUS_ENV` (`dev` until Terraform). Adapter **`dbt-spark`**. Model `+schema` maps to Iceberg namespaces above.
+Project `nexus_lakehouse`. Profile target = `NEXUS_ENV` (`dev` until `prd` / backlog **10**). Adapter **`dbt-spark`**. Model `+schema` maps to Iceberg namespaces above.
 
 SQL models by default. Python/PySpark models only when SQL is a poor fit.
 
 ### Thrift (default) vs PySpark (complex models only)
 
-Thrift is the **dbt client protocol**, not a replacement for PySpark. Both talk to the **same** Spark SQL engine. dbt stays on the host; Spark stays in Docker (Milestone 2).
+Thrift is the **dbt client protocol**, not a replacement for PySpark. Both talk to the **same** Spark SQL engine. dbt stays on the host; Spark stays in Docker (backlog **6**).
 
 | Model | Connection | Why |
 | --- | --- | --- |
@@ -220,7 +220,7 @@ uv run dbt run --project-dir branches/dlt_dbt_spark_iceberg --target "$NEXUS_ENV
 
 ---
 
-## Compose (Milestone 2)
+## Compose (backlog item 6)
 
 Python/dlt/dbt on the **host**. Polaris, Spark Thrift, Trino, and MinIO in Docker. ClickHouse stays on profile `clickhouse` only.
 

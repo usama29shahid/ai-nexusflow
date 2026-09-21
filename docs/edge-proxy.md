@@ -1,6 +1,6 @@
 # Edge proxy (Caddy + subdomains)
 
-**Status:** local path implemented (Compose profile `proxy` — [`docker/caddy/`](../docker/caddy/)). **VPS / Terraform path is a separate contract** (Phase 2) — do not treat local hosts + HTTP as production.
+**Status:** local path implemented (Compose profile `proxy` — [`docker/caddy/`](../docker/caddy/)). **VPS / Terraform path is a separate contract** (backlog item **10**) — do not treat local hosts + HTTP as production.
 
 Public hostname for the capstone is intentional. That does **not** mean raw Compose ports on a VPS IP.
 
@@ -16,7 +16,7 @@ Public hostname for the capstone is intentional. That does **not** mean raw Comp
 
 | Concern | **Local** (`NEXUS_EDGE_MODE=local`) | **VPS** (`NEXUS_EDGE_MODE=vps`) |
 | --- | --- | --- |
-| Who configures it | Developer on WSL | Terraform + deploy workflow (Phase 2); not copy-paste of WSL `.env` |
+| Who configures it | Developer on WSL | Terraform + deploy workflow (backlog **10**); not copy-paste of WSL `.env` |
 | Name service | `./scripts/proxy-hosts.sh` (+ Windows hosts if browser is on Windows) | **DNS A records** (or wildcard). **No** `/etc/hosts` as production DNS |
 | `NEXUS_PUBLIC_HOST` | `localhost.com` | Real domain, e.g. `example.com` |
 | TLS | HTTP only (`Caddyfile.local`, `auto_https off`; scheme defaults to `http://`) | HTTPS + Let’s Encrypt (`Caddyfile.vps` selected by `NEXUS_EDGE_MODE=vps`; empty site scheme + `NEXUS_CADDY_ACME_EMAIL`) |
@@ -71,9 +71,9 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 | `signoz.` / `openmetadata.` | Readers | App login | App login |
 | `docs.` / `elementary.` | Static | Loopback OK | **Auth gate required** |
 
-## Deployment contract (Terraform / GitHub Actions — Phase 2)
+## Deployment contract (Terraform / GitHub Actions — backlog item 10)
 
-Phase 2 is **additive** ([environments.md](environments.md), [roadmap.md](roadmap.md), [ci-cd.md](ci-cd.md)). **GitHub Actions** is the primary CI/CD path; **Terraform** owns env/DNS/server edge settings. Modules and deploy workflows **must** treat edge as first-class and **must not** assume local mode.
+Backlog item **10** is **additive** ([environments.md](environments.md), [backlog.md](backlog.md), [ci-cd.md](ci-cd.md)). **GitHub Actions** is the primary CI/CD path; **Terraform** owns env/DNS/server edge settings on the VPS. Modules and deploy workflows **must** treat edge as first-class and **must not** assume local mode. Local Terraform (backlog **5**) does not require this VPS checklist.
 
 When implementing `infrastructure/terraform/` and VPS deploy Actions, satisfy all of the following (checklist for implementers):
 
@@ -113,7 +113,7 @@ Use this when `start.sh` or Caddy exits on start, or a VPS edge looks “half up
 2. Confirm `NEXUS_PUBLISH_BIND` is `127.0.0.1` or unset — never `0.0.0.0` on VPS.
 3. Prefer `./scripts/start.sh` over raw Compose on VPS so the early bind check runs.
 4. If Caddy logged the public-bind fatal **and** backends were up first (raw Compose): recreate backends after fixing env.
-5. Automated Terraform/Actions deploy that only sets the [deployment contract](#deployment-contract-terraform--github-actions--phase-2) defaults makes the bad-bind path **very unlikely**; treat an explicit `0.0.0.0` on VPS as a misconfiguration.
+5. Automated Terraform/Actions deploy that only sets the [deployment contract](#deployment-contract-terraform--github-actions--backlog-item-10) defaults makes the bad-bind path **very unlikely**; treat an explicit `0.0.0.0` on VPS as a misconfiguration.
 
 ## Secrets on VPS
 
@@ -125,4 +125,4 @@ Do not copy WSL `.env` or `.nexusflow/` keys. Generate Vault and Airflow Fernet 
 2. ~~Local Caddy + `proxy` profile + hosts script~~ (this slice).
 3. Keep local **production-shaped** (same scripts, names, images, edge routes) — [ci-cd.md](ci-cd.md).
 4. Auth gate (home + Supabase/Google and/or Caddy for static routes) — **before** public DNS.
-5. Phase 2: GitHub Actions + Terraform (`NEXUS_EDGE_MODE=vps`, DNS, HTTPS, Vault, `127.0.0.1` binds) — day-one deploy automated via the contract above.
+5. Backlog item **10**: GitHub Actions + Terraform (`NEXUS_EDGE_MODE=vps`, DNS, HTTPS, Vault, `127.0.0.1` binds) — day-one deploy automated via the contract above.

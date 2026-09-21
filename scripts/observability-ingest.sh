@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Batch ingest: observability lake → reader native stores (SigNoz, OpenMetadata, Elementary).
 #
-# Reader Compose profiles are not wired yet. This script is the future entrypoint for
-# lake replay / projection into tool indexes without changing pipeline emit code.
+# SigNoz target: implement under backlog item 2 (live OTLP already works via collector).
+# OpenMetadata / Elementary targets: backlog items 3 / later — see docs/backlog.md.
 #
 # Usage (from repo root, when implemented):
 #   ./scripts/observability-ingest.sh signoz
@@ -20,12 +20,12 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/observability-ingest.sh <reader>
 
-Readers (not implemented yet):
+Readers (implement per backlog — SigNoz = item 2):
   signoz         Replay lake OTLP batches into SigNoz
   openmetadata   Project lake + warehouse metadata into OpenMetadata
   elementary     Sync lake dbt artifacts into Elementary index
 
-See docs/observability.md
+See docs/observability.md and docs/backlog.md
 EOF
 }
 
@@ -36,8 +36,8 @@ case "${target}" in
     ;;
   signoz|openmetadata|elementary)
     echo "Reader ingest for '${target}' is not implemented yet." >&2
-    echo "Start MinIO + otel-collector; pipeline runs write to nexus-telemetry-{env}." >&2
-    echo "Enable the ${target} Compose profile when it is added to docker-compose.yml." >&2
+    echo "Lake writes: MinIO nexus-telemetry-{env} (required). Live OTLP→SigNoz works when profile signoz is up." >&2
+    echo "Implement lake→SigNoz under backlog item 2; see docs/backlog.md." >&2
     exit 2
     ;;
   *)

@@ -8,7 +8,7 @@ Related:
 - [dlt extraction](dlt-extraction.md) — dlt reads secrets from the environment
 - [Environments](environments.md) — `NEXUS_ENV` and naming
 - [Architecture](architecture.md) — infra on host vs Docker
-- [Role-based access (RBAC)](rbac.md) — ClickHouse loader/transformer accepted with products cutover; MinIO IAM deferred
+- [Role-based access (RBAC)](rbac.md) — ClickHouse loader/transformer implemented; MinIO IAM = [backlog.md](backlog.md) item **4**
 
 Official HashiCorp references:
 
@@ -103,7 +103,7 @@ Vault API listens on **`127.0.0.1:8200`** only — not exposed to the public int
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXUS_ENV` | `dev` until Terraform (`prd` naming contract later) |
+| `NEXUS_ENV` | `dev` until `prd` / backlog **10** |
 | `NEXUS_SECRETS_BACKEND` | `env` or `vault` |
 | `VAULT_ADDR` | e.g. `http://127.0.0.1:8200` |
 | `COMPOSE_PROFILES` | Which Docker stacks start |
@@ -280,7 +280,7 @@ Solo developer (no shared group): omit `NEXUS_SECRETS_GROUP`; bootstrap uses you
 
 ---
 
-## AWS secrets (complementary, Phase 2+)
+## AWS secrets (complementary, later / VPS+)
 
 When [Terraform](roadmap.md) lands on AWS:
 
@@ -312,7 +312,7 @@ Fail clearly in dlt when a required secret env var is missing (for example a fut
 | Done | `scripts/vault-ensure.sh`, `scripts/vault-bootstrap.sh`, `scripts/load-secrets.sh` |
 | Done | Verified: `dlt_clickhouse_smoke` with Vault-injected secrets |
 | Planned | Route catalog ingestion (no secrets); JWT secrets only when authenticated entities are added |
-| Held | Per-role MinIO IAM / lakehouse RBAC — not in this cutover |
+| Scheduled | Per-role MinIO IAM — backlog **4**; lakehouse RBAC — backlog **6** |
 | Implemented (dev) | ClickHouse `nexus_loader` / `nexus_transformer` / … — [rbac.md](rbac.md), [bronze-silver-cutover.md](bronze-silver-cutover.md) |
 
 Read this document before changing secrets layout, bootstrap scripts, or Compose Vault services.

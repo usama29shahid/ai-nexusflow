@@ -2,7 +2,7 @@
 
 Compose profile **`proxy`**. Shared routes in `sites.caddy`; TLS mode from **`NEXUS_EDGE_MODE`** (no hand-edit for HTTPS).
 
-| | Local | VPS (Phase 2) |
+| | Local | VPS (backlog **10**) |
 | --- | --- | --- |
 | Flag | `NEXUS_EDGE_MODE=local` | `NEXUS_EDGE_MODE=vps` (Terraform/Actions) |
 | Caddyfile | `Caddyfile.local` (`auto_https off`) | `Caddyfile.vps` (Let’s Encrypt) |
@@ -25,9 +25,9 @@ Open e.g. `http://airflow.localhost.com`. Windows browser → also update Window
 ## Auth
 
 Local: each tool’s own login.  
-Before VPS: gate `docs` / `elementary` / future home — [edge-proxy auth](../../docs/edge-proxy.md#auth-locked-intent).
+Before VPS: gate `docs` / `elementary` / future home — [edge-proxy auth](../../docs/edge-proxy.md#auth-locked-intent). Backlog item **9** for docs basic auth.
 
-## VPS (Phase 2 — automated)
+## VPS (backlog item 10 — automated)
 
 Terraform/Actions set on the server (no SSH edit of Caddyfile):
 
@@ -40,6 +40,6 @@ NEXUS_CADDY_ACME_EMAIL=ops@example.com
 # NEXUS_PUBLISH_BIND=127.0.0.1
 ```
 
-Full checklist: [deployment contract](../../docs/edge-proxy.md#deployment-contract-terraform--github-actions--phase-2).
+Full checklist: [deployment contract](../../docs/edge-proxy.md#deployment-contract-terraform--github-actions--backlog-item-10).
 
 **Debug (agents):** if Caddy exits with `caddy: fatal:` about scheme, ACME email, or `NEXUS_PUBLISH_BIND`, or backends look public after a failed proxy start — see [Debug: Caddy exit / NEXUS_PUBLISH_BIND](../../docs/edge-proxy.md#debug-caddy-exit--nexus_publish_bind-for-agents).

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Creates MinIO buckets for both capabilities (env=dev until Terraform).
+# Creates MinIO buckets for both capabilities (env=dev until prd / backlog item 10).
 set -eu
 
 MINIO_USER="${MINIO_ROOT_USER:-minioadmin}"

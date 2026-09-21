@@ -19,7 +19,7 @@ REST API
                       → optional published
 ```
 
-The same path runs on the host with `uv run` or via Airflow (`route_clickhouse_products`). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until Terraform**.
+The same path runs on the host with `uv run` or via Airflow (`route_clickhouse_products`). Generate **one `run_id` per run** (`NEXUS_RUN_ID`) and pass it to **both** dlt and dbt. When Airflow orchestrates, the DAG **`run_id`** is `NEXUS_RUN_ID`. Env is **`NEXUS_ENV` (default `dev`) until `prd` / backlog item 10**.
 
 ---
 
@@ -46,8 +46,8 @@ Same MinIO **service**. Isolation is **one bucket per capability per env**. Unti
 | `nexus-dlt-dbt-clickhouse-dev` | This capability’s raw API archive (replay). Not Iceberg. |
 | `nexus-dlt-dbt-spark-iceberg-archive-dev` | Lakehouse JSONL archive (`dlt_dbt_spark_iceberg`). Not this Bronze. |
 | `nexus-dlt-dbt-spark-iceberg-dev` | Iceberg warehouse for Polaris catalog `nexus_dev`. Not this Bronze. |
-| `nexus-airflow-logs-dev` | Airflow remote task logs (Phase 1). Not data. |
-| `nexus-telemetry-dev` | Observability data lake (Phase 1). Not raw API archive. |
+| `nexus-airflow-logs-dev` | Airflow remote task logs. Not data. |
+| `nexus-telemetry-dev` | Observability data lake. Not raw API archive. |
 
 Later: the same names with `-prd`.
 
@@ -167,7 +167,7 @@ Which models exist depends on the **requirement**. There is no mandatory full st
 
 ## Worked example: Route `products` (implemented)
 
-**Live reference:** [`dlt/route/products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py). Org extraction norms (mandatory for the next endpoint): [dlt-extraction.md](dlt-extraction.md). Full Route source contract: [route-ingestion.md](route-ingestion.md). Lakehouse copy of the same API (Milestone 2): [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
+**Live reference:** [`dlt/route/products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py). Org extraction norms (mandatory for the next endpoint): [dlt-extraction.md](dlt-extraction.md). Full Route source contract: [route-ingestion.md](route-ingestion.md). Lakehouse copy of the same API (backlog **6**): [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
 Assumptions: source Route API, endpoint `GET /api/v1/products`, resource `products`. Public catalog — no JWT. Full-refresh paginated extract → MinIO JSONL + ClickHouse Bronze + lake/OTLP. Opaque job names such as `pipe_one` are not used. Catalog follow-ons (`categories`, `brands`) must mirror this script’s norms.
 
