@@ -37,11 +37,11 @@ Reason RBAC started with the rename: Bronze physical names and CH connection con
 
 ---
 
-## Explicitly deferred
+## Explicitly deferred / scheduled elsewhere
 
-- MinIO IAM policies
-- OM / SigNoz / Elementary **UI** product setup
-- Airflow source DAG, categories/brands endpoints
-- Full Terraform modules + GitHub Actions workflows (additive: same names/RBAC; see [environments.md](environments.md) Phase 2 is additive)
+- MinIO IAM policies — [backlog.md](backlog.md) item **4**
+- OM / SigNoz / Elementary **UI** product setup — backlog **2–3** / **9**
+- Catalog endpoints `categories` / `brands` — backlog **7** (Airflow `route_clickhouse_products` is done)
+- Local Terraform modules — backlog **5**; VPS + GitHub Actions — backlog **10** (additive names/RBAC; [environments.md](environments.md))
 - `dlt_smoke` rename to new bronze pattern
 - Silver incremental / delta (FULL_LOAD only today)

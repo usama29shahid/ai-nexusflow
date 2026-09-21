@@ -7,8 +7,8 @@ Related: [vault.md](vault.md), [environments.md](environments.md), [observabilit
 
 **Password rotation (VPS):** change KV in Vault UI → reload Agent → `source scripts/load-secrets.sh` → re-run `./scripts/clickhouse-rbac-bootstrap.sh`. Details: [vault.md](vault.md) (Daily operations).
 
-**MinIO IAM:** out of scope — keep shared root.  
-**Lakehouse (Polaris/Trino) RBAC:** not started.  
+**MinIO IAM:** scheduled — [backlog.md](backlog.md) item **4** (admin / reader / loader-style; shared root until then).  
+**Lakehouse (Polaris/Trino) RBAC:** with Iceberg parity — backlog item **6**.  
 **SSO / row-column masking:** out of scope unless a later requirement forces it.
 
 ---
@@ -45,7 +45,7 @@ dlt and dbt do **not** switch roles at runtime. Each process connects as a **dif
 | `nexus_reader` | Consumers (BI/apps) | SELECT on `gold_{env}` / `marts_{env}` / `published_{env}` |
 | `nexus_admin` | Break-glass / bootstrap | Full CH; create users and GRANTs |
 
-Complexity of this slice: **MEDIUM** (CH only). Full CH + MinIO IAM + lakehouse: **COMPLEX** — deferred.
+Complexity of this slice: **MEDIUM** (CH done). MinIO IAM next (backlog **4**); lakehouse RBAC with Iceberg (backlog **6**).
 
 ```text
 dlt  →  nexus_loader       →  bronze_{env}
@@ -79,17 +79,17 @@ Keep existing `clickhouse` and `minio` secrets for Compose/bootstrap as needed.
 | MinIO archive + `nexus-telemetry-{env}` | MinIO root (unchanged) |
 | Elementary models in ClickHouse | `nexus_transformer` (dbt) |
 | OTLP / lake JSON events | `common/observability` + Collector — no direct SigNoz/OM API calls |
-| SigNoz / OpenMetadata / Elementary **UI** | After gold for the products pipeline; artifact/OTLP producers from day one |
+| SigNoz / OpenMetadata / Elementary **UI** | Product setup: backlog items **2–3** / **9**; artifact/OTLP producers already live with `products` |
 
 ---
 
 ## Terraform / GitHub Actions
 
-Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`. Phase 2 is **additive** — see [environments.md](environments.md) (Phase 2 is additive).
+Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`. Terraform and Actions are **additive** — order in [backlog.md](backlog.md); naming rules in [environments.md](environments.md).
 
 - **Airflow** (or a host `./scripts/start.sh` command) runs ingest and transform. The loader process already uses `CLICKHOUSE_LOADER_*`; dbt already uses `CLICKHOUSE_TRANSFORMER_*`.
-- **GitHub Actions** lints, tests, and optionally deploys the VPS. It does **not** become a second ingest or transform runner. If a workflow injects secrets, it injects those same env vars into `start.sh`.
-- **Terraform** (later) can create the same ClickHouse users/GRANTs and write the existing Vault sibling paths. It does not invent new role names that would force dlt/dbt credential rewrites.
+- **GitHub Actions** (backlog **10**) lints, tests, and deploys the VPS. It does **not** become a second ingest or transform runner. If a workflow injects secrets, it injects those same env vars into `start.sh`.
+- **Local Terraform** (backlog **5**) can create the same ClickHouse users/GRANTs (and later MinIO IAM from item **4**) and write the existing Vault sibling paths. It does not invent new role names that would force dlt/dbt credential rewrites. Dual ownership with bootstrap scripts is a known issue to resolve when item **5** is implemented — see [backlog.md](backlog.md) item 5.
 
 ---
 
@@ -99,4 +99,5 @@ Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`. P
 | --- | --- |
 | Done (dev) | CREATE USER/GRANT, Vault siblings, dlt=`nexus_loader`, dbt=`nexus_transformer` |
 | Canonical | This document; record [bronze-silver-cutover.md](bronze-silver-cutover.md) |
-| Deferred | MinIO IAM, Polaris/Trino RBAC, SSO/masking |
+| Scheduled | MinIO IAM — backlog **4**; Polaris/Trino RBAC — backlog **6** |
+| Out of scope | SSO/masking unless required |

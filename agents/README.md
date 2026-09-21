@@ -2,4 +2,4 @@
 
 One LangGraph package: planner, router, generator, validator, executor. RAG supplies organization rules.
 
-Phase 2 (after Phase 1: branches, Airflow, observability lake). Not implemented yet.
+**When:** [docs/backlog.md](../docs/backlog.md) item **12** (after semantic layer **8** and Streamlit/Supabase **11**). Not implemented yet.

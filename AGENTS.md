@@ -7,13 +7,14 @@ AI-NexusFlow is a multi-branch data-engineering execution platform and learning/
 Architecture and engineering standards live in `docs/`. Read the relevant document before changing a capability:
 
 - `docs/architecture.md` — platform design, branch responsibilities, and phases.
-- `docs/roadmap.md` — current delivery sequence and status.
+- `docs/backlog.md` — **delivery order source of truth** (execute one item at a time).
+- `docs/roadmap.md` — historical phase checklist and status; defers to backlog for what to build next.
 - `docs/setup.md` — local development and service topology.
 - `docs/operations.md` — daily start/stop, all services, lakehouse restore.
 - `docs/vault.md` — HashiCorp Vault secrets (KV paths, Agent injection, VPS ops). Read before changing secrets or bootstrap scripts.
 - `docs/edge-proxy.md` — Caddy edge; local vs VPS modes; deploy checklist for Actions/Terraform. When Caddy exits or VPS ports look wrong, use the **Debug: Caddy exit / NEXUS_PUBLISH_BIND** section before inventing a new failure mode.
 - `docs/ci-cd.md` — GitHub Actions + Terraform intent; production-shaped local; day-one deploy.
-- `docs/rbac.md` — ClickHouse loader/transformer/reader/admin (accepted; implement with Bronze cutover). MinIO IAM held.
+- `docs/rbac.md` — ClickHouse loader/transformer/reader/admin (implemented). MinIO IAM = backlog item 4.
 - `docs/bronze-silver-cutover.md` — implementation record for warehouse Bronze rename, RBAC, and silver peer tables (canonical rules in environments / dbt-modeling / dlt-dbt-clickhouse / rbac).
 - `docs/dlt-dbt-clickhouse.md` and `docs/dlt-extraction.md` — warehouse ingestion rules.
 - `docs/dlt-dbt-spark-iceberg.md` — lakehouse rules.
@@ -22,7 +23,9 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 
 ## Current implementation priority
 
-Phase 1, Milestone 1 — warehouse branch first. Route **`products`** dlt (archive + Bronze + observability producers) is the **reference endpoint pipeline**; document and copy its norms for the next scripts. Products silver / Gold and Airflow DAG `route_clickhouse_products` are in place. Still ahead: catalog follow-ons (`categories` / `brands`), then SigNoz / OpenMetadata look-and-feel.
+**Follow [docs/backlog.md](docs/backlog.md)** — one item at a time. Do not use old “Phase 2 blocks readers/Terraform” language to skip backlog items.
+
+Route **`products`** (archive + Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers) is the **reference endpoint pipeline** and backlog item 0 (done). Next: stack verify → SigNoz (OTLP + lake ingest) → OpenMetadata → MinIO IAM → local Terraform → Iceberg parity → remaining Route endpoints → facts/marts/semantic layer → docs basic auth → VPS/Actions → Supabase/Streamlit → RAG later.
 
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
@@ -30,7 +33,18 @@ REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging 
 Airflow DAG → same dlt/dbt via nexus-elt job image (DAG run_id = NEXUS_RUN_ID)
 ```
 
-Implement and verify `dlt_dbt_clickhouse` with full observability producers (lake writes on every run) before starting Spark/Iceberg, Terraform/CI, reader-tool dashboards, or LLM/RAG. Warehouse Bronze/RBAC/silver for products is implemented — see [docs/bronze-silver-cutover.md](docs/bronze-silver-cutover.md). Airflow smoke/source DAGs are part of Milestone 1. Do not fill future-phase folders with speculative implementations. MinIO IAM and lakehouse RBAC stay deferred.
+Warehouse Bronze/RBAC/silver for products is implemented — see [docs/bronze-silver-cutover.md](docs/bronze-silver-cutover.md). Do not fill folders with speculative stubs ahead of the current backlog item. HashiCorp Terraform only (BSL); no OpenTofu; no Ansible.
+
+## Git and plan-execution guardrails
+
+**Hard rule until the user explicitly overrides it in chat:**
+
+1. **Never implement backlog / plan work on `main`.** Before coding or doc-implementation for a backlog item, create and check out a **feature branch** (e.g. `feat/signoz-dashboards`, `docs/…`).
+2. **Do not merge to `main`, force-push `main`, or commit backlog execution directly on `main`** unless the user clearly confirms that this slice may land on `main`.
+3. Prefer **one backlog item per feature branch** (or a clearly named slice). Open a PR when the user asks.
+4. If the working tree is already on `main` at the start of an execution request, **stop and create a feature branch first** (or ask the user for the branch name) before editing.
+
+This applies to agents executing [docs/backlog.md](docs/backlog.md) or any Cursor plan for this repo.
 
 ## Capability boundaries
 
@@ -44,7 +58,7 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 - Run Python, `uv`, dlt, and dbt on the host from the repository root; do not run `uv sync` in a bind-mounted Compose container.
 - Docker Compose runs infrastructure: MinIO AIStor Free + OTel Collector always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow on-demand via `airflow`; CloudBeaver via `cloudbeaver`; SigNoz / OpenMetadata via `signoz` / `openmetadata`.
 - Use `.env` for local configuration; secrets on the VPS come from HashiCorp Vault via Agent (see `docs/vault.md`). Local WSL may use `NEXUS_SECRETS_BACKEND=env` until Vault is running. Never commit `.env`, `profiles.yml`, credentials, API keys, tokens, or `.nexusflow/minio.license`.
-- Default environment is `NEXUS_ENV=dev`. `prd` is a Phase 2/Terraform naming contract, not a second local stack.
+- Default environment is `NEXUS_ENV=dev`. `prd` is a naming contract for backlog item **10** (VPS/Actions), not a second local stack.
 - dbt does not load `.env` itself; source it before dbt commands. Keep dbt `--target` equal to `NEXUS_ENV`.
 
 ## Ingestion rules
@@ -72,18 +86,18 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 
 ## Orchestration and observability
 
-- Airflow is **Phase 1** orchestration, not a transformation backend. Use **one DAG per source + target + endpoint** with layer tasks (`assert_branch_enabled` → bronze → silver → gold → observability). Never `dbt build` (always `run` then `test`).
+- Airflow is orchestration, not a transformation backend. Use **one DAG per source + target + endpoint** with layer tasks (`assert_branch_enabled` → bronze → silver → gold → observability). Never `dbt build` (always `run` then `test`).
 - **Airflow runtime (locked):** Dockerized **Airflow 3.3** (`api-server` + `dag-processor` + LocalExecutor); dlt/dbt in ephemeral **`nexus-elt`** job containers (`docker run` on the Compose network). Cursor still uses host `uv`. Never install dlt/dbt into the Airflow image. One UI for all branches. Do not bind-mount `.venv`. See [docs/architecture.md](docs/architecture.md), [docker/elt/README.md](docker/elt/README.md).
 - **Observability data lake:** MinIO `nexus-telemetry-{env}` is the system of record. Pipeline code uses `common/observability` only — never SigNoz, OpenMetadata, or Elementary directly.
 - Airflow owns task scheduling, retries, and remote stdout (`nexus-airflow-logs-{env}`); dlt owns load telemetry in warehouse `_dlt_*` tables; dbt owns local `target/` plus artifact copy to the lake.
-- Phase 1 requires full producers: lake summaries, OTLP when the collector is up, dbt artifact copy, Elementary HTML, Airflow remote logs. SigNoz and OpenMetadata are **readers** (product setup after the first Airflow E2E) with their own native DBs; ingest from the lake; do not replace their storage with MinIO. Pipeline code must not call those APIs.
+- Producers required on every run: lake summaries, OTLP when the collector is up, dbt artifact copy, Elementary HTML, Airflow remote logs. SigNoz and OpenMetadata are **readers** with their own native DBs — **product setup is backlog items 2–3** ([docs/backlog.md](docs/backlog.md); warehouse `products` Airflow path already live). Ingest from the lake; do not replace their storage with MinIO. Pipeline code must not call those APIs.
 - Airflow DAG `run_id` = `NEXUS_RUN_ID` when orchestrated; `local-{timestamp}` for manual runs until then.
 - **`nexus_elt_exec` env quoting:** `docker run -e NEXUS_RUN_ID='{{ run_id }}'` (and DAG/task id) assumes Airflow ids have **no single quote**. Default / manual Airflow `run_id`s are fine. Do not introduce custom run ids with `'`; the remote `bash -lc` fragment is `shlex.quote`d, but those `-e` lines are not. See `orchestration/airflow/dags/nexus_elt_exec.py`.
 - Do not build a custom logging service or use a ClickHouse table as the ops system of record.
 
 ## Future LLM/RAG behavior
 
-- Build LLM/RAG only in **Phase 3**, after Phase 1 (capabilities, Airflow, observability producers) is runnable and Phase 2 (Terraform, CI, reader tools) is in place. Do not start Phase 3 before Phase 1.
+- Build LLM/RAG only after the backlog reaches that item ([docs/backlog.md](docs/backlog.md) item 12): semantic layer and Streamlit/Supabase shell should exist first.
 - The LLM reasons over user requirements; RAG supplies organization-specific standards. Do not invent organization conventions or unsupported platform capabilities.
 - Keep planner, ingestion, transformation, platform/branch, workflow, and validation responsibilities separate. Validation must reject disabled branches, unavailable runtimes, invalid schedules, and standards violations.
 
@@ -93,3 +107,4 @@ Implement and verify `dlt_dbt_clickhouse` with full observability producers (lak
 - Prefer a small, runnable vertical slice over broad unverified scaffolding.
 - Update the relevant docs and tests when a documented implementation contract changes.
 - Before handing off a change, run the narrowest relevant verification (for example, `uv run dbt debug`, `dbt run`, `dbt test`, or focused tests) and report anything not verified.
+- Obey **Git and plan-execution guardrails** above (feature branch; no backlog work on `main` without explicit user confirmation).

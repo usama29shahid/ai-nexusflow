@@ -1,6 +1,6 @@
 # Environments (dev / prd)
 
-`env` is `dev` or `prd` (lowercase in object names). **Until Terraform, `dev` is the only environment in use.** Compose, dlt, dbt, MinIO, ClickHouse, and later Polaris all use `dev`. `prd` is a naming contract for later — do not stand up a second Compose “prod stack” before Terraform.
+`env` is `dev` or `prd` (lowercase in object names). **`dev` is the only environment in use until backlog item 10 / `prd` cutover.** Compose, dlt, dbt, MinIO, ClickHouse, and later Polaris default to `dev`. `prd` is a naming contract — do not stand up a second Compose “prod stack.” Local Terraform (backlog **5**) may manage **`dev`** resources against Compose before VPS/`prd` exists.
 
 **Same pattern on every capability.** Capability folders: `dlt_dbt_clickhouse`, `dlt_dbt_spark_iceberg`.
 
@@ -35,7 +35,7 @@ Archive MinIO layout is unchanged: `nexus-dlt-dbt-clickhouse-{env}/{source}/{end
 
 **Legacy:** `warehouse.raw_route_{env}___products` — obsolete after cutover; optional DROP after verify.
 
-| Surface | `dev` | `prd` (after Terraform) |
+| Surface | `dev` | `prd` (after backlog **10** / VPS naming) |
 | --- | --- | --- |
 | ClickHouse (warehouse) | `bronze_dev`, `silver_dev`, … | `bronze_prd`, `silver_prd`, … |
 | Iceberg (Polaris) | catalog `nexus_dev`; schemas `raw_{source}`, `stg_{source}`, `int`, `gold`, `marts`, `pub` | catalog `nexus_prd`; **same schema names** |
@@ -66,18 +66,18 @@ Same-contract URL parameters do not create a new table; they become job paramete
 
 Worked example: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). Details: [dlt-extraction.md](dlt-extraction.md), [dbt-modeling.md](dbt-modeling.md).
 
-## Phase 2 is additive (Terraform / GitHub Actions)
+## Terraform / GitHub Actions are additive
 
-Phase 2 **adds** workflow files and Terraform modules. It does **not** rewrite dlt, dbt, DAGs, or `./scripts/start.sh`. If a later change would rename Bronze tables, invent a second ELT runner, or fork the repo per env, the design is wrong.
+Terraform and Actions **add** modules and workflows. They do **not** rewrite dlt, dbt, DAGs, or `./scripts/start.sh`. If a later change would rename Bronze tables, invent a second ELT runner, or fork the repo per env, the design is wrong.
 
-**CI/CD intent (locked):** GitHub Actions is the primary path for lint, test, build, Terraform, and VPS deploy. Local stays production-shaped so day-one cutover is automation — see [ci-cd.md](ci-cd.md).
+**Order:** [backlog.md](backlog.md) — local Terraform = item **5**; Actions + VPS edge/`prd` = item **10**. Intent detail: [ci-cd.md](ci-cd.md).
 
-| Phase 2 adds | Reuses (already locked) |
-| --- | --- |
-| `.github/workflows/` (lint, test, build, terraform, VPS deploy) | `uv run`, existing tests, `./scripts/start.sh`, image Dockerfiles |
-| Terraform modules (create `bronze_{env}`, `silver_{env}`, `{purpose}-{env}` buckets, ClickHouse users) | Names in this document; [rbac.md](rbac.md) `nexus_loader` / `nexus_transformer` |
-| Secret injection on the VPS or in CI | Same env var names Vault Agent already renders ([vault.md](vault.md)) |
-| Edge / public hostname (`NEXUS_EDGE_MODE=vps`, DNS, HTTPS Caddy, `127.0.0.1` binds) | Contract in [edge-proxy.md](edge-proxy.md) — **separate from local** hosts + HTTP |
+| Adds | When | Reuses (already locked) |
+| --- | --- | --- |
+| Local Terraform modules (`dev` buckets, CH users, MinIO IAM, …) | backlog **5** | Names in this document; [rbac.md](rbac.md) |
+| `.github/workflows/` (lint, test, build, terraform, VPS deploy) | backlog **10** | `uv run`, existing tests, `./scripts/start.sh`, image Dockerfiles |
+| Secret injection on the VPS or in CI | backlog **10** | Same env var names Vault Agent already renders ([vault.md](vault.md)) |
+| Edge / public hostname (`NEXUS_EDGE_MODE=vps`, DNS, HTTPS Caddy, `127.0.0.1` binds) | backlog **10** | Contract in [edge-proxy.md](edge-proxy.md) — **separate from local** hosts + HTTP |
 
 Rules:
 
@@ -89,4 +89,4 @@ Rules:
 
 VPS deploy uses the same Compose + host `uv` model as WSL ([setup.md](setup.md), [orchestration/airflow/README.md](../orchestration/airflow/README.md)). Set `NEXUS_REPO_ROOT` to that machine’s absolute clone path.
 
-Public UIs: **Caddy + subdomains** — [edge-proxy.md](edge-proxy.md). Local and VPS are different rows in that doc’s contract table; Phase 2 owns the VPS row via Actions + Terraform ([ci-cd.md](ci-cd.md)).
+Public UIs: **Caddy + subdomains** — [edge-proxy.md](edge-proxy.md). Local and VPS are different rows in that doc’s contract table; backlog item **10** owns the VPS row via Actions + Terraform ([ci-cd.md](ci-cd.md)).

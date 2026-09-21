@@ -17,29 +17,35 @@ Platform design: [docs/architecture.md](docs/architecture.md). Warehouse: [docs/
 
 ---
 
-## Phases
+## Current delivery order
 
-| Phase | What ships |
+**Source of truth:** [docs/backlog.md](docs/backlog.md) (one item at a time). Historical phases: [docs/roadmap.md](docs/roadmap.md).
+
+Warehouse Route `products` + Airflow + lake producers are **done**. Next: stack verify → SigNoz (OTLP + lake ingest) → OpenMetadata → MinIO IAM → local Terraform → Iceberg parity → remaining endpoints → facts/marts/semantic layer → docs auth → VPS/Actions → Streamlit/Supabase → RAG later.
+
+## Portfolio labels (not build order)
+
+Prefer [docs/backlog.md](docs/backlog.md) for what to build next. Rough resume story:
+
+| Label | Themes (mapped to backlog) |
 | --- | --- |
-| **1** | ClickHouse (M1) + Spark/Iceberg (M2) + Airflow + observability producers (lake writes on every run) |
-| **2** | Terraform (dev/prd) + GitHub Actions + reader tools (SigNoz, OpenMetadata, Elementary) |
-| **3** | Multi-agent LangGraph, RAG, Streamlit (live app) |
-
-Details and checklists: [docs/roadmap.md](docs/roadmap.md).
+| **Capabilities** | Warehouse + lakehouse + Airflow + lake producers (items **0**, **6**) |
+| **Platform ops** | Readers **2–3**, MinIO IAM **4**, local TF **5**, docs auth **9**, VPS/Actions **10** |
+| **App / AI** | Supabase/Streamlit **11**, RAG **12** (after semantic layer **8**) |
 
 ---
 
 ## Current status
 
-**Phase 1 Milestone 1 is in progress.** Route `products` warehouse ELT (dlt archive + ClickHouse Bronze/silver/Gold + Airflow DAG + lake producers) is live. Other catalog endpoints and the lakehouse branch are still ahead. Details: [docs/roadmap.md](docs/roadmap.md).
+Route `products` warehouse ELT (dlt archive + ClickHouse Bronze/silver/Gold + Airflow DAG + lake producers) is live. Full ordered backlog: [docs/backlog.md](docs/backlog.md).
 
 - Host uv (Python 3.12, DLT, dbt-clickhouse) — not inside Docker
 - Docker Compose: MinIO AIStor Free always (license `.nexusflow/minio.license`); `COMPOSE_PROFILES=clickhouse,lakehouse` (ClickHouse + Polaris + Spark Thrift + Trino)
 - dbt project: `branches/dlt_dbt_clickhouse`
-- Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until M2)
+- Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until backlog item **6**)
 - Branch switches: `config/branches.yaml`
 
-**Next:** remaining Route catalog endpoints (`categories` / `brands`), then SigNoz / OpenMetadata look-and-feel.
+**Next:** [docs/backlog.md](docs/backlog.md) item **1** (stack verify), then SigNoz (OTLP + lake ingest) → OpenMetadata → …
 
 ---
 
@@ -85,12 +91,12 @@ ai-nexusflow/
 ├── agents/
 ├── ui/
 ├── docker/                     # init scripts; compose stays at root
-├── infrastructure/             # Terraform (Phase 2)
+├── infrastructure/             # Terraform (local backlog 5; VPS 10)
 ├── tests/
 └── docs/
 ```
 
-Empty capability folders have short READMEs. Fill them when that phase has real code.
+Empty capability folders have short READMEs. Fill them when that backlog item has real code.
 
 ---
 
@@ -104,6 +110,7 @@ Empty capability folders have short READMEs. Fill them when that phase has real 
 - [dlt extraction](docs/dlt-extraction.md) — REST auth, pagination, retries, dual load
 - [dbt modeling](docs/dbt-modeling.md) — medallion + dimensional DAG
 - [Enhanced modeling strategy](docs/enhanced-modeling-strategy.md) — proposal backlog (SCD / soft delete / keys)
-- [Observability](docs/observability.md) — observability data lake, Airflow Phase 1, dlt/dbt emit contract, swappable readers (SigNoz, OpenMetadata, Elementary)
-- [Roadmap](docs/roadmap.md) — phases, status, next milestone
+- [Observability](docs/observability.md) — observability data lake, dlt/dbt emit contract, swappable readers (SigNoz, OpenMetadata, Elementary)
+- [Backlog](docs/backlog.md) — delivery order (source of truth)
+- [Roadmap](docs/roadmap.md) — portfolio context + status checklist
 - [Setup](docs/setup.md) — WSL / VPS / EC2, Docker, uv, troubleshooting

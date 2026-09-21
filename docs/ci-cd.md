@@ -2,29 +2,39 @@
 
 **Goal:** make the repo as **production-shaped on WSL** as practical, so **day-one VPS cutover is automated** through **GitHub Actions + Terraform**. Prefer **GitHub Actions for all CI/CD** (lint, test, build images, plan/apply, deploy). Do not invent a second deploy tool (Jenkins, ad-hoc SSH runbooks as the primary path, manual “copy `.env` to the server”).
 
-Phase 1 builds the runnable platform. Phase 2 **wires** Actions + Terraform. Do not implement speculative workflows before Phase 1 Milestone 1 is solid ([roadmap.md](roadmap.md)).
+**Delivery order:** [backlog.md](backlog.md). Split Terraform timing:
+
+| Slice | Backlog | What |
+| --- | --- | --- |
+| **Local Terraform** | item **5** | API resources against Compose (`dev` buckets, CH users, MinIO IAM, …) |
+| **Actions + VPS Terraform** | item **10** | lint/test/build, edge/DNS/`prd`, `git pull` + `./scripts/start.sh` |
+
+Warehouse `products` + Airflow + lake producers are already solid (backlog item **0**). Do not block item **5** on Iceberg or a full “Phase 1 done” label. Do not invent speculative Actions workflows before the backlog reaches item **10**.
 
 ## Who owns what
 
 | Concern | Owner | Notes |
 | --- | --- | --- |
-| Lint / unit tests / image builds | **GitHub Actions** | Same commands developers run (`uv run`, `docker build`) |
-| Environment identity (`dev` / `prd`), DNS, firewall baseline, rendered server env | **Terraform** | Creates names in [environments.md](environments.md); sets `NEXUS_EDGE_MODE=vps`, `NEXUS_PUBLIC_HOST`, etc. |
+| Lint / unit tests / image builds | **GitHub Actions** (item **10**) | Same commands developers run (`uv run`, `docker build`) |
+| Local API resources (`dev` buckets, CH DBs/users, MinIO IAM) | **Terraform** (item **5**) | Names in [environments.md](environments.md); [rbac.md](rbac.md) |
+| Env identity on VPS (`dev` / `prd`), DNS, firewall, rendered server env | **Terraform** (item **10**) | Sets `NEXUS_EDGE_MODE=vps`, `NEXUS_PUBLIC_HOST`, etc. |
 | Bring stacks up / ELT | **`./scripts/start.sh`** on the host (or Actions invoking it over SSH) | Actions is **not** a second ingest/transform runner |
 | Secrets on VPS | **Vault + Agent** | [vault.md](vault.md); Actions may trigger deploy, not bake secrets into git |
 | Local vs public edge | **`NEXUS_EDGE_MODE`** | `local` → `Caddyfile.local` (HTTP); `vps` → `Caddyfile.vps` (HTTPS). Entrypoint selects file — no SSH edit ([edge-proxy.md](edge-proxy.md)) |
 
 ```text
-Developer push → GitHub Actions
+Developer push → GitHub Actions                         [backlog 10]
   → lint + tests (+ optional image build)
-  → terraform plan/apply (env / DNS / server config)     [Phase 2]
-  → deploy: git pull + ./scripts/start.sh on VPS         [Phase 2]
+  → terraform plan/apply (env / DNS / server config)
+  → deploy: git pull + ./scripts/start.sh on VPS
   → Airflow / dlt / dbt still run on the VPS host path     (unchanged)
+
+Local (earlier): terraform apply against Compose         [backlog 5]
 ```
 
 ## Production-ready on local (what “done” means before day-one deploy)
 
-Build these **now** (Phase 1) so Actions/Terraform only **connect** them later:
+Build these on the **backlog path** so Actions/VPS Terraform only **connect** them later:
 
 1. **One codebase, one Compose file, one `start.sh`** — no “prod fork” of pipelines.
 2. **Names already final** — `bronze_{env}`, buckets `{purpose}-{env}`, RBAC users ([environments.md](environments.md), [rbac.md](rbac.md)).
@@ -36,9 +46,9 @@ Build these **now** (Phase 1) so Actions/Terraform only **connect** them later:
 
 Local still differs where it must: hosts file + HTTP, optional weak lab passwords, not every profile always on. That is **mode**, not a second architecture.
 
-## Day-one deploy (Phase 2 — automated)
+## Day-one deploy (backlog item 10 — automated)
 
-When Phase 2 lands, a typical first production cutover should be **Actions-driven**, not a long manual checklist:
+When item **10** lands, a typical first production cutover should be **Actions-driven**, not a long manual checklist:
 
 1. Terraform applies `dev` (or `prd`) env resources + DNS + server env including `NEXUS_EDGE_MODE=vps`.
 2. Actions builds/pushes required images if needed (`nexus-elt`, Airflow image).
@@ -53,11 +63,13 @@ Manual steps that remain acceptable (document in the workflow README when writte
 - Copying WSL `.env` onto the VPS via Actions.
 - Using `proxy-hosts.sh` as production DNS.
 - A second Compose “prod stack” or `prd` git branch.
+- OpenTofu or Ansible (HashiCorp Terraform only — [backlog.md](backlog.md)).
 
 ## Pointers
 
+- Delivery order: [backlog.md](backlog.md)
 - Edge / local vs VPS checklist: [edge-proxy.md](edge-proxy.md)
-- Env names + additive Phase 2 rules: [environments.md](environments.md)
+- Env names + additive Terraform/Actions rules: [environments.md](environments.md)
 - Terraform stub + edge requirements: [infrastructure/terraform/README.md](../infrastructure/terraform/README.md)
 - Vault: [vault.md](vault.md)
-- Roadmap Phase 2: [roadmap.md](roadmap.md)
+- Roadmap (portfolio context): [roadmap.md](roadmap.md)

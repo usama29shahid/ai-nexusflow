@@ -6,7 +6,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 Airflow is Dockerized; DAG tasks run an ephemeral **`nexus-elt`** job container (`docker run` on the Compose network) with the same scripts as a manual `uv` run. Do **not** install dlt/dbt into the Airflow image. Locked decision: [architecture.md](architecture.md) (Airflow execution runtime), [orchestration/airflow/README.md](../orchestration/airflow/README.md).
 
-Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running. ClickHouse RBAC (loader / transformer / reader / admin) is **implemented** — bootstrap via `./scripts/clickhouse-rbac-bootstrap.sh`; MinIO IAM stays deferred — see [rbac.md](rbac.md).
+Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running. ClickHouse RBAC (loader / transformer / reader / admin) is **implemented** — bootstrap via `./scripts/clickhouse-rbac-bootstrap.sh`; MinIO IAM is backlog item **4** — see [rbac.md](rbac.md), [backlog.md](backlog.md).
 
 Docker Compose runs **MinIO AIStor Free and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). Copy the Free license to `.nexusflow/minio.license` before the first start ([docker/minio/README.md](../docker/minio/README.md)). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`. On a **16 GB / 4-core** VPS, keep profiles strict (ClickHouse + Airflow day-to-day); do not start every stack at once.
 
@@ -28,7 +28,7 @@ cp /path/to/aistor-license .nexusflow/minio.license   # gitignored; see docker/m
 | ClickHouse | Warehouse (`profile: clickhouse`) | Docker |
 | Polaris, Spark Thrift, Trino | Lakehouse (`profile: lakehouse`) | Docker |
 | CloudBeaver | Web database IDE (`profile: cloudbeaver`) | Docker |
-| Airflow | Orchestration (`profile: airflow`, Phase 1) | Docker |
+| Airflow | Orchestration (`profile: airflow`) | Docker |
 | HashiCorp Vault | Secrets (`profile: vault` when `NEXUS_SECRETS_BACKEND=vault`) | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).

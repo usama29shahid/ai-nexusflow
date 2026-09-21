@@ -17,7 +17,7 @@ Enhanced keys / soft-delete / SCD metadata patterns: [enhanced-modeling-strategy
 
 Lakehouse catalog/schema rules: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md). ClickHouse database rules: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md). Env: [environments.md](environments.md). RBAC: [rbac.md](rbac.md).
 
-Profile **target** = env (`NEXUS_ENV`, default `dev` until Terraform, later `prd`). One project per capability; do not fork the repo per env. Run with `--target "$NEXUS_ENV"` so dlt and dbt agree.
+Profile **target** = env (`NEXUS_ENV`, default `dev` until `prd` / backlog **10**). One project per capability; do not fork the repo per env. Run with `--target "$NEXUS_ENV"` so dlt and dbt agree.
 
 **Profile default database (ClickHouse):** in `profiles.example.yml`, each output hardcodes `schema: silver_dev` / `silver_prd` (the connection default / fallback). Do **not** derive profile `schema` from `NEXUS_ENV` — that can disagree with `--target`. Models with `+schema: silver` (and later `gold`, …) still resolve via `generate_schema_name` to `{layer}_{{ target.name }}`. Re-copy or edit local gitignored `profiles.yml` when the example changes.
 
