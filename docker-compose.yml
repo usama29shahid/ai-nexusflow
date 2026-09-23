@@ -433,6 +433,7 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
 
     volumes:
+      - ./docker/lakehouse/trino/config.properties:/etc/trino/config.properties:ro
       - ./docker/lakehouse/trino/catalog:/etc/trino/catalog:ro
 
     depends_on:

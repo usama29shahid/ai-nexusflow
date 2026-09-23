@@ -20,6 +20,7 @@
 #   ./scripts/start.sh signoz          # SigNoz reader (platform, on-demand)
 #   ./scripts/start.sh openmetadata    # OpenMetadata reader (platform, on-demand)
 #   ./scripts/start.sh observability   # MinIO + OTel + SigNoz + OpenMetadata readers
+#   ./scripts/start.sh verify          # host health check; does not start or repair services
 #   ./scripts/start.sh stop-signoz       # stop SigNoz reader; OTel → lake only
 #   ./scripts/start.sh stop-openmetadata # stop OpenMetadata reader
 #   ./scripts/start.sh stop-observability # stop both readers
@@ -57,6 +58,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   openmetadata  Start OpenMetadata reader profile (data catalog)
   observability Start shared infra + SigNoz + OpenMetadata readers
   observability-smoke  Run scripts/observability-smoke.sh
+  verify        Host health check (PASS/FAIL/SKIP). Does not start or repair services.
   stop-signoz        Stop SigNoz reader; revert OTel to lake-only export
   stop-openmetadata  Stop OpenMetadata reader
   stop-observability Stop SigNoz + OpenMetadata readers
@@ -458,6 +460,11 @@ case "${cmd}" in
     load_env_and_secrets
     chmod +x scripts/observability-smoke.sh
     exec ./scripts/observability-smoke.sh
+    ;;
+  verify)
+    load_env
+    chmod +x scripts/stack-verify.sh
+    exec ./scripts/stack-verify.sh
     ;;
   stop-signoz)
     load_env_and_secrets

@@ -12,13 +12,13 @@
 | # | Item |
 | --- | --- |
 | 0 | Warehouse Route `products` — dlt → MinIO archive + ClickHouse Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers |
+| 1 | Stack verify — `./scripts/start.sh verify` (MinIO + OTel, ClickHouse, Airflow, SigNoz, OpenMetadata, Vault, lakehouse). `openmetadata-ingestion` stays optional |
 
 ---
 
 ## Ordered backlog
 
 ```text
-1.  Stack verify — all local Compose services healthy
 2.  SigNoz ready — OTLP live dashboards + lake→SigNoz ingest + products run visibility
 3.  OpenMetadata ready — catalog warehouse tables from products
 4.  MinIO IAM — admin / reader / loader-style (mirror ClickHouse RBAC)
@@ -63,9 +63,9 @@ Execute **one number at a time**. Do not start the next item until the current o
 
 ## Work package notes
 
-### 1. Stack verify
+### 1. Stack verify — done
 
-Confirm health for profiles in daily use: MinIO + OTel, `clickhouse`, `airflow`, `signoz`, `openmetadata`, optional `vault`, `lakehouse`. Fix or document gaps in [operations.md](operations.md).
+`./scripts/start.sh verify` checks MinIO + OTel, `clickhouse`, `airflow`, `signoz`, `openmetadata`, Vault when `NEXUS_SECRETS_BACKEND=vault`, and `lakehouse`. It does not start or repair services. `openmetadata-ingestion` is skipped (catalog ingest is item 3). Runbook: [operations.md](operations.md). SigNoz Compose health uses `curl` because the standalone image has no `wget`.
 
 ### 2. SigNoz ready
 
