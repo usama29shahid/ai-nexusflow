@@ -134,14 +134,36 @@ Vault only (no other stacks):
 
 ## Verify services
 
+One command. It prints `PASS` / `FAIL` / `SKIP` and exits non-zero on any `FAIL`. It does not start or repair containers.
+
+```bash
+./scripts/start.sh verify
+```
+
+Start the stacks first. `./scripts/start.sh all` brings up MinIO, OTel, ClickHouse, lakehouse, CloudBeaver, and Airflow (plus Vault when `NEXUS_SECRETS_BACKEND=vault`). SigNoz and OpenMetadata stay on demand:
+
+```bash
+./scripts/start.sh signoz
+./scripts/start.sh openmetadata
+```
+
+`openmetadata-ingestion` is skipped on purpose (heavy; catalog ingest is backlog item 3). Vault checks run only when `NEXUS_SECRETS_BACKEND=vault`, and they fail while Vault is sealed (`"sealed":false` is required). CloudBeaver and Caddy are checked when that profile is in `COMPOSE_PROFILES` or the container is already running.
+
+One-shots that should be `Exited (0)`: `minio-init`, `airflow-init`, `openmetadata-migrate`. `polaris-setup` stays up.
+
+Manual curls (same targets the script uses):
+
 ```bash
 docker compose ps
 
 curl http://localhost:8123/ping                    # ClickHouse → Ok.
+curl -sf http://127.0.0.1:13133/                   # OTel collector health
 curl http://localhost:8080/v1/info                 # Trino
 curl http://127.0.0.1:8081/api/v2/monitor/health   # Airflow 3 api-server
-curl "http://127.0.0.1:8200/v1/sys/health?sealedcode=200"   # Vault
+curl -sf http://127.0.0.1:8200/v1/sys/health | grep -q '"sealed":false'   # Vault unsealed
 curl --fail http://localhost:8182/q/health         # Polaris
+curl -sf http://127.0.0.1:3301/api/v1/health       # SigNoz
+curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 ```
 
 | UI | URL |
@@ -151,6 +173,8 @@ curl --fail http://localhost:8182/q/health         # Polaris
 | Spark UI | http://localhost:4040 |
 | CloudBeaver | http://localhost:8978 |
 | Airflow | http://127.0.0.1:8081 |
+| SigNoz | http://127.0.0.1:3301 |
+| OpenMetadata | http://127.0.0.1:8585 |
 | Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
 
 ### Elementary report (host CLI)
@@ -207,6 +231,7 @@ First time ever     →  ./scripts/setup.sh
 Start all stacks    →  ./scripts/start.sh all
 Start .env stacks   →  ./scripts/start.sh
 Stop all            →  ./scripts/start.sh down
+Health check        →  ./scripts/start.sh verify   # does not start services
 Stop SigNoz only    →  ./scripts/start.sh stop-signoz
 Stop OM only        →  ./scripts/start.sh stop-openmetadata
 Stop both readers   →  ./scripts/start.sh stop-observability

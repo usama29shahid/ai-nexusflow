@@ -15,6 +15,7 @@ cp .env.example .env   # or paste your .env
 ./scripts/start.sh all          # everything: MinIO, both branches, CloudBeaver, Airflow, Vault
 ./scripts/start.sh              # only COMPOSE_PROFILES from .env (+ Vault if enabled)
 ./scripts/start.sh down         # stop all (avoids "network still in use")
+./scripts/start.sh verify       # health check only; does not start or repair services
 ./scripts/start.sh vault        # Vault only (platform secrets)
 ./scripts/start.sh airflow      # Airflow only (platform; on-demand)
 ./scripts/start.sh smoke

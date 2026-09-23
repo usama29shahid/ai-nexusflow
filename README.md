@@ -21,7 +21,7 @@ Platform design: [docs/architecture.md](docs/architecture.md). Warehouse: [docs/
 
 **Source of truth:** [docs/backlog.md](docs/backlog.md) (one item at a time). Historical phases: [docs/roadmap.md](docs/roadmap.md).
 
-Warehouse Route `products` + Airflow + lake producers are **done**. Next: stack verify → SigNoz (OTLP + lake ingest) → OpenMetadata → MinIO IAM → local Terraform → Iceberg parity → remaining endpoints → facts/marts/semantic layer → docs auth → VPS/Actions → Streamlit/Supabase → RAG later.
+Warehouse Route `products` + Airflow + lake producers are **done**. Stack verify is **done** (`./scripts/start.sh verify`). Next: SigNoz (OTLP + lake ingest) → OpenMetadata → MinIO IAM → local Terraform → Iceberg parity → remaining endpoints → facts/marts/semantic layer → docs auth → VPS/Actions → Streamlit/Supabase → RAG later.
 
 ## Portfolio labels (not build order)
 
@@ -45,7 +45,7 @@ Route `products` warehouse ELT (dlt archive + ClickHouse Bronze/silver/Gold + Ai
 - Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until backlog item **6**)
 - Branch switches: `config/branches.yaml`
 
-**Next:** [docs/backlog.md](docs/backlog.md) item **1** (stack verify), then SigNoz (OTLP + lake ingest) → OpenMetadata → …
+**Next:** [docs/backlog.md](docs/backlog.md) item **2** (SigNoz: OTLP + lake ingest) → OpenMetadata → …
 
 ---
 

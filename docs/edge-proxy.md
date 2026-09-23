@@ -67,7 +67,7 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 | `vault.` | Vault UI | Optional | Optional; unseal stays SSH |
 | `clickhouse.` | HTTP Play | Showcase | Omit or gate |
 | `polaris.` | REST `:8181` | Showcase | Omit or gate |
-| `trino.` / `spark.` | UIs | As needed | As needed; Thrift never on edge |
+| `trino.` / `spark.` | UIs | As needed. Trino sets `http-server.process-forwarded=true` so Caddy’s `X-Forwarded-For` is accepted | As needed; Thrift never on edge |
 | `signoz.` / `openmetadata.` | Readers | App login | App login |
 | `docs.` / `elementary.` | Static | Loopback OK | **Auth gate required** |
 
