@@ -143,9 +143,16 @@ One command. It prints `PASS` / `FAIL` / `SKIP` and exits non-zero on any `FAIL`
 Start the stacks first. `./scripts/start.sh all` brings up MinIO, OTel, ClickHouse, lakehouse, CloudBeaver, and Airflow (plus Vault when `NEXUS_SECRETS_BACKEND=vault`). SigNoz and OpenMetadata stay on demand:
 
 ```bash
-./scripts/start.sh signoz
+./scripts/start.sh signoz          # required entrypoint (sets JWT + OTLP ensure); not bare compose up
+./scripts/signoz-ensure.sh         # repair OTLP if UI is up but collector cannot reach signoz:4317
+./scripts/signoz-bootstrap.sh      # optional dashboard (SIGNOZ_API_KEY or SIGNOZ_BOOTSTRAP_SQLITE=1)
+./scripts/observability-ingest.sh signoz   # lake → SigNoz backfill (default last 24h)
 ./scripts/start.sh openmetadata
 ```
+
+**SigNoz JWT:** Compose requires `SIGNOZ_TOKENIZER_JWT_SECRET`. Always use `./scripts/start.sh signoz` so it is created in `.env`. Bare `docker compose --profile signoz up` fails without that variable by design — see [docker/signoz/README.md](../docker/signoz/README.md).
+
+**SigNoz ready check:** UI `http://127.0.0.1:3301` → Traces with `serviceName = nexusflow.dlt` after a products run; Dashboards → **Nexus Route products**. Empty panels after recreate: lake replay with `--force --since …`. See [docker/signoz/README.md](../docker/signoz/README.md).
 
 `openmetadata-ingestion` is skipped on purpose (heavy; catalog ingest is backlog item 3). Vault checks run only when `NEXUS_SECRETS_BACKEND=vault`, and they fail while Vault is sealed (`"sealed":false` is required). CloudBeaver and Caddy are checked when that profile is in `COMPOSE_PROFILES` or the container is already running.
 

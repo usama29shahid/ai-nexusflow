@@ -29,14 +29,15 @@ See also: [architecture.md](architecture.md), [backlog.md](backlog.md), [roadmap
 
 ```text
 nexus-telemetry-{env}/
-├── otel/traces|logs|metrics/...     # OTLP batches (Collector export)
+├── otel/{YYYY}/{MM}/{DD}/{HH}/{MM}/   # OTLP batches (Collector awss3; files traces_|metrics_|logs_*.json)
 ├── events/pipeline/...              # nexus.telemetry/v1 JSONL (dlt, dbt)
 ├── events/airflow/...               # DAG/task lifecycle events
 ├── artifacts/dbt/
 │   ├── dlt_dbt_clickhouse/{run_id}/ # manifest.json, run_results.json, catalog.json
 │   └── dlt_dbt_spark_iceberg/{run_id}/
 ├── artifacts/elementary/{branch}/{run_id}/  # elementary_report.html
-└── summaries/runs/{run_id}.json     # per-run rollup (manual or Airflow)
+├── summaries/runs/{run_id}.json     # per-run rollup (manual or Airflow)
+└── indexes/signoz/...               # lake→SigNoz ingest markers (reader bootstrap)
 ```
 
 **Write contract (implementation):** host Python and Airflow tasks use `common/observability`. Pipeline code **must not** call SigNoz, OpenMetadata, or Elementary APIs directly.
@@ -179,8 +180,9 @@ SigNoz and OpenMetadata Compose profiles exist locally. **Product setup** is bac
 
 **SigNoz (item 2) includes both:**
 
-1. **Live OTLP** — collector forwards to SigNoz while the profile is up ([docker/otel/](../docker/otel/)).
-2. **Lake → SigNoz** — implement `./scripts/observability-ingest.sh signoz` to project `nexus-telemetry-{env}` into SigNoz’s native store (backfill / SigNoz-was-down). Today that script exits “not implemented.”
+1. **Live OTLP** — collector forwards to SigNoz while the profile is up ([docker/otel/](../docker/otel/)). Start with **`./scripts/start.sh signoz`** only (not bare Compose): it writes `SIGNOZ_TOKENIZER_JWT_SECRET` when missing and runs [`scripts/signoz-ensure.sh`](../scripts/signoz-ensure.sh) so the standalone ingester listens on `:4317`/`:4318` (Compose health requires UI **and** OTLP). If the trace index is empty after a wipe, replay the lake (`observability-ingest.sh signoz -- --force --since …`) or set `SIGNOZ_AUTO_REPLAY=1`.
+2. **Lake → SigNoz** — `./scripts/observability-ingest.sh signoz` lists `nexus-telemetry-{env}/otel/` JSON batches and POSTs them into SigNoz OTLP HTTP from inside the container (backfill / SigNoz-was-down). Idempotent via `indexes/signoz/*.ingested`; `--force` re-posts after a SigNoz wipe (may duplicate spans). Default window is **last 24h** — pass `--since` for older lake history.
+3. **Products dashboard** — [`docker/signoz/dashboards/route-products.json`](../docker/signoz/dashboards/route-products.json) via [`scripts/signoz-bootstrap.sh`](../scripts/signoz-bootstrap.sh) (`SIGNOZ_API_KEY` preferred; `SIGNOZ_BOOTSTRAP_SQLITE=1` last resort). Edit the JSON in git, re-run bootstrap to create or update. Not run on every `start.sh signoz`. Traces filter: `serviceName = nexusflow.dlt` and attribute `nexus.run_id`.
 
 OpenMetadata (item **3**) similarly gets warehouse connectors + catalog views; its lake projection can follow the same ingest script pattern (`openmetadata` target) when that item runs.
 

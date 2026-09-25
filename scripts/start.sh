@@ -279,8 +279,32 @@ ensure_proxy() {
 
 ensure_signoz() {
   echo "Starting SigNoz reader (profile signoz)..."
+  # Persist a local JWT secret when missing (same pattern as Airflow JWT).
+  if [[ -f .env ]] && ! grep -q '^SIGNOZ_TOKENIZER_JWT_SECRET=.\+' .env; then
+    local jwt
+    jwt="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    if grep -q '^SIGNOZ_TOKENIZER_JWT_SECRET=' .env; then
+      sed -i "s|^SIGNOZ_TOKENIZER_JWT_SECRET=.*|SIGNOZ_TOKENIZER_JWT_SECRET=${jwt}|" .env
+    else
+      printf '\nSIGNOZ_TOKENIZER_JWT_SECRET=%s\n' "${jwt}" >> .env
+    fi
+    echo "Generated SIGNOZ_TOKENIZER_JWT_SECRET in .env"
+    set -a
+    # shellcheck source=/dev/null
+    source .env
+    set +a
+  fi
+  if [[ -z "${SIGNOZ_TOKENIZER_JWT_SECRET:-}" ]]; then
+    export SIGNOZ_TOKENIZER_JWT_SECRET
+    SIGNOZ_TOKENIZER_JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    echo "Using ephemeral SIGNOZ_TOKENIZER_JWT_SECRET for this start (add to .env to persist)."
+  fi
   docker compose --profile signoz up -d signoz
   sync_otel_collector_config
+  # OTLP readiness only — do not stop UI / mutate SQLite on every start.
+  chmod +x scripts/signoz-ensure.sh
+  ./scripts/signoz-ensure.sh
+  echo "Dashboard (optional): ./scripts/signoz-bootstrap.sh  # needs SIGNOZ_API_KEY or SIGNOZ_BOOTSTRAP_SQLITE=1"
 }
 
 ensure_openmetadata() {

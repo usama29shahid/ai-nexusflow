@@ -13,13 +13,13 @@
 | --- | --- |
 | 0 | Warehouse Route `products` — dlt → MinIO archive + ClickHouse Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers |
 | 1 | Stack verify — `./scripts/start.sh verify` (MinIO + OTel, ClickHouse, Airflow, SigNoz, OpenMetadata, Vault, lakehouse). `openmetadata-ingestion` stays optional |
+| 2 | SigNoz ready — OTLP live + products dashboard + lake→SigNoz ingest (`observability-ingest.sh signoz`) |
 
 ---
 
 ## Ordered backlog
 
 ```text
-2.  SigNoz ready — OTLP live dashboards + lake→SigNoz ingest + products run visibility
 3.  OpenMetadata ready — catalog warehouse tables from products
 4.  MinIO IAM — admin / reader / loader-style (mirror ClickHouse RBAC)
 5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
@@ -67,23 +67,21 @@ Execute **one number at a time**. Do not start the next item until the current o
 
 `./scripts/start.sh verify` checks MinIO + OTel, `clickhouse`, `airflow`, `signoz`, `openmetadata`, Vault when `NEXUS_SECRETS_BACKEND=vault`, and `lakehouse`. It does not start or repair services. `openmetadata-ingestion` is skipped (catalog ingest is item 3). Runbook: [operations.md](operations.md). SigNoz Compose health uses `curl` because the standalone image has no `wget`.
 
-### 2. SigNoz ready
+### 2. SigNoz ready — done
 
-Compose profile + live OTLP forward already exist ([docker/signoz/](../docker/signoz/), [docker/otel/collector-config.signoz.yaml](../docker/otel/collector-config.signoz.yaml)). Item **2** finishes the **reader** story for SigNoz. Pipeline code must still not call SigNoz APIs ([observability.md](observability.md)).
+Compose profile + live OTLP forward already existed. Item **2** finished the **reader** story: ensure OTLP ingester, products dashboard, and lake→SigNoz replay. Pipeline code must still not call SigNoz APIs ([observability.md](observability.md)).
 
-**In scope (both paths + product polish):**
+**Delivered:**
 
 | # | Deliverable |
 | --- | --- |
-| 2a | **Live OTLP:** SigNoz up → collector forwards → run `route_clickhouse_products` (or host dlt) → traces/metrics visible in SigNoz UI |
-| 2b | **Dashboards / saved views** for the products pipeline run (enough to demo ops visibility; document how to open them) |
-| 2c | **Lake → SigNoz ingest:** implement `./scripts/observability-ingest.sh signoz` — replay/project lake OTLP (and related) objects from `nexus-telemetry-{env}` into SigNoz’s native store so runs that happened while SigNoz was down (or after a SigNoz wipe) can be indexed |
-| 2d | Smoke/docs: how to start SigNoz, verify live path, run lake ingest, confirm UI; update [docker/signoz/README.md](../docker/signoz/README.md) / [observability.md](observability.md) |
-| 2e | Keep lake writes required on every run whether or not SigNoz is up |
+| 2a | **Live OTLP:** `./scripts/start.sh signoz` → `signoz-ensure` → collector forwards → products run → traces in SigNoz UI (`nexusflow.dlt`) |
+| 2b | **Dashboard:** `docker/signoz/dashboards/route-products.json` + `signoz-bootstrap.sh` |
+| 2c | **Lake → SigNoz:** `./scripts/observability-ingest.sh signoz` (`scripts/signoz_lake_ingest.py`) |
+| 2d | Smoke/docs: [docker/signoz/README.md](../docker/signoz/README.md), [observability.md](observability.md), this backlog note |
+| 2e | Lake writes remain required whether or not SigNoz is up |
 
 **Done when:** live OTLP path verified on a products run **and** `observability-ingest.sh signoz` successfully indexes lake data into SigNoz (documented + repeatable).
-
-**Out of scope for item 2:** OpenMetadata (item **3**); Elementary HTML auth (item **9**); changing dlt/dbt emit code to call SigNoz directly.
 
 ### 3. OpenMetadata ready
 

@@ -25,7 +25,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 
 **Follow [docs/backlog.md](docs/backlog.md)** — one item at a time. Do not use old “Phase 2 blocks readers/Terraform” language to skip backlog items.
 
-Route **`products`** (archive + Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers) is the **reference endpoint pipeline** and backlog item 0 (done). Stack verify is backlog item 1 (done): `./scripts/start.sh verify`. Next: SigNoz (OTLP + lake ingest) → OpenMetadata → MinIO IAM → local Terraform → Iceberg parity → remaining Route endpoints → facts/marts/semantic layer → docs basic auth → VPS/Actions → Supabase/Streamlit → RAG later.
+Route **`products`** (archive + Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers) is the **reference endpoint pipeline** and backlog item 0 (done). Stack verify is backlog item 1 (done): `./scripts/start.sh verify`. SigNoz is backlog item 2 (done). Next: OpenMetadata → MinIO IAM → local Terraform → Iceberg parity → remaining Route endpoints → facts/marts/semantic layer → docs basic auth → VPS/Actions → Supabase/Streamlit → RAG later.
 
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
