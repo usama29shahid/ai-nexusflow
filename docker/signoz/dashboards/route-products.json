@@ -1,0 +1,165 @@
+{
+  "description": "NexusFlow warehouse Route products pipeline visibility (dlt spans + rows).",
+  "title": "Nexus Route products",
+  "tags": ["nexus", "products", "dlt_dbt_clickhouse"],
+  "version": "v4",
+  "variables": {},
+  "layout": [
+    { "h": 6, "i": "0", "w": 6, "x": 0, "y": 0, "moved": false, "static": false },
+    { "h": 6, "i": "1", "w": 6, "x": 6, "y": 0, "moved": false, "static": false },
+    { "h": 6, "i": "2", "w": 12, "x": 0, "y": 6, "moved": false, "static": false }
+  ],
+  "widgets": [
+    {
+      "id": "0",
+      "panelTypes": "graph",
+      "title": "Products load spans (nexusflow.dlt)",
+      "description": "Count of route.products.load / dlt.load spans. Filter uses SigNoz column serviceName.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "clickhouse_sql": [],
+        "builder": {
+          "queryData": [
+            {
+              "aggregateOperator": "count",
+              "dataSource": "traces",
+              "queryName": "A",
+              "legend": "spans",
+              "expression": "A",
+              "disabled": false,
+              "filters": {
+                "items": [
+                  {
+                    "id": "svc",
+                    "key": {
+                      "dataType": "string",
+                      "id": "serviceName--string--tag--true",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "key": "serviceName",
+                      "type": "tag"
+                    },
+                    "op": "=",
+                    "value": "nexusflow.dlt"
+                  }
+                ],
+                "op": "AND"
+              },
+              "groupBy": [],
+              "stepInterval": 60,
+              "having": [],
+              "orderBy": [],
+              "limit": null,
+              "reduceTo": "sum",
+              "aggregateAttribute": {
+                "dataType": "float64",
+                "id": "------false",
+                "isColumn": true,
+                "isJSON": false,
+                "key": "",
+                "type": ""
+              }
+            }
+          ],
+          "queryFormulas": []
+        }
+      }
+    },
+    {
+      "id": "1",
+      "panelTypes": "graph",
+      "title": "Rows loaded (nexus.dlt.rows_loaded)",
+      "description": "Max observed OTLP counter value per 5m bucket. (Builder Increase stays empty when each run emits a single sample.)",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": {
+          "queryData": [],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "rows",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(unix_milli, 1000)), INTERVAL 5 MINUTE) AS ts, max(value) AS value FROM signoz_metrics.distributed_samples_v4 WHERE metric_name = 'nexus.dlt.rows_loaded' AND unix_milli >= {{.start_timestamp}} * 1000 AND unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "panelTypes": "list",
+      "title": "Recent products traces",
+      "description": "Traces for serviceName = nexusflow.dlt. Also filter attribute nexus.run_id in Traces explorer.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "none",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "clickhouse_sql": [],
+        "builder": {
+          "queryData": [
+            {
+              "aggregateOperator": "noop",
+              "dataSource": "traces",
+              "queryName": "A",
+              "legend": "",
+              "expression": "A",
+              "disabled": false,
+              "filters": {
+                "items": [
+                  {
+                    "id": "svc2",
+                    "key": {
+                      "dataType": "string",
+                      "id": "serviceName--string--tag--true",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "key": "serviceName",
+                      "type": "tag"
+                    },
+                    "op": "=",
+                    "value": "nexusflow.dlt"
+                  }
+                ],
+                "op": "AND"
+              },
+              "groupBy": [],
+              "stepInterval": 60,
+              "having": [],
+              "orderBy": [
+                {
+                  "columnName": "timestamp",
+                  "order": "desc"
+                }
+              ],
+              "limit": 100,
+              "reduceTo": "avg",
+              "aggregateAttribute": {
+                "dataType": "float64",
+                "id": "------false",
+                "isColumn": true,
+                "isJSON": false,
+                "key": "",
+                "type": ""
+              }
+            }
+          ],
+          "queryFormulas": []
+        }
+      }
+    }
+  ]
+}

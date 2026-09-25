@@ -149,7 +149,7 @@ dbt-clickhouse  1.10.2
 - [x] Engine RBAC (ClickHouse loader/transformer/reader/admin) — [rbac.md](rbac.md)
 - [x] Products Bronze → `bronze_{env}` + silver peer tables
 - [x] Stack verify — `./scripts/start.sh verify` — backlog **1**
-- [ ] SigNoz ready — live OTLP + dashboards + lake→SigNoz (`observability-ingest.sh signoz`) — backlog **2**
+- [x] SigNoz ready — live OTLP + dashboards + lake→SigNoz (`observability-ingest.sh signoz`) — backlog **2**
 - [ ] OpenMetadata product dashboards / catalog — backlog **3**
 - [ ] MinIO IAM — backlog **4**
 - [ ] Local Terraform — backlog **5**

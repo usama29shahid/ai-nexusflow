@@ -1,6 +1,10 @@
 # SigNoz standalone — profile: signoz
 # UI: http://127.0.0.1:${SIGNOZ_UI_PORT:-3301}
-# OTLP is internal-only (signoz:4317); host pipelines send to nexus otel-collector.
+# OTLP is internal-only (signoz:4317 / :4318); host pipelines send to nexus otel-collector.
+#
+# Start via ./scripts/start.sh signoz (generates SIGNOZ_TOKENIZER_JWT_SECRET in .env).
+# Bare `docker compose --profile signoz up` fails without that var set — by design.
+# After start: ensure OTLP is run by start.sh. Dashboard: ./scripts/signoz-bootstrap.sh.
 
 services:
   signoz:
@@ -17,23 +21,26 @@ services:
       - "4317"
       - "4318"
 
+    environment:
+      # start.sh generates and writes this to .env when missing — do not commit a shared default.
+      SIGNOZ_TOKENIZER_JWT_SECRET: ${SIGNOZ_TOKENIZER_JWT_SECRET:?set SIGNOZ_TOKENIZER_JWT_SECRET in .env (or run ./scripts/start.sh signoz)}
+
     volumes:
       - signoz_data:/var/lib/signoz
+      - signoz_clickhouse:/var/lib/clickhouse
+      - ./dashboards:/opt/signoz/dashboards:ro
 
     healthcheck:
       test:
         [
-          "CMD",
-          "curl",
-          "--fail",
-          "--silent",
-          "--show-error",
-          "http://127.0.0.1:8080/api/v1/health",
+          "CMD-SHELL",
+          "curl -sf http://127.0.0.1:8080/api/v1/health >/dev/null && curl -sf -o /dev/null -X POST http://127.0.0.1:4318/v1/traces -H 'Content-Type: application/json' -d '{\"resourceSpans\":[]}'",
         ]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 180s
+      start_period: 240s
 
 volumes:
   signoz_data:
+  signoz_clickhouse:
