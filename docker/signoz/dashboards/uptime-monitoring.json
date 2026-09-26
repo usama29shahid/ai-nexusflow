@@ -1,0 +1,102 @@
+{
+  "title": "Uptime Monitoring (HTTP Check)",
+  "description": "Always-on Compose-DNS probes from nexus otel-collector httpcheck (service.name=nexusflow.uptime): MinIO + collector health. Optional profiles (ClickHouse / SigNoz / Airflow) are not probed by default. ClickHouse SQL tuned for SigNoz standalone v0.117.",
+  "tags": ["nexus", "uptime", "httpcheck"],
+  "version": "v4",
+  "uploadedGrafana": false,
+  "variables": {},
+  "layout": [
+    { "h": 7, "i": "0", "w": 12, "x": 0, "y": 0, "moved": false, "static": false },
+    { "h": 7, "i": "1", "w": 12, "x": 0, "y": 7, "moved": false, "static": false },
+    { "h": 7, "i": "2", "w": 12, "x": 0, "y": 14, "moved": false, "static": false }
+  ],
+  "widgets": [
+    {
+      "id": "0",
+      "panelTypes": "graph",
+      "title": "Availability (2xx) by URL",
+      "description": "httpcheck.status for http.status_class=2xx. 1 = up. Lines may overlap when all healthy.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "none",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "minio",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, avg(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'httpcheck.status' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.uptime' AND JSONExtractString(t.labels, 'http.status_class') = '2xx' AND JSONExtractString(t.labels, 'http.url') = 'http://minio:9000/minio/health/live' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "B",
+            "legend": "otel-collector",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, avg(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'httpcheck.status' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.uptime' AND JSONExtractString(t.labels, 'http.status_class') = '2xx' AND JSONExtractString(t.labels, 'http.url') = 'http://otel-collector:13133' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "1",
+      "panelTypes": "graph",
+      "title": "Check duration (ms) by URL",
+      "description": "httpcheck.duration in milliseconds.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "ms",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "minio",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, avg(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'httpcheck.duration' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.uptime' AND JSONExtractString(t.labels, 'http.url') = 'http://minio:9000/minio/health/live' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "B",
+            "legend": "otel-collector",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, avg(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'httpcheck.duration' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.uptime' AND JSONExtractString(t.labels, 'http.url') = 'http://otel-collector:13133' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "panelTypes": "graph",
+      "title": "Non-2xx status matches by URL",
+      "description": "httpcheck.status value for classes other than 2xx (1 = that class matched). Healthy probes stay at 0. httpcheck.error is not emitted when a response is received, so this panel is the reliable failure signal.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "none",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "minio",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'httpcheck.status' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.uptime' AND JSONExtractString(t.labels, 'http.status_class') != '2xx' AND JSONExtractString(t.labels, 'http.url') = 'http://minio:9000/minio/health/live' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "B",
+            "legend": "otel-collector",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'httpcheck.status' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.uptime' AND JSONExtractString(t.labels, 'http.status_class') != '2xx' AND JSONExtractString(t.labels, 'http.url') = 'http://otel-collector:13133' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    }
+  ]
+}

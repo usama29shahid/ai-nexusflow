@@ -80,6 +80,7 @@ Compose profile + live OTLP forward already existed. Item **2** finished the **r
 | 2c | **Lake → SigNoz:** `./scripts/observability-ingest.sh signoz` (`scripts/signoz_lake_ingest.py`) |
 | 2d | Smoke/docs: [docker/signoz/README.md](../docker/signoz/README.md), [observability.md](observability.md), this backlog note |
 | 2e | Lake writes remain required whether or not SigNoz is up |
+| 2f | **Ops dashboards (follow-on):** collector self-metrics + httpcheck uptime + Ingestion JSON; bootstrap upserts all `dashboards/*.json`. Deferred (situation-triggered): ClickHouse Prometheus, Docker `docker_stats`, Cursor IDE, CI/CD — see [docker/signoz/README.md](../docker/signoz/README.md#future-dashboards-add-when-the-situation-matches) |
 
 **Done when:** live OTLP path verified on a products run **and** `observability-ingest.sh signoz` successfully indexes lake data into SigNoz (documented + repeatable).
 

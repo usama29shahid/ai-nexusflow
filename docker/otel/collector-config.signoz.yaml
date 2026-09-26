@@ -1,5 +1,9 @@
 # OTel Collector — lake + SigNoz reader forward (when signoz profile is running).
 # Env: NEXUS_ENV, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
+#
+# Ops receivers (keep in sync with collector-config.yaml):
+# - prometheus/self — collector otelcol_* metrics
+# - httpcheck — Compose-DNS health probes (service.name = nexusflow.uptime)
 
 extensions:
   health_check:
@@ -13,8 +17,33 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  prometheus/self:
+    config:
+      scrape_configs:
+        - job_name: otelcol
+          scrape_interval: 60s
+          static_configs:
+            - targets: ["127.0.0.1:8888"]
+
+  # Defaults only on contrib 0.128: httpcheck.status / duration / error
+  # (optional phase/size metrics need a newer collector).
+  # Always-on Compose services only — optional profiles (clickhouse / signoz /
+  # airflow) are omitted so stopped stacks do not flood the lake with failures.
+  httpcheck:
+    collection_interval: 60s
+    targets:
+      - method: GET
+        endpoints:
+          - http://minio:9000/minio/health/live
+          - http://otel-collector:13133
+
 processors:
   batch:
+  resource/uptime:
+    attributes:
+      - key: service.name
+        value: nexusflow.uptime
+        action: upsert
 
 exporters:
   awss3:
@@ -36,14 +65,29 @@ exporters:
 
 service:
   extensions: [health_check]
+  telemetry:
+    resource:
+      service.name: nexusflow.otel-collector
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "127.0.0.1"
+                port: 8888
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
       exporters: [awss3, otlp/signoz]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, prometheus/self]
       processors: [batch]
+      exporters: [awss3, otlp/signoz]
+    metrics/uptime:
+      receivers: [httpcheck]
+      processors: [resource/uptime, batch]
       exporters: [awss3, otlp/signoz]
     logs:
       receivers: [otlp]

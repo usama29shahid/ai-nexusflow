@@ -1,0 +1,210 @@
+{
+  "title": "Ingestion",
+  "description": "NexusFlow SigNoz ingest volume (metrics + traces). Logs stay empty until app logs are exported via OTLP. Respects the dashboard time picker. service.name labels: nexusflow.otel-collector, nexusflow.uptime; traces use serviceName (nexusflow.dlt, nexusflow.airflow, …).",
+  "tags": ["nexus", "ingestion", "signoz"],
+  "version": "v4",
+  "uploadedGrafana": false,
+  "variables": {},
+  "layout": [
+    { "h": 6, "i": "0", "w": 6, "x": 0, "y": 0, "moved": false, "static": false },
+    { "h": 6, "i": "1", "w": 6, "x": 6, "y": 0, "moved": false, "static": false },
+    { "h": 6, "i": "2", "w": 6, "x": 0, "y": 6, "moved": false, "static": false },
+    { "h": 6, "i": "3", "w": 6, "x": 6, "y": 6, "moved": false, "static": false },
+    { "h": 6, "i": "4", "w": 6, "x": 0, "y": 12, "moved": false, "static": false },
+    { "h": 6, "i": "5", "w": 6, "x": 6, "y": 12, "moved": false, "static": false },
+    { "h": 6, "i": "6", "w": 12, "x": 0, "y": 18, "moved": false, "static": false }
+  ],
+  "widgets": [
+    {
+      "id": "0",
+      "panelTypes": "graph",
+      "title": "Metric samples ingested",
+      "description": "Count of rows written to signoz_metrics.distributed_samples_v4 per minute.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "samples",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_metrics.distributed_samples_v4 WHERE unix_milli >= {{.start_timestamp}} * 1000 AND unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "1",
+      "panelTypes": "graph",
+      "title": "Metric samples by service.name",
+      "description": "Samples joined to time series labels. Blank deployment.environment is expected — we do not set that resource attribute yet.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "nexusflow.otel-collector",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "B",
+            "legend": "nexusflow.uptime",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE JSONExtractString(t.labels, 'service.name') = 'nexusflow.uptime' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "C",
+            "legend": "other (incl. pipeline)",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE JSONExtractString(t.labels, 'service.name') NOT IN ('nexusflow.otel-collector', 'nexusflow.uptime') AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "panelTypes": "graph",
+      "title": "httpcheck metric samples",
+      "description": "Samples for httpcheck.status + httpcheck.duration.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "httpcheck.status",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_metrics.distributed_samples_v4 WHERE metric_name = 'httpcheck.status' AND unix_milli >= {{.start_timestamp}} * 1000 AND unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "B",
+            "legend": "httpcheck.duration",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_metrics.distributed_samples_v4 WHERE metric_name = 'httpcheck.duration' AND unix_milli >= {{.start_timestamp}} * 1000 AND unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "panelTypes": "graph",
+      "title": "otelcol metric samples",
+      "description": "Samples whose metric_name starts with otelcol_.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "otelcol_*",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_metrics.distributed_samples_v4 WHERE startsWith(metric_name, 'otelcol_') AND unix_milli >= {{.start_timestamp}} * 1000 AND unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "panelTypes": "graph",
+      "title": "Trace spans ingested",
+      "description": "Spans in signoz_traces.distributed_signoz_index_v3 per minute.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "spans",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE timestamp >= toDateTime({{.start_timestamp}}) AND timestamp <= toDateTime({{.end_timestamp}}) GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5",
+      "panelTypes": "graph",
+      "title": "Trace spans by serviceName",
+      "description": "Pipeline services (nexusflow.dlt / nexusflow.airflow) plus other emitters.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "nexusflow.dlt",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName = 'nexusflow.dlt' AND timestamp >= toDateTime({{.start_timestamp}}) AND timestamp <= toDateTime({{.end_timestamp}}) GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "B",
+            "legend": "nexusflow.airflow",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName = 'nexusflow.airflow' AND timestamp >= toDateTime({{.start_timestamp}}) AND timestamp <= toDateTime({{.end_timestamp}}) GROUP BY ts ORDER BY ts"
+          },
+          {
+            "name": "C",
+            "legend": "other",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(timestamp, INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_traces.distributed_signoz_index_v3 WHERE serviceName NOT IN ('nexusflow.dlt', 'nexusflow.airflow') AND timestamp >= toDateTime({{.start_timestamp}}) AND timestamp <= toDateTime({{.end_timestamp}}) GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "6",
+      "panelTypes": "graph",
+      "title": "Log records ingested",
+      "description": "Expected to stay empty: NexusFlow does not export application logs to SigNoz yet (lake + metrics/traces only). Zero is correct, not a broken panel.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "logs",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(fromUnixTimestamp64Nano(timestamp), INTERVAL 1 MINUTE) AS ts, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE timestamp >= toUnixTimestamp64Nano(toDateTime64({{.start_timestamp}}, 9)) AND timestamp <= toUnixTimestamp64Nano(toDateTime64({{.end_timestamp}}, 9)) GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    }
+  ]
+}

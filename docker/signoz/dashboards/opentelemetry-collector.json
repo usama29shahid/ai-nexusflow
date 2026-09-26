@@ -1,0 +1,252 @@
+{
+  "title": "OpenTelemetry Collector",
+  "description": "NexusFlow otel-collector health (contrib 0.128 → SigNoz). Uses metric names as stored in SigNoz (often *_total). service.name = nexusflow.otel-collector.",
+  "tags": ["nexus", "otel", "collector", "metrics"],
+  "version": "v4",
+  "uploadedGrafana": false,
+  "variables": {},
+  "layout": [
+    { "h": 6, "i": "0", "w": 6, "x": 0, "y": 0, "moved": false, "static": false },
+    { "h": 6, "i": "1", "w": 6, "x": 6, "y": 0, "moved": false, "static": false },
+    { "h": 6, "i": "2", "w": 6, "x": 0, "y": 6, "moved": false, "static": false },
+    { "h": 6, "i": "3", "w": 6, "x": 6, "y": 6, "moved": false, "static": false },
+    { "h": 6, "i": "4", "w": 6, "x": 0, "y": 12, "moved": false, "static": false },
+    { "h": 6, "i": "5", "w": 6, "x": 6, "y": 12, "moved": false, "static": false },
+    { "h": 6, "i": "6", "w": 6, "x": 0, "y": 18, "moved": false, "static": false },
+    { "h": 6, "i": "7", "w": 6, "x": 6, "y": 18, "moved": false, "static": false },
+    { "h": 6, "i": "8", "w": 6, "x": 0, "y": 24, "moved": false, "static": false },
+    { "h": 6, "i": "9", "w": 6, "x": 6, "y": 24, "moved": false, "static": false }
+  ],
+  "widgets": [
+    {
+      "id": "0",
+      "panelTypes": "graph",
+      "title": "Process RSS memory (bytes)",
+      "description": "otelcol_process_memory_rss_bytes for nexusflow.otel-collector.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "bytes",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "rss",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, avg(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_process_memory_rss_bytes' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "1",
+      "panelTypes": "graph",
+      "title": "Process heap alloc (bytes)",
+      "description": "otelcol_process_runtime_heap_alloc_bytes.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "bytes",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "heap",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, avg(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_process_runtime_heap_alloc_bytes' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "panelTypes": "graph",
+      "title": "CPU seconds (cumulative)",
+      "description": "otelcol_process_cpu_seconds_total — rising counter; slope ≈ CPU use.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "s",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "cpu_seconds",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_process_cpu_seconds_total' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "panelTypes": "graph",
+      "title": "Uptime (seconds)",
+      "description": "otelcol_process_uptime_seconds_total.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "s",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "uptime",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_process_uptime_seconds_total' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "panelTypes": "graph",
+      "title": "Receiver accepted metric points (cumulative)",
+      "description": "otelcol_receiver_accepted_metric_points_total (prometheus/self + httpcheck + otlp).",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "accepted",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_receiver_accepted_metric_points_total' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5",
+      "panelTypes": "graph",
+      "title": "Exporter sent metric points (cumulative)",
+      "description": "otelcol_exporter_sent_metric_points_total (awss3 + otlp/signoz when profile is up).",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "sent",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_exporter_sent_metric_points_total' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "6",
+      "panelTypes": "graph",
+      "title": "Exporter send failures (cumulative)",
+      "description": "otelcol_exporter_send_failed_metric_points_total — should stay flat when healthy.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "failed",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_exporter_send_failed_metric_points_total' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "7",
+      "panelTypes": "graph",
+      "title": "Exporter queue size",
+      "description": "otelcol_exporter_queue_size.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "queue",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, avg(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_exporter_queue_size' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "8",
+      "panelTypes": "graph",
+      "title": "Processor incoming items (cumulative)",
+      "description": "otelcol_processor_incoming_items_total.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "incoming",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_processor_incoming_items_total' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    },
+    {
+      "id": "9",
+      "panelTypes": "graph",
+      "title": "Processor outgoing items (cumulative)",
+      "description": "otelcol_processor_outgoing_items_total.",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "yAxisUnit": "short",
+      "timePreferance": "GLOBAL_TIME",
+      "query": {
+        "queryType": "clickhouse_sql",
+        "promql": [],
+        "builder": { "queryData": [], "queryFormulas": [] },
+        "clickhouse_sql": [
+          {
+            "name": "A",
+            "legend": "outgoing",
+            "disabled": false,
+            "query": "SELECT toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 1 MINUTE) AS ts, max(s.value) AS value FROM signoz_metrics.distributed_samples_v4 AS s INNER JOIN signoz_metrics.distributed_time_series_v4 AS t ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name WHERE s.metric_name = 'otelcol_processor_outgoing_items_total' AND JSONExtractString(t.labels, 'service.name') = 'nexusflow.otel-collector' AND s.unix_milli >= {{.start_timestamp}} * 1000 AND s.unix_milli <= {{.end_timestamp}} * 1000 GROUP BY ts ORDER BY ts"
+          }
+        ]
+      }
+    }
+  ]
+}

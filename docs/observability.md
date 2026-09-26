@@ -182,7 +182,14 @@ SigNoz and OpenMetadata Compose profiles exist locally. **Product setup** is bac
 
 1. **Live OTLP** — collector forwards to SigNoz while the profile is up ([docker/otel/](../docker/otel/)). Start with **`./scripts/start.sh signoz`** only (not bare Compose): it writes `SIGNOZ_TOKENIZER_JWT_SECRET` when missing and runs [`scripts/signoz-ensure.sh`](../scripts/signoz-ensure.sh) so the standalone ingester listens on `:4317`/`:4318` (Compose health requires UI **and** OTLP). If the trace index is empty after a wipe, replay the lake (`observability-ingest.sh signoz -- --force --since …`) or set `SIGNOZ_AUTO_REPLAY=1`.
 2. **Lake → SigNoz** — `./scripts/observability-ingest.sh signoz` lists `nexus-telemetry-{env}/otel/` JSON batches and POSTs them into SigNoz OTLP HTTP from inside the container (backfill / SigNoz-was-down). Idempotent via `indexes/signoz/*.ingested`; `--force` re-posts after a SigNoz wipe (may duplicate spans). Default window is **last 24h** — pass `--since` for older lake history.
-3. **Products dashboard** — [`docker/signoz/dashboards/route-products.json`](../docker/signoz/dashboards/route-products.json) via [`scripts/signoz-bootstrap.sh`](../scripts/signoz-bootstrap.sh) (`SIGNOZ_API_KEY` preferred; `SIGNOZ_BOOTSTRAP_SQLITE=1` last resort). Edit the JSON in git, re-run bootstrap to create or update. Not run on every `start.sh signoz`. Traces filter: `serviceName = nexusflow.dlt` and attribute `nexus.run_id`.
+3. **Dashboards** — [`scripts/signoz-bootstrap.sh`](../scripts/signoz-bootstrap.sh) upserts every JSON under [`docker/signoz/dashboards/`](../docker/signoz/dashboards/) (`SIGNOZ_API_KEY` preferred; `SIGNOZ_BOOTSTRAP_SQLITE=1` last resort). Not run on every `start.sh signoz`. Shipped set:
+   - **Nexus Route products** — traces `serviceName = nexusflow.dlt` / attribute `nexus.run_id`
+   - **OpenTelemetry Collector** — `otelcol_*` (`service.name = nexusflow.otel-collector`)
+   - **Uptime Monitoring** — `httpcheck.*` (`service.name = nexusflow.uptime`; always-on MinIO + collector probes)
+   - **Ingestion** — recent SigNoz ingest volume
+4. **Collector ops receivers** — always-on in both lake-only and lake+SigNoz configs ([docker/otel/](../docker/otel/)): `prometheus/self` + `httpcheck` (separate `metrics/uptime` pipeline so `resource/uptime` does not overwrite app metrics). httpcheck targets are always-on services only (MinIO, collector) so optional profiles do not flood the lake when stopped.
+
+**Deferred community dashboards** (situation triggers; do not enable by default): ClickHouse Prometheus, Docker `docker_stats`, Cursor IDE hooks, CI/CD — see [docker/signoz/README.md](../docker/signoz/README.md#future-dashboards-add-when-the-situation-matches).
 
 OpenMetadata (item **3**) similarly gets warehouse connectors + catalog views; its lake projection can follow the same ingest script pattern (`openmetadata` target) when that item runs.
 
