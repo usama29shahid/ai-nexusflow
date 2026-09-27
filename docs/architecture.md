@@ -249,7 +249,8 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 | `lakehouse` | Polaris, Spark Thrift, Trino | `dlt_dbt_spark_iceberg` |
 | `airflow` | Airflow (on-demand) | Orchestration |
 | `signoz` | SigNoz | Pipeline trace reader (product setup: backlog **2**) |
-| `openmetadata` | OpenMetadata | Data catalog reader (product setup: backlog **3**) |
+| `openobserve` | OpenObserve | Primary observer under test (backlog **2.1**) |
+| `openmetadata` | OpenMetadata | Catalog / lineage reader (product setup: backlog **3**) |
 | `vault` | HashiCorp Vault + Agent | Secrets — [vault.md](vault.md) |
 | `proxy` | Caddy edge | Public/local hostnames — [edge-proxy.md](edge-proxy.md) |
 

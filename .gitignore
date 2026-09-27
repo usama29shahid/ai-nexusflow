@@ -152,6 +152,9 @@ activemq-data/
 .envrc
 .nexusflow/
 
+# Generated OTel collector config (scripts/render-otel-collector-config.py)
+docker/otel/.generated/
+
 # MinIO AIStor Free license (canonical path is .nexusflow/minio.license)
 *.license
 minio.license

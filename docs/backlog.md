@@ -20,6 +20,7 @@
 ## Ordered backlog
 
 ```text
+2.1 OpenObserve ready — primary observer under test (SigNoz retained); OTLP + dashboards + lake replay
 3.  OpenMetadata ready — catalog warehouse tables from products
 4.  MinIO IAM — admin / reader / loader-style (mirror ClickHouse RBAC)
 5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
@@ -38,7 +39,7 @@ Execute **one number at a time**. Do not start the next item until the current o
 
 ## Why this order
 
-1. **Readers (2–3) before MinIO IAM / Terraform** — telemetry and warehouse tables already exist from `products`.
+1. **Readers (2 → 2.1 → 3) before MinIO IAM / Terraform** — telemetry and warehouse tables already exist from `products`. OpenObserve (2.1) is the lighter single-binary observer to evaluate as the day-to-day UI while keeping SigNoz; Grafana is deferred until both branches and LLM are running.
 2. **MinIO IAM (4) before Terraform (5)** — design roles, prove with scripts, then Terraform owns them (one owner per resource class).
 3. **Terraform before Iceberg ELT (6)** — reuse bucket/IAM/env patterns on the lakehouse path.
 4. **Endpoints (7) before facts/semantic (8)** — category/brand grains feed dimensional models.
@@ -53,7 +54,7 @@ Execute **one number at a time**. Do not start the next item until the current o
 
 | Layer | Owner |
 | --- | --- |
-| Run containers (MinIO, ClickHouse, Polaris, SigNoz, OTel, OpenMetadata, Vault, Airflow, …) | **Docker Compose** + `./scripts/start.sh` |
+| Run containers (MinIO, ClickHouse, Polaris, SigNoz, OpenObserve, OTel, OpenMetadata, Vault, Airflow, …) | **Docker Compose** + `./scripts/start.sh` |
 | API-managed resources (buckets, MinIO IAM, ClickHouse DBs/users, optional OM connectors) | **HashiCorp Terraform** (local `environments/dev` first) |
 | Pull code, recreate stacks, `uv sync` on VPS | **GitHub Actions** + `start.sh` + host `uv` — **not** Terraform |
 
@@ -83,6 +84,24 @@ Compose profile + live OTLP forward already existed. Item **2** finished the **r
 | 2f | **Ops dashboards (follow-on):** collector self-metrics + httpcheck uptime + Ingestion JSON; bootstrap upserts all `dashboards/*.json`. Deferred (situation-triggered): ClickHouse Prometheus, Docker `docker_stats`, Cursor IDE, CI/CD — see [docker/signoz/README.md](../docker/signoz/README.md#future-dashboards-add-when-the-situation-matches) |
 
 **Done when:** live OTLP path verified on a products run **and** `observability-ingest.sh signoz` successfully indexes lake data into SigNoz (documented + repeatable).
+
+### 2.1 OpenObserve ready
+
+Compose profile + live OTLP forward + dashboards + lake replay. **Primary observer under test**; SigNoz (item 2) stays. Pipeline code must still not call OpenObserve APIs ([observability.md](observability.md)). Grafana deferred until both branches + LLM are running.
+
+**Deliverables:**
+
+| # | Deliverable |
+| --- | --- |
+| 2.1a | **Image:** `openobserve/openobserve:v1.0.4` single-binary (not SigNoz-style standalone) |
+| 2.1b | **Live OTLP:** `./scripts/start.sh openobserve` → collector forwards → products traces in UI |
+| 2.1c | **Dashboards:** products, collector, uptime, ingestion, Docker, Airflow, ClickHouse + `openobserve-bootstrap.sh` |
+| 2.1d | **Lake → OpenObserve:** `./scripts/observability-ingest.sh openobserve` |
+| 2.1e | **Vault:** KV `secret/nexusflow/{env}/openobserve` → `ZO_ROOT_USER_*` via Agent |
+| 2.1f | **Caddy:** `openobserve.${NEXUS_PUBLIC_HOST}` + `proxy-hosts.sh` |
+| 2.1g | Smoke/docs: [docker/openobserve/README.md](../docker/openobserve/README.md), observability/ops/vault/edge |
+
+**Done when:** live OTLP verified on a products run **and** lake replay indexes into OpenObserve; SigNoz still works when both profiles are up.
 
 ### 3. OpenMetadata ready
 
@@ -147,6 +166,7 @@ Multi-agent + RAG over `docs/` + semantic layer. Do not start before items 8 and
 
 - OpenTofu or Ansible
 - Terraform as app deploy / Compose / `uv` updater
-- Pipeline code calling SigNoz or OpenMetadata APIs
+- Pipeline code calling SigNoz, OpenObserve, or OpenMetadata APIs
 - LLM/RAG before semantic layer + Streamlit shell
 - Speculative stubs that skip verification of the current backlog item
+- Grafana stack (deferred until both branches + LLM are running)

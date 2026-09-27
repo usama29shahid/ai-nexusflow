@@ -8,7 +8,7 @@
 #
 # Always (no profile): MinIO AIStor Free, minio-init, otel-collector
 # License (gitignored): .nexusflow/minio.license — see docker/minio/README.md
-# Optional readers: signoz, openmetadata (add to COMPOSE_PROFILES or ./scripts/start.sh observability)
+# Optional readers: signoz, openobserve, openmetadata (COMPOSE_PROFILES or ./scripts/start.sh)
 # Airflow: add airflow to COMPOSE_PROFILES or: docker compose --profile airflow up -d
 # Proxy:   docker compose --profile proxy up -d  (or ./scripts/start.sh proxy)
 # Cursor Python/dlt/dbt stay on the host. Orchestrated ELT uses image nexus-elt (docker/elt).
@@ -17,6 +17,7 @@
 
 include:
   - path: ./docker/signoz/compose.yml
+  - path: ./docker/openobserve/compose.yml
   - path: ./docker/openmetadata/compose.yml
 
 x-airflow-common: &airflow-common
@@ -47,6 +48,12 @@ x-airflow-common: &airflow-common
     AIRFLOW__API__ENABLE_PROXY_FIX: ${AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX:-False}
     AIRFLOW__FAB__ENABLE_PROXY_FIX: ${AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX:-False}
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # OTel metrics → nexus otel-collector (OpenObserve / SigNoz Airflow boards).
+    AIRFLOW__METRICS__OTEL_ON: "True"
+    AIRFLOW__METRICS__OTEL_HOST: otel-collector
+    AIRFLOW__METRICS__OTEL_PORT: "4318"
+    AIRFLOW__METRICS__OTEL_SSL_ACTIVE: "False"
+    AIRFLOW__METRICS__OTEL_INTERVAL_MILLISECONDS: "60000"
     AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
     AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: minio_logs
     AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: s3://nexus-airflow-logs-${NEXUS_ENV:-dev}
@@ -174,6 +181,7 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
       - ./docker/clickhouse/users.d/nexus_access_management.xml:/etc/clickhouse-server/users.d/nexus_access_management.xml:ro
+      - ./docker/clickhouse/config.d/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
 
     healthcheck:
       test:
@@ -265,9 +273,20 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       AWS_ENDPOINT_URL: http://minio:9000
+      # Set by start.sh when OpenObserve is up (Basic auth for otlphttp exporter).
+      OPENOBSERVE_OTLP_BASIC_AUTH: ${OPENOBSERVE_OTLP_BASIC_AUTH:-}
 
     volumes:
+      # Default = in-repo lake-only config (safe for bare `compose up`).
+      # start.sh renders readers into .generated/ and sets OTEL_COLLECTOR_CONFIG.
       - ./docker/otel/${OTEL_COLLECTOR_CONFIG:-collector-config.yaml}:/etc/otelcol/config.yaml:ro
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+
+    # docker_stats needs docker.sock. Distroless default UID cannot open the
+    # Desktop/WSL socket even with group_add; run as root (same sock as Airflow).
+    user: "0:0"
+    group_add:
+      - "${DOCKER_GID:-0}"
 
     command: ["--config=/etc/otelcol/config.yaml"]
 

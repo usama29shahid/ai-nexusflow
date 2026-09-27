@@ -1,0 +1,48 @@
+# OpenObserve single-binary — profile: openobserve (backlog item 2.1)
+# UI + OTLP/HTTP: http://127.0.0.1:${OPENOBSERVE_UI_PORT:-5080}
+# OTLP/gRPC :5081 is Compose-network only (not published).
+#
+# Start via ./scripts/start.sh openobserve (sets ZO_ROOT_USER_* from .env or Vault).
+# Bare compose up fails without those vars — by design.
+# Dashboards: ./scripts/openobserve-bootstrap.sh
+
+services:
+  openobserve:
+    image: openobserve/openobserve:${OPENOBSERVE_VERSION:-v1.0.4}
+    container_name: openobserve
+    profiles: [openobserve]
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:${OPENOBSERVE_UI_PORT:-5080}:5080"
+
+    expose:
+      - "5081"
+
+    environment:
+      ZO_DATA_DIR: /data
+      # Prefer ./scripts/start.sh openobserve (env generate or Vault Agent). Not :?
+      # — Compose interpolates profiled services on every command.
+      ZO_ROOT_USER_EMAIL: ${ZO_ROOT_USER_EMAIL:-}
+      ZO_ROOT_USER_PASSWORD: ${ZO_ROOT_USER_PASSWORD:-}
+      ZO_TELEMETRY: "false"
+      # Compact deletes data older than N days (min 3). Default matches ~3 months.
+      ZO_COMPACT_DATA_RETENTION_DAYS: ${OPENOBSERVE_RETENTION_DAYS:-90}
+      # Ingest window in hours (OO default is 5!). Must cover lake replay age —
+      # default 2160h = 90d so historical OTLP/events are accepted after start.
+      ZO_INGEST_ALLOWED_UPTO: ${OPENOBSERVE_INGEST_ALLOWED_HOURS:-2160}
+      ZO_INGEST_ALLOWED_IN_FUTURE: ${OPENOBSERVE_INGEST_ALLOWED_FUTURE_HOURS:-24}
+
+    volumes:
+      - openobserve_data:/data
+      - ./dashboards:/opt/openobserve/dashboards:ro
+
+    mem_limit: ${OPENOBSERVE_MEM_LIMIT:-2g}
+
+    # Distroless-ish image: no /bin/true, wget, or curl. Real check is host/compose
+    # curl → /healthz (stack-verify + bootstrap). Disable Docker HEALTHCHECK.
+    healthcheck:
+      disable: true
+
+volumes:
+  openobserve_data:

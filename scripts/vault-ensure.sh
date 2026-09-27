@@ -65,6 +65,12 @@ jwt_secret_in_file() {
     && grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=.\+' "${secrets_file}"
 }
 
+openobserve_creds_in_file() {
+  [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
+    && grep -q '^ZO_ROOT_USER_EMAIL=.\+' "${secrets_file}" \
+    && grep -q '^ZO_ROOT_USER_PASSWORD=.\+' "${secrets_file}"
+}
+
 vault_root_token() {
   python3 -c "import json; print(json.load(open('${INIT_FILE}'))['root_token'])"
 }
@@ -116,6 +122,44 @@ ensure_airflow_jwt_secret() {
     sleep 1
   done
   echo "Timed out waiting for AIRFLOW__API_AUTH__JWT_SECRET in ${secrets_file}." >&2
+  echo "  docker compose logs vault-agent" >&2
+  exit 1
+}
+
+# OpenObserve (backlog 2.1): seed KV if missing, recreate Agent for ZO_ROOT_USER_*.
+ensure_openobserve_secret() {
+  if openobserve_creds_in_file; then
+    return 0
+  fi
+  if [[ ! -f "${INIT_FILE}" ]]; then
+    echo "Cannot seed openobserve: missing ${INIT_FILE}" >&2
+    return 1
+  fi
+  local kv_base="secret/nexusflow/${NEXUS_ENV:-dev}"
+  echo "Ensuring ${kv_base}/openobserve (OpenObserve root user)..."
+  if ! vault_exec_auth kv get "${kv_base}/openobserve" >/dev/null 2>&1; then
+    local email password
+    email="$(grep -E '^ZO_ROOT_USER_EMAIL=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    email="${email:-root@nexusflow.local}"
+    password="$(grep -E '^ZO_ROOT_USER_PASSWORD=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    if [[ -z "${password}" ]]; then
+      password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    fi
+    echo "  Seeding: ${kv_base}/openobserve"
+    vault_exec_auth kv put "${kv_base}/openobserve" \
+      root_user_email="${email}" \
+      root_user_password="${password}"
+  fi
+  echo "Recreating Vault Agent so secrets.env picks up OpenObserve..."
+  docker compose --profile vault up -d --no-deps --force-recreate vault-agent
+  local i
+  for i in $(seq 1 30); do
+    if openobserve_creds_in_file; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for ZO_ROOT_USER_* in ${secrets_file}." >&2
   echo "  docker compose logs vault-agent" >&2
   exit 1
 }
@@ -187,6 +231,7 @@ if secrets_file_ready; then
     wait_for_secrets_file 10 || true
   fi
   ensure_airflow_jwt_secret
+  ensure_openobserve_secret
   exit 0
 fi
 
@@ -195,6 +240,7 @@ docker compose --profile vault up -d vault-agent
 
 if wait_for_secrets_file 30; then
   ensure_airflow_jwt_secret
+  ensure_openobserve_secret
   exit 0
 fi
 

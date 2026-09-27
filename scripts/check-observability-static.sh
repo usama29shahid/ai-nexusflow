@@ -1,111 +1,127 @@
 #!/usr/bin/env bash
-# Static checks for SigNoz dashboards + OTel ops receiver sync (no Docker required).
-# Used by signoz-bootstrap.sh; safe to run alone: ./scripts/check-observability-static.sh
+# Static checks for SigNoz + OpenObserve dashboards and OTel base ops (no Docker).
+# Used by signoz-bootstrap.sh; safe alone: ./scripts/check-observability-static.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-DASHBOARD_DIR="${ROOT}/docker/signoz/dashboards"
+SIGNOZ_DIR="${ROOT}/docker/signoz/dashboards"
+OO_DIR="${ROOT}/docker/openobserve/dashboards"
 OTEL_BASE="${ROOT}/docker/otel/collector-config.yaml"
-OTEL_SIGNOZ="${ROOT}/docker/otel/collector-config.signoz.yaml"
 
-python3 - <<'PY' "${DASHBOARD_DIR}" "${OTEL_BASE}" "${OTEL_SIGNOZ}"
+python3 - <<'PY' "${SIGNOZ_DIR}" "${OO_DIR}" "${OTEL_BASE}" "${ROOT}/scripts/render-otel-collector-config.py"
 import json, pathlib, re, sys
 
-dash_dir, base_path, signoz_path = map(pathlib.Path, sys.argv[1:4])
+signoz_dir, oo_dir, base_path, render_path = map(pathlib.Path, sys.argv[1:5])
 errors: list[str] = []
 
-files = sorted(dash_dir.glob("*.json"))
-if not files:
-    errors.append(f"no dashboard JSON under {dash_dir}")
+# --- SigNoz V1 dashboards ---
+signoz_files = sorted(signoz_dir.glob("*.json"))
+if not signoz_files:
+    errors.append(f"no SigNoz dashboard JSON under {signoz_dir}")
 
-for path in files:
+for path in signoz_files:
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        errors.append(f"{path.name}: invalid JSON ({exc})")
+        errors.append(f"signoz/{path.name}: invalid JSON ({exc})")
         continue
     if doc.get("schemaVersion"):
         errors.append(
-            f"{path.name}: V2 dashboard (schemaVersion set); standalone needs V1 title+widgets+layout"
+            f"signoz/{path.name}: V2 dashboard (schemaVersion set); standalone needs V1"
         )
         continue
     title = doc.get("title")
     if not isinstance(title, str) or not title.strip():
-        errors.append(f"{path.name}: missing V1 title")
+        errors.append(f"signoz/{path.name}: missing V1 title")
     widgets = doc.get("widgets")
     layout = doc.get("layout")
     if not isinstance(widgets, list) or not widgets:
-        errors.append(f"{path.name}: missing widgets[]")
+        errors.append(f"signoz/{path.name}: missing widgets[]")
         continue
     if not isinstance(layout, list) or not layout:
-        errors.append(f"{path.name}: missing layout[]")
+        errors.append(f"signoz/{path.name}: missing layout[]")
         continue
     wids = {str(w.get("id")) for w in widgets if isinstance(w, dict)}
     lids = {str(item.get("i")) for item in layout if isinstance(item, dict)}
     if wids != lids:
         errors.append(
-            f"{path.name}: layout/widget id mismatch "
+            f"signoz/{path.name}: layout/widget id mismatch "
             f"(only_in_widgets={sorted(wids - lids)} only_in_layout={sorted(lids - wids)})"
         )
 
-ops_pattern = re.compile(
-    r"(?ms)^  prometheus/self:.*?^  resource/uptime:.*?^        action: upsert\n",
-)
-telemetry_pattern = re.compile(
-    r"(?ms)^  telemetry:.*?^                port: 8888\n",
-)
+# --- OpenObserve dashboards (schema version 5) ---
+oo_files = sorted(oo_dir.glob("*.json")) if oo_dir.is_dir() else []
+if not oo_files:
+    errors.append(f"no OpenObserve dashboard JSON under {oo_dir}")
 
-def ops_blob(text: str, label: str) -> str | None:
-    m = ops_pattern.search(text)
-    if not m:
-        errors.append(f"{label}: missing prometheus/self + resource/uptime ops block")
-        return None
-    return m.group(0)
+for path in oo_files:
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        errors.append(f"openobserve/{path.name}: invalid JSON ({exc})")
+        continue
+    title = doc.get("title")
+    if not isinstance(title, str) or not title.strip():
+        errors.append(f"openobserve/{path.name}: missing title")
+    ver = doc.get("version")
+    if ver not in (5, "5"):
+        errors.append(f"openobserve/{path.name}: expected version 5, got {ver!r}")
 
-def telemetry_blob(text: str, label: str) -> str | None:
-    m = telemetry_pattern.search(text)
-    if not m:
-        errors.append(f"{label}: missing telemetry prometheus reader block")
-        return None
-    blob = m.group(0)
-    if 'host: "127.0.0.1"' not in blob:
-        errors.append(f"{label}: prometheus reader host must be 127.0.0.1 (not published)")
-    return blob
-
+# --- OTel base config ---
 base = base_path.read_text(encoding="utf-8")
-signoz = signoz_path.read_text(encoding="utf-8")
-ob, os_ = ops_blob(base, base_path.name), ops_blob(signoz, signoz_path.name)
-tb, ts = telemetry_blob(base, base_path.name), telemetry_blob(signoz, signoz_path.name)
-if ob is not None and os_ is not None and ob != os_:
+if "prometheus/self:" not in base:
+    errors.append(f"{base_path.name}: missing prometheus/self")
+if "docker_stats:" not in base:
+    errors.append(f"{base_path.name}: missing docker_stats receiver")
+if "prometheus/clickhouse:" in base:
     errors.append(
-        f"ops receivers/processors differ between {base_path.name} and {signoz_path.name}"
+        f"{base_path.name}: prometheus/clickhouse belongs in render inject "
+        "(not always-on base — CH profile may be stopped)"
     )
-if tb is not None and ts is not None and tb != ts:
+if 'host: "127.0.0.1"' not in base or "port: 8888" not in base:
+    errors.append(f"{base_path.name}: prometheus reader must bind 127.0.0.1:8888")
+if "receivers: [otlp, prometheus/self, docker_stats]" not in base:
     errors.append(
-        f"telemetry prometheus reader differs between {base_path.name} and {signoz_path.name}"
+        f"{base_path.name}: metrics pipeline should default to "
+        "otlp + prometheus/self + docker_stats (CH scrape via render)"
     )
 
-# Always-on httpcheck endpoints only (optional profiles intentionally omitted).
+render_src = render_path.read_text(encoding="utf-8")
+if "CLICKHOUSE_RECEIVER" not in render_src or "clickhouse:9363" not in render_src:
+    errors.append("render-otel-collector-config.py: missing ClickHouse scrape inject")
+
 expected = {
     "http://minio:9000/minio/health/live",
     "http://otel-collector:13133",
 }
-for label, text in ((base_path.name, base), (signoz_path.name, signoz)):
-    endpoints = set(re.findall(r"- (http://\S+)", text))
-    # Only consider httpcheck block endpoints (both files share the same list today).
+# Restrict to httpcheck block
+hc = re.search(r"(?ms)^  httpcheck:.*?^(?=processors:)", base)
+if not hc:
+    errors.append(f"{base_path.name}: missing httpcheck block")
+else:
+    endpoints = set(re.findall(r"- (http://\S+)", hc.group(0)))
     if not expected.issubset(endpoints):
-        errors.append(f"{label}: missing always-on httpcheck endpoints {sorted(expected - endpoints)}")
+        errors.append(
+            f"{base_path.name}: missing always-on httpcheck endpoints "
+            f"{sorted(expected - endpoints)}"
+        )
     extra = endpoints - expected
-    # Allow other http:// mentions outside httpcheck (none expected today).
     if extra:
-        errors.append(f"{label}: unexpected http endpoints {sorted(extra)} (always-on only)")
+        errors.append(
+            f"{base_path.name}: unexpected httpcheck endpoints {sorted(extra)} "
+            "(always-on only)"
+        )
 
 if errors:
     print("ERROR: observability static checks failed:", file=sys.stderr)
     for err in errors:
         print(f"  - {err}", file=sys.stderr)
     raise SystemExit(1)
-print(f"Observability static checks OK ({len(files)} dashboard(s), collector ops in sync).")
+print(
+    f"Observability static checks OK "
+    f"(signoz={len(signoz_files)} openobserve={len(oo_files)} dashboards; "
+    f"otel base ops)."
+)
 PY

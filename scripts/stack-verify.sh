@@ -20,6 +20,7 @@ CLICKHOUSE_HTTP_PORT="${CLICKHOUSE_HTTP_PORT:-8123}"
 OTEL_HEALTH_PORT="${OTEL_HEALTH_PORT:-13133}"
 AIRFLOW_WEBSERVER_PORT="${AIRFLOW_WEBSERVER_PORT:-8081}"
 SIGNOZ_UI_PORT="${SIGNOZ_UI_PORT:-3301}"
+OPENOBSERVE_UI_PORT="${OPENOBSERVE_UI_PORT:-5080}"
 OPENMETADATA_ADMIN_PORT="${OPENMETADATA_ADMIN_PORT:-8586}"
 POLARIS_MGMT_PORT="${POLARIS_MGMT_PORT:-8182}"
 SPARK_THRIFT_PORT="${SPARK_THRIFT_PORT:-10000}"
@@ -208,6 +209,8 @@ check "airflow-init exited 0" expect_exited_zero airflow-init
 check "Airflow /api/v2/monitor/health" expect_curl "http://127.0.0.1:${AIRFLOW_WEBSERVER_PORT}/api/v2/monitor/health"
 check "signoz healthy" expect_healthy signoz
 check "SigNoz /api/v1/health" expect_curl "http://127.0.0.1:${SIGNOZ_UI_PORT}/api/v1/health"
+check "openobserve running" expect_running openobserve
+check "OpenObserve /healthz" expect_curl "http://127.0.0.1:${OPENOBSERVE_UI_PORT}/healthz"
 check "openmetadata-postgresql healthy" expect_healthy openmetadata-postgresql
 check "openmetadata-elasticsearch healthy" expect_healthy openmetadata-elasticsearch
 check "openmetadata-migrate exited 0" expect_exited_zero openmetadata-migrate

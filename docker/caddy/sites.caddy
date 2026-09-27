@@ -56,6 +56,11 @@
 	reverse_proxy signoz:8080
 }
 
+{$NEXUS_CADDY_SITE_SCHEME}openobserve.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy openobserve:5080
+}
+
 {$NEXUS_CADDY_SITE_SCHEME}openmetadata.{$NEXUS_PUBLIC_HOST} {
 	import encode_headers
 	reverse_proxy openmetadata-server:8585
