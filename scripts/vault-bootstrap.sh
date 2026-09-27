@@ -302,6 +302,14 @@ else
     jwt_secret="$(generate_if_blank AIRFLOW__API_AUTH__JWT_SECRET "python3 -c 'import secrets; print(secrets.token_urlsafe(32))'")" \
     admin_password="$(read_env_default AIRFLOW_ADMIN_PASSWORD change-me)"
 fi
+if kv_secret_exists "${kv_base}/openobserve"; then
+  echo "  KV exists: ${kv_base}/openobserve (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/openobserve"
+  vault_exec kv put "${kv_base}/openobserve" \
+    root_user_email="$(read_env_default ZO_ROOT_USER_EMAIL root@nexusflow.local)" \
+    root_user_password="$(generate_if_blank ZO_ROOT_USER_PASSWORD "python3 -c 'import secrets; print(secrets.token_urlsafe(24))'")"
+fi
 
 echo "Starting Vault Agent..."
 docker compose --profile vault up -d vault-agent

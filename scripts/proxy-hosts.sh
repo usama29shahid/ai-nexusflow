@@ -62,6 +62,7 @@ SUBDOMAINS=(
   trino
   spark
   signoz
+  openobserve
   openmetadata
   docs
   elementary

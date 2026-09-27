@@ -13,7 +13,8 @@ Quick reference when you forget start/stop steps. For first-time install see [se
 | **Branch — lakehouse** | `lakehouse` | Polaris, polaris-setup, Spark Thrift, Trino |
 | **Platform** | `cloudbeaver` | CloudBeaver |
 | **Platform** | `airflow` | Airflow (postgres, api-server, dag-processor, scheduler) — Phase 1 orchestration |
-| **Platform** | `signoz` | SigNoz — pipeline trace reader |
+| **Platform** | `signoz` | SigNoz — pipeline trace reader (item 2) |
+| **Platform** | `openobserve` | OpenObserve — primary observer under test (item **2.1**) |
 | **Platform** | `openmetadata` | OpenMetadata — data catalog reader |
 | **Platform** | `vault` | Vault, vault-agent (when `NEXUS_SECRETS_BACKEND=vault`) |
 
@@ -73,15 +74,16 @@ Do **not** use `down -v` unless you intend to **delete** MinIO / ClickHouse data
 
 ## Stop observability readers (keep MinIO + OTel + branches)
 
-SigNoz and OpenMetadata are on-demand. Stop them without tearing down the rest of the stack:
+SigNoz, OpenObserve, and OpenMetadata are on-demand. Stop them without tearing down the rest of the stack:
 
 ```bash
-./scripts/start.sh stop-signoz          # revert OTel to lake-only export
+./scripts/start.sh stop-signoz          # re-sync OTel exporters
+./scripts/start.sh stop-openobserve     # re-sync OTel exporters
 ./scripts/start.sh stop-openmetadata
-./scripts/start.sh stop-observability   # both readers
+./scripts/start.sh stop-observability   # all three readers
 ```
 
-MinIO and `otel-collector` stay running. When SigNoz stops, `start.sh` switches the collector back to `collector-config.yaml` (no forward to `signoz:4317`).
+MinIO and `otel-collector` stay running. When readers stop, `start.sh` re-renders collector exporters (lake always; remaining readers keep their forward).
 
 ---
 
@@ -140,19 +142,23 @@ One command. It prints `PASS` / `FAIL` / `SKIP` and exits non-zero on any `FAIL`
 ./scripts/start.sh verify
 ```
 
-Start the stacks first. `./scripts/start.sh all` brings up MinIO, OTel, ClickHouse, lakehouse, CloudBeaver, and Airflow (plus Vault when `NEXUS_SECRETS_BACKEND=vault`). SigNoz and OpenMetadata stay on demand:
+Start the stacks first. `./scripts/start.sh all` brings up MinIO, OTel, ClickHouse, lakehouse, CloudBeaver, and Airflow (plus Vault when `NEXUS_SECRETS_BACKEND=vault`). Readers stay on demand:
 
 ```bash
-./scripts/start.sh signoz          # required entrypoint (sets JWT + OTLP ensure); not bare compose up
-./scripts/signoz-ensure.sh         # repair OTLP if UI is up but collector cannot reach signoz:4317
-./scripts/signoz-bootstrap.sh      # optional: all dashboards/*.json (SIGNOZ_API_KEY or SIGNOZ_BOOTSTRAP_SQLITE=1)
-./scripts/observability-ingest.sh signoz   # lake → SigNoz backfill (default last 24h)
+./scripts/start.sh openobserve     # primary UI under test (item 2.1); Vault/env ZO_ROOT_USER_*
+./scripts/openobserve-bootstrap.sh # optional dashboards
+./scripts/observability-ingest.sh openobserve
+./scripts/start.sh signoz          # retained (item 2); sets JWT + OTLP ensure
+./scripts/signoz-bootstrap.sh
+./scripts/observability-ingest.sh signoz
 ./scripts/start.sh openmetadata
 ```
 
-**SigNoz JWT:** Compose requires `SIGNOZ_TOKENIZER_JWT_SECRET`. Always use `./scripts/start.sh signoz` so it is created in `.env`. Bare `docker compose --profile signoz up` fails without that variable by design — see [docker/signoz/README.md](../docker/signoz/README.md).
+**OpenObserve:** UI `http://127.0.0.1:5080` — see [docker/openobserve/README.md](../docker/openobserve/README.md). Credentials from `.env` or Vault KV `openobserve`.
 
-**SigNoz ready check:** UI `http://127.0.0.1:3301` → Traces with `serviceName = nexusflow.dlt` after a products run; Dashboards → **Nexus Route products**, **OpenTelemetry Collector**, **Uptime Monitoring** (`nexusflow.uptime`), **Ingestion**. Metrics Explorer should show `otelcol_*` / `httpcheck.*` after the collector recreates. Empty trace panels after recreate: lake replay with `--force --since …`. Future (CH / Docker / Cursor / CI) dashboards: [docker/signoz/README.md](../docker/signoz/README.md#future-dashboards-add-when-the-situation-matches).
+**SigNoz JWT:** Compose requires `SIGNOZ_TOKENIZER_JWT_SECRET`. Always use `./scripts/start.sh signoz`. See [docker/signoz/README.md](../docker/signoz/README.md).
+
+**SigNoz ready check:** UI `http://127.0.0.1:3301` → Traces with `serviceName = nexusflow.dlt`; Dashboards → products / collector / uptime / ingestion.
 
 `openmetadata-ingestion` is skipped on purpose (heavy; catalog ingest is backlog item 3). Vault checks run only when `NEXUS_SECRETS_BACKEND=vault`, and they fail while Vault is sealed (`"sealed":false` is required). CloudBeaver and Caddy are checked when that profile is in `COMPOSE_PROFILES` or the container is already running.
 
@@ -170,6 +176,7 @@ curl http://127.0.0.1:8081/api/v2/monitor/health   # Airflow 3 api-server
 curl -sf http://127.0.0.1:8200/v1/sys/health | grep -q '"sealed":false'   # Vault unsealed
 curl --fail http://localhost:8182/q/health         # Polaris
 curl -sf http://127.0.0.1:3301/api/v1/health       # SigNoz
+curl -sf http://127.0.0.1:5080/healthz             # OpenObserve
 curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 ```
 
@@ -180,6 +187,7 @@ curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 | Spark UI | http://localhost:4040 |
 | CloudBeaver | http://localhost:8978 |
 | Airflow | http://127.0.0.1:8081 |
+| OpenObserve | http://127.0.0.1:5080 |
 | SigNoz | http://127.0.0.1:3301 |
 | OpenMetadata | http://127.0.0.1:8585 |
 | Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
@@ -240,8 +248,9 @@ Start .env stacks   →  ./scripts/start.sh
 Stop all            →  ./scripts/start.sh down
 Health check        →  ./scripts/start.sh verify   # does not start services
 Stop SigNoz only    →  ./scripts/start.sh stop-signoz
+Stop OpenObserve    →  ./scripts/start.sh stop-openobserve
 Stop OM only        →  ./scripts/start.sh stop-openmetadata
-Stop both readers   →  ./scripts/start.sh stop-observability
+Stop reader UIs     →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
 dlt smoke           →  ./scripts/start.sh smoke

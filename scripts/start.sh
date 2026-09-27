@@ -5,7 +5,7 @@
 #
 #   Always (no profile)     MinIO + otel-collector — shared store + telemetry gateway
 #                           Independent of branches (same always-on model)
-#   Platform (independent)  vault, airflow, cloudbeaver, signoz, openmetadata
+#   Platform (independent)  vault, airflow, cloudbeaver, signoz, openobserve, openmetadata
 #   Branch stacks           clickhouse → dlt_dbt_clickhouse
 #                           lakehouse  → dlt_dbt_spark_iceberg
 #
@@ -18,12 +18,14 @@
 #   ./scripts/start.sh airflow         # Airflow only (platform, on-demand)
 #   ./scripts/start.sh proxy           # Caddy edge proxy (*.NEXUS_PUBLIC_HOST)
 #   ./scripts/start.sh signoz          # SigNoz reader (platform, on-demand)
+#   ./scripts/start.sh openobserve     # OpenObserve reader (backlog 2.1; primary UI under test)
 #   ./scripts/start.sh openmetadata    # OpenMetadata reader (platform, on-demand)
-#   ./scripts/start.sh observability   # MinIO + OTel + SigNoz + OpenMetadata readers
+#   ./scripts/start.sh observability   # MinIO + OTel + SigNoz + OpenObserve + OpenMetadata
 #   ./scripts/start.sh verify          # host health check; does not start or repair services
-#   ./scripts/start.sh stop-signoz       # stop SigNoz reader; OTel → lake only
+#   ./scripts/start.sh stop-signoz       # stop SigNoz; re-sync OTel exporters
+#   ./scripts/start.sh stop-openobserve  # stop OpenObserve; re-sync OTel exporters
 #   ./scripts/start.sh stop-openmetadata # stop OpenMetadata reader
-#   ./scripts/start.sh stop-observability # stop both readers
+#   ./scripts/start.sh stop-observability # stop reader UIs
 #   ./scripts/start.sh smoke           # ClickHouse dlt smoke
 #   ./scripts/start.sh dbt ...         # dbt with secrets loaded
 #   ./scripts/start.sh shell           # interactive shell with secrets
@@ -39,7 +41,7 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 # Profiles that map to execution branches (config/branches.yaml)
 BRANCH_PROFILES="clickhouse lakehouse"
 # Profiles for platform tooling (not a data branch)
-PLATFORM_PROFILES="vault airflow cloudbeaver signoz openmetadata proxy"
+PLATFORM_PROFILES="vault airflow cloudbeaver signoz openobserve openmetadata proxy"
 
 usage() {
   cat <<'EOF'
@@ -55,13 +57,15 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   airflow       Start Airflow profile only (platform; on-demand)
   proxy         Start Caddy edge proxy (http://*.NEXUS_PUBLIC_HOST)
   signoz        Start SigNoz reader profile (trace UI)
+  openobserve   Start OpenObserve reader (backlog 2.1; primary UI under test)
   openmetadata  Start OpenMetadata reader profile (data catalog)
-  observability Start shared infra + SigNoz + OpenMetadata readers
+  observability Start shared infra + SigNoz + OpenObserve + OpenMetadata
   observability-smoke  Run scripts/observability-smoke.sh
   verify        Host health check (PASS/FAIL/SKIP). Does not start or repair services.
-  stop-signoz        Stop SigNoz reader; revert OTel to lake-only export
+  stop-signoz        Stop SigNoz; re-sync OTel exporters (SigNoz/OpenObserve/lake)
+  stop-openobserve   Stop OpenObserve; re-sync OTel exporters
   stop-openmetadata  Stop OpenMetadata reader
-  stop-observability Stop SigNoz + OpenMetadata readers
+  stop-observability Stop SigNoz + OpenObserve + OpenMetadata readers
 
 App (secrets loaded):
 
@@ -161,13 +165,35 @@ signoz_is_running() {
   docker compose --profile signoz ps signoz --status running -q 2>/dev/null | grep -q .
 }
 
+openobserve_is_running() {
+  docker compose --profile openobserve ps openobserve --status running -q 2>/dev/null | grep -q .
+}
+
 sync_otel_collector_config() {
-  local config="collector-config.yaml"
-  if signoz_is_running; then
-    config="collector-config.signoz.yaml"
+  # docker_stats needs docker.sock group access. Prefer Desktop's /var/run/docker.sock
+  # as the Compose bind source (Desktop remaps it). Do not point DOCKER_SOCK at
+  # /mnt/wsl/docker-desktop-bind-mounts/... for mounts — that sock is often nobody:nogroup.
+  if [[ -z "${DOCKER_GID:-}" ]]; then
+    local sock="${DOCKER_SOCK:-/var/run/docker.sock}"
+    if [[ -S "${sock}" ]]; then
+      DOCKER_GID="$(stat -c '%g' "${sock}" 2>/dev/null || echo 0)"
+    else
+      # Host CLI may use a Desktop bind-mount sock while Compose still mounts /var/run/docker.sock.
+      DOCKER_GID=1001
+    fi
+    export DOCKER_GID
   fi
-  export OTEL_COLLECTOR_CONFIG="${config}"
-  echo "Syncing otel-collector (${config})..."
+  export DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
+  # shellcheck source=scripts/openobserve-credentials.sh
+  source "${ROOT}/scripts/openobserve-credentials.sh"
+  if openobserve_is_running || [[ -n "${ZO_ROOT_USER_EMAIL:-}" && -n "${ZO_ROOT_USER_PASSWORD:-}" ]]; then
+    if [[ -n "${ZO_ROOT_USER_EMAIL:-}" && -n "${ZO_ROOT_USER_PASSWORD:-}" ]]; then
+      export_openobserve_otlp_basic_auth || true
+    fi
+  fi
+  uv run python scripts/render-otel-collector-config.py
+  export OTEL_COLLECTOR_CONFIG=".generated/collector-config.yaml"
+  echo "Syncing otel-collector (${OTEL_COLLECTOR_CONFIG}; DOCKER_GID=${DOCKER_GID})..."
   docker compose up -d --force-recreate otel-collector
 }
 
@@ -307,6 +333,30 @@ ensure_signoz() {
   echo "Dashboard (optional): ./scripts/signoz-bootstrap.sh  # needs SIGNOZ_API_KEY or SIGNOZ_BOOTSTRAP_SQLITE=1"
 }
 
+ensure_openobserve() {
+  echo "Starting OpenObserve reader (profile openobserve; backlog 2.1)..."
+  # shellcheck source=scripts/openobserve-credentials.sh
+  source "${ROOT}/scripts/openobserve-credentials.sh"
+  ensure_openobserve_env_credentials
+  # Vault: vault-ensure seeds KV; re-source secrets.env if Agent just wrote ZO_*.
+  if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]] && [[ -f scripts/load-secrets.sh ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source scripts/load-secrets.sh 2>/dev/null || true
+    set +a
+  fi
+  if [[ -z "${ZO_ROOT_USER_EMAIL:-}" || -z "${ZO_ROOT_USER_PASSWORD:-}" ]]; then
+    echo "ERROR: ZO_ROOT_USER_EMAIL / ZO_ROOT_USER_PASSWORD missing after credential ensure." >&2
+    echo "  env mode: re-run start.sh; vault mode: seed secret/nexusflow/\$NEXUS_ENV/openobserve" >&2
+    exit 1
+  fi
+  export_openobserve_otlp_basic_auth
+  docker compose --profile openobserve up -d openobserve
+  sync_otel_collector_config
+  echo "Dashboard (optional): ./scripts/openobserve-bootstrap.sh"
+  echo "Lake replay: ./scripts/observability-ingest.sh openobserve"
+}
+
 ensure_openmetadata() {
   echo "Starting OpenMetadata reader (profile openmetadata)..."
   docker compose --profile openmetadata up -d
@@ -319,6 +369,13 @@ stop_signoz() {
   sync_otel_collector_config
 }
 
+stop_openobserve() {
+  echo "Stopping OpenObserve reader..."
+  docker compose --profile openobserve stop openobserve 2>/dev/null || true
+  docker compose --profile openobserve rm -f openobserve 2>/dev/null || true
+  sync_otel_collector_config
+}
+
 stop_openmetadata() {
   echo "Stopping OpenMetadata reader..."
   docker compose --profile openmetadata down
@@ -326,12 +383,14 @@ stop_openmetadata() {
 
 stop_observability_readers() {
   stop_signoz
+  stop_openobserve
   stop_openmetadata
 }
 
 ensure_observability_readers() {
   ensure_minio
   ensure_signoz
+  ensure_openobserve
   ensure_openmetadata
 }
 
@@ -356,7 +415,7 @@ start_profiles() {
 
   echo "Branch / optional profiles: COMPOSE_PROFILES=${COMPOSE_PROFILES:-"(none — shared infra only)"}"
   echo "  Branch stacks:   clickhouse | lakehouse"
-  echo "  Platform (opt.): airflow | cloudbeaver | signoz | openmetadata | vault via NEXUS_SECRETS_BACKEND"
+  echo "  Platform (opt.): airflow | cloudbeaver | signoz | openobserve | openmetadata | vault via NEXUS_SECRETS_BACKEND"
   echo "  Always:          MinIO, otel-collector"
 
   # Always bring shared infra up first (explicit; not only via compose no-profile side effect).
@@ -375,6 +434,8 @@ start_profiles() {
     else
       docker compose up -d
     fi
+    # Re-render after profiles are up (ClickHouse scrape, reader exporters).
+    sync_otel_collector_config
   fi
 
   # proxy is optional platform; start when listed in COMPOSE_PROFILES
@@ -386,7 +447,7 @@ start_profiles() {
 stop_all() {
   echo "Stopping all stacks (branch + platform + vault)..."
   # Every profile must be enabled on down — otherwise Compose leaves profiled services running.
-  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,airflow,signoz,openmetadata,openmetadata-ingestion,proxy \
+  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy \
     docker compose \
       --profile vault \
       --profile clickhouse \
@@ -394,6 +455,7 @@ stop_all() {
       --profile cloudbeaver \
       --profile airflow \
       --profile signoz \
+      --profile openobserve \
       --profile openmetadata \
       --profile openmetadata-ingestion \
       --profile proxy \
@@ -465,6 +527,16 @@ case "${cmd}" in
     ensure_signoz
     echo "SigNoz up: http://127.0.0.1:${SIGNOZ_UI_PORT:-3301}"
     ;;
+  openobserve)
+    load_env_and_secrets
+    ensure_minio
+    ensure_openobserve
+    echo "OpenObserve up: http://127.0.0.1:${OPENOBSERVE_UI_PORT:-5080}"
+    echo "  Login: ${ZO_ROOT_USER_EMAIL:-root@nexusflow.local} (password from .env or Vault)"
+    if [[ -n "${NEXUS_PUBLIC_HOST:-}" ]]; then
+      echo "  Via proxy (if up): ${NEXUS_CADDY_SITE_SCHEME:-http://}openobserve.${NEXUS_PUBLIC_HOST}"
+    fi
+    ;;
   openmetadata)
     load_env_and_secrets
     ensure_minio
@@ -476,6 +548,7 @@ case "${cmd}" in
     load_env_and_secrets
     ensure_observability_readers
     echo "Observability readers up."
+    echo "  OpenObserve:   http://127.0.0.1:${OPENOBSERVE_UI_PORT:-5080}  (primary UI under test; item 2.1)"
     echo "  SigNoz:        http://127.0.0.1:${SIGNOZ_UI_PORT:-3301}"
     echo "  OpenMetadata:  http://127.0.0.1:${OPENMETADATA_SERVER_PORT:-8585}"
     echo "  OTel gateway:  http://127.0.0.1:${OTEL_HTTP_PORT:-4318} (HTTP), :${OTEL_GRPC_PORT:-4317} (gRPC)"
@@ -493,7 +566,12 @@ case "${cmd}" in
   stop-signoz)
     load_env_and_secrets
     stop_signoz
-    echo "SigNoz stopped. OTel collector exports to lake only."
+    echo "SigNoz stopped. OTel collector exporters re-synced."
+    ;;
+  stop-openobserve)
+    load_env_and_secrets
+    stop_openobserve
+    echo "OpenObserve stopped. OTel collector exporters re-synced."
     ;;
   stop-openmetadata)
     load_env
@@ -503,7 +581,7 @@ case "${cmd}" in
   stop-observability)
     load_env_and_secrets
     stop_observability_readers
-    echo "Observability readers stopped. OTel collector exports to lake only."
+    echo "Observability readers stopped. OTel collector exporters re-synced."
     ;;
   all)
     load_env_and_secrets

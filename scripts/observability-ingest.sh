@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Batch ingest: observability lake → reader native stores (SigNoz, OpenMetadata, Elementary).
+# Batch ingest: observability lake → reader native stores (SigNoz, OpenObserve, …).
 #
 # SigNoz (backlog item 2): live OTLP via collector + lake replay below.
+# OpenObserve (backlog item 2.1): live OTLP via collector + lake replay below.
 # OpenMetadata / Elementary: backlog items 3 / later — see docs/backlog.md.
 #
 # Usage (from repo root):
 #   ./scripts/observability-ingest.sh signoz
 #   ./scripts/observability-ingest.sh signoz -- --since 2026-09-24T00:00:00Z --force
+#   ./scripts/observability-ingest.sh openobserve
 #   ./scripts/observability-ingest.sh openmetadata
 #   ./scripts/observability-ingest.sh elementary
 #
@@ -24,6 +26,7 @@ Usage: ./scripts/observability-ingest.sh <reader> [-- <reader-args>]
 
 Readers:
   signoz         Replay lake OTLP batches into SigNoz (item 2)
+  openobserve    Replay lake OTLP batches into OpenObserve (item 2.1)
   openmetadata   Project lake + warehouse metadata into OpenMetadata (item 3)
   elementary     Sync lake dbt artifacts into Elementary index (later)
 
@@ -31,6 +34,12 @@ SigNoz examples:
   ./scripts/observability-ingest.sh signoz
   ./scripts/observability-ingest.sh signoz -- --since 2026-09-24T00:00:00Z
   ./scripts/observability-ingest.sh signoz -- --force --dry-run
+
+OpenObserve examples:
+  ./scripts/observability-ingest.sh openobserve
+  ./scripts/observability-ingest.sh openobserve -- --force --since 2026-09-01T00:00:00Z
+  ./scripts/observability-ingest.sh openobserve -- --signals traces,events --force
+  ./scripts/observability-ingest.sh openobserve -- --signals traces,logs,metrics,events
 
 See docs/observability.md and docs/backlog.md
 EOF
@@ -54,14 +63,33 @@ case "${target}" in
       source scripts/load-secrets.sh 2>/dev/null || true
       set +a
     fi
-    # Allow: observability-ingest.sh signoz -- --since ...
     if [[ "${1:-}" == "--" ]]; then
       shift
     fi
     chmod +x scripts/signoz-ensure.sh
-    # Skip ensure's AUTO_REPLAY — this script runs lake ingest next (avoids double force-replay).
     SIGNOZ_ENSURE_SKIP_AUTO_REPLAY=1 ./scripts/signoz-ensure.sh
     exec uv run python scripts/signoz_lake_ingest.py "$@"
+    ;;
+  openobserve)
+    if [[ -f .env ]]; then
+      set -a
+      # shellcheck source=/dev/null
+      source .env
+      set +a
+    fi
+    if [[ -f scripts/load-secrets.sh ]]; then
+      set -a
+      # shellcheck source=/dev/null
+      source scripts/load-secrets.sh 2>/dev/null || true
+      set +a
+    fi
+    if [[ "${1:-}" == "--" ]]; then
+      shift
+    fi
+    # shellcheck source=scripts/openobserve-credentials.sh
+    source "${ROOT}/scripts/openobserve-credentials.sh"
+    ensure_openobserve_env_credentials
+    exec uv run python scripts/openobserve_lake_ingest.py "$@"
     ;;
   openmetadata|elementary)
     echo "Reader ingest for '${target}' is not implemented yet." >&2

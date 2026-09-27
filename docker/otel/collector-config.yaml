@@ -1,9 +1,13 @@
-# OTel Collector — lake only (default). SigNoz forward: collector-config.signoz.yaml
+# OTel Collector — lake always; reader exporters injected by
+# scripts/render-otel-collector-config.py → .generated/collector-config.yaml
 # Env: NEXUS_ENV, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
+# Optional: ZO_ROOT_USER_EMAIL / ZO_ROOT_USER_PASSWORD (OpenObserve Basic auth)
 #
-# Ops receivers (keep in sync with collector-config.signoz.yaml):
+# Ops receivers:
 # - prometheus/self — collector otelcol_* metrics
-# - httpcheck — Compose-DNS health probes (service.name = nexusflow.uptime)
+# - httpcheck — always-on Compose-DNS probes (service.name = nexusflow.uptime)
+# - docker_stats — container CPU/mem/net/IO (docker.sock ro)
+# - prometheus/clickhouse — injected when clickhouse profile is up (render script)
 
 extensions:
   health_check:
@@ -25,10 +29,31 @@ receivers:
           static_configs:
             - targets: ["127.0.0.1:8888"]
 
+  docker_stats:
+    collection_interval: 60s
+    timeout: 20s
+    api_version: "1.44"
+    metrics:
+      container.cpu.utilization:
+        enabled: true
+      container.cpu.usage.total:
+        enabled: true
+      container.memory.percent:
+        enabled: true
+      container.memory.usage.total:
+        enabled: true
+      container.network.io.usage.rx_bytes:
+        enabled: true
+      container.network.io.usage.tx_bytes:
+        enabled: true
+      container.blockio.io_service_bytes_recursive:
+        enabled: true
+
   # Defaults only on contrib 0.128: httpcheck.status / duration / error
-  # (optional phase/size metrics need a newer collector).
-  # Always-on Compose services only — optional profiles (clickhouse / signoz /
-  # airflow) are omitted so stopped stacks do not flood the lake with failures.
+  # Always-on Compose services only — optional profiles omitted so stopped
+  # stacks do not flood the lake with failures.
+  # prometheus/clickhouse is injected by render-otel-collector-config.py when
+  # the clickhouse profile is running (avoids scrape errors when CH is down).
   httpcheck:
     collection_interval: 60s
     targets:
@@ -75,7 +100,7 @@ service:
       processors: [batch]
       exporters: [awss3]
     metrics:
-      receivers: [otlp, prometheus/self]
+      receivers: [otlp, prometheus/self, docker_stats]
       processors: [batch]
       exporters: [awss3]
     metrics/uptime:

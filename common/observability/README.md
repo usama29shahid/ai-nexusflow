@@ -10,9 +10,14 @@ Pipeline code imports this package only — never SigNoz, OpenMetadata, or Eleme
 - `copy_dbt_artifacts()` → `artifacts/dbt/{branch}/{run_id}/`
 - `publish_pipeline_event()` → `events/pipeline/...` JSONL
 
-## OTLP (traces, metrics)
+## OTLP (traces, metrics, logs)
 
-`publish_dlt_load()` also emits a best-effort `dlt.load` span and `nexus.dlt.rows_loaded` counter via the Collector (does not fail the pipeline if the collector is down).
+`publish_dlt_load()` / orchestrated Airflow closer emit best-effort:
+- span (`dlt.load` / `airflow.dag.*`)
+- counter `nexus.dlt.rows_loaded` (dlt only)
+- log record (same attributes) for the OpenObserve **Logs** tab
+
+Export to the Collector (does not fail the pipeline if the collector is down).
 
 ```bash
 # default — host → always-on otel-collector

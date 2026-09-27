@@ -9,7 +9,7 @@ Do **not** build a custom logging UI or a ClickHouse “ops log” table. Pipeli
 | Did transforms and tests succeed? | **dbt** | `target/` on host; **artifacts copied** to the observability lake after each run |
 | Pipeline traces, metrics, structured events | **OpenTelemetry** → OTel Collector → lake | MinIO `nexus-telemetry-{env}/otel/` |
 | Data catalog / lineage (read) | **OpenMetadata** (current) | OM Postgres + Elasticsearch — **index** fed by lake + warehouse connectors |
-| Pipeline trace UI (read) | **SigNoz** (current) | SigNoz internal store — **index** fed by **live OTLP** (collector forward) and **lake replay** (backlog item **2**; `observability-ingest.sh signoz`) |
+| Pipeline trace UI (read) | **OpenObserve** (primary under test, item **2.1**) + **SigNoz** (item **2**, retained) | Tool-native stores — **indexes** fed by **live OTLP** (collector forward) and **lake replay** (`observability-ingest.sh openobserve` / `signoz`) |
 | dbt DQ history (read) | **Elementary** (current) | `elementary_{env}` in warehouse — **index**; lake holds `run_results.json` archives |
 | Which rows came from which run? | **data** | `run_id` on Bronze, carried in dbt where needed |
 
@@ -37,10 +37,11 @@ nexus-telemetry-{env}/
 │   └── dlt_dbt_spark_iceberg/{run_id}/
 ├── artifacts/elementary/{branch}/{run_id}/  # elementary_report.html
 ├── summaries/runs/{run_id}.json     # per-run rollup (manual or Airflow)
-└── indexes/signoz/...               # lake→SigNoz ingest markers (reader bootstrap)
+├── indexes/signoz/...               # lake→SigNoz ingest markers (reader bootstrap)
+└── indexes/openobserve/...          # lake→OO: *.ingested success; *.rejected permanent skip
 ```
 
-**Write contract (implementation):** host Python and Airflow tasks use `common/observability`. Pipeline code **must not** call SigNoz, OpenMetadata, or Elementary APIs directly.
+**Write contract (implementation):** host Python and Airflow tasks use `common/observability`. Pipeline code **must not** call SigNoz, OpenObserve, OpenMetadata, or Elementary APIs directly.
 
 **Schema:** structured events use `nexus.telemetry/v1` with required attributes: `nexus.run_id`, `nexus.env`, `nexus.branch`, `nexus.component`, optional `nexus.dag_id`, `nexus.task_id`, `nexus.source`, `nexus.endpoint`.
 
@@ -50,7 +51,8 @@ nexus-telemetry-{env}/
 
 | Product | Native store | Purpose |
 | --- | --- | --- |
-| SigNoz | Internal ClickHouse (SigNoz stack) | Trace/metric queries and UI |
+| SigNoz | Internal ClickHouse (SigNoz stack) | Trace/metric queries and UI (item 2) |
+| OpenObserve | Local disk / SQLite (single-binary) | Trace/metric queries and UI (item **2.1**, primary under test) |
 | OpenMetadata | Postgres + Elasticsearch | Catalog search and lineage graph |
 | Elementary | ClickHouse or Trino `elementary_{env}` | dbt test trends and anomaly UI |
 
@@ -99,7 +101,7 @@ Every endpoint pipeline must emit on **success and failure** via `common.observa
 | **OTLP → OTel Collector → MinIO** | Traces, metrics, structured log records (streams) |
 | **SDK direct → MinIO** | dbt JSON artifacts, run summary files (blobs — wrong shape for OTLP) |
 
-The Collector is the **ingestion gateway** (swappable). MinIO is the **durable store** (fixed layout). Collector listens on `127.0.0.1:4317` (host) and `otel-collector:4317` (Compose network for Airflow). Starts always-on with MinIO (no profile). When the SigNoz reader profile is off, the collector exports to the lake only; `./scripts/start.sh signoz` switches to `collector-config.signoz.yaml` and forwards a copy to SigNoz.
+The Collector is the **ingestion gateway** (swappable). MinIO is the **durable store** (fixed layout). Collector listens on `127.0.0.1:4317` (host) and `otel-collector:4317` (Compose network for Airflow). Starts always-on with MinIO (no profile). Compose mounts `docker/otel/collector-config.yaml` by default (lake-only). `./scripts/start.sh` renders `docker/otel/.generated/collector-config.yaml` (SigNoz / OpenObserve exporters when those containers are up; ClickHouse scrape when warehouse is up) and recreates the collector. Stopping one reader does not drop the other.
 
 ---
 
@@ -139,7 +141,7 @@ The future LLM workflow agent should emit this DAG shape.
 | Layer | Current choice | Profile |
 | --- | --- | --- |
 | Ingestion gateway | OpenTelemetry SDK + OTel Collector | always on with MinIO |
-| Pipeline UI | SigNoz | `signoz` (on-demand local; always-on VPS) |
+| Pipeline UI | OpenObserve (primary under test) + SigNoz | `openobserve` / `signoz` (on-demand local) |
 | Data catalog | OpenMetadata | `openmetadata` |
 | dbt DQ | Elementary | host `edr` + dbt package |
 
@@ -174,24 +176,21 @@ Milestone 1 implements the lake + instrumentation for the ClickHouse branch; lak
 
 ---
 
-## Reader tools (backlog items 2–3)
+## Reader tools (backlog items 2, 2.1, 3)
 
-SigNoz and OpenMetadata Compose profiles exist locally. **Product setup** is backlog items **2–3**.
+SigNoz, OpenObserve, and OpenMetadata Compose profiles exist locally. **Product setup:** items **2** (SigNoz done), **2.1** (OpenObserve — this slice), **3** (OpenMetadata).
 
-**SigNoz (item 2) includes both:**
+**OpenObserve (item 2.1) includes:**
 
-1. **Live OTLP** — collector forwards to SigNoz while the profile is up ([docker/otel/](../docker/otel/)). Start with **`./scripts/start.sh signoz`** only (not bare Compose): it writes `SIGNOZ_TOKENIZER_JWT_SECRET` when missing and runs [`scripts/signoz-ensure.sh`](../scripts/signoz-ensure.sh) so the standalone ingester listens on `:4317`/`:4318` (Compose health requires UI **and** OTLP). If the trace index is empty after a wipe, replay the lake (`observability-ingest.sh signoz -- --force --since …`) or set `SIGNOZ_AUTO_REPLAY=1`.
-2. **Lake → SigNoz** — `./scripts/observability-ingest.sh signoz` lists `nexus-telemetry-{env}/otel/` JSON batches and POSTs them into SigNoz OTLP HTTP from inside the container (backfill / SigNoz-was-down). Idempotent via `indexes/signoz/*.ingested`; `--force` re-posts after a SigNoz wipe (may duplicate spans). Default window is **last 24h** — pass `--since` for older lake history.
-3. **Dashboards** — [`scripts/signoz-bootstrap.sh`](../scripts/signoz-bootstrap.sh) upserts every JSON under [`docker/signoz/dashboards/`](../docker/signoz/dashboards/) (`SIGNOZ_API_KEY` preferred; `SIGNOZ_BOOTSTRAP_SQLITE=1` last resort). Not run on every `start.sh signoz`. Shipped set:
-   - **Nexus Route products** — traces `serviceName = nexusflow.dlt` / attribute `nexus.run_id`
-   - **OpenTelemetry Collector** — `otelcol_*` (`service.name = nexusflow.otel-collector`)
-   - **Uptime Monitoring** — `httpcheck.*` (`service.name = nexusflow.uptime`; always-on MinIO + collector probes)
-   - **Ingestion** — recent SigNoz ingest volume
-4. **Collector ops receivers** — always-on in both lake-only and lake+SigNoz configs ([docker/otel/](../docker/otel/)): `prometheus/self` + `httpcheck` (separate `metrics/uptime` pipeline so `resource/uptime` does not overwrite app metrics). httpcheck targets are always-on services only (MinIO, collector) so optional profiles do not flood the lake when stopped.
+1. **Live OTLP** — collector forwards when the profile is up. Start with **`./scripts/start.sh openobserve`** only (sets `ZO_ROOT_USER_*` from `.env` or Vault).
+2. **Lake → OpenObserve** — `./scripts/observability-ingest.sh openobserve` (markers under `indexes/openobserve/`). Requires a successful `/healthz` at `OPENOBSERVE_URL` (default `http://127.0.0.1:5080`). Set `OPENOBSERVE_INGEST_ALLOWED_HOURS` (default **2160** = 90d → `ZO_INGEST_ALLOWED_UPTO`); OpenObserve’s built-in default is only **5 hours**, which rejects historical lake traces/logs. Default replay signals are `traces,logs,events` (omit bulky `metrics` unless passed explicitly). Transient POST failures (retention window, 5xx, auth) are left unmarked for retry; permanent payload/schema errors get a `.rejected` marker so cron does not spam them (`--force` re-tries; a successful post deletes `.rejected`).
+3. **Dashboards** — [`scripts/openobserve-bootstrap.sh`](../scripts/openobserve-bootstrap.sh) upserts [`docker/openobserve/dashboards/`](../docker/openobserve/dashboards/) (products, collector, uptime, ingestion, Docker, Airflow, ClickHouse).
+4. **Ops receivers** — always-on: `prometheus/self`, `httpcheck`, `docker_stats`. `prometheus/clickhouse` (CH `:9363` Compose-only) is injected when the `clickhouse` profile is running. Airflow emits OTEL metrics to the collector.
+5. **Vault + Caddy** — KV `openobserve` → Agent; subdomain `openobserve.` with app login.
 
-**Deferred community dashboards** (situation triggers; do not enable by default): ClickHouse Prometheus, Docker `docker_stats`, Cursor IDE hooks, CI/CD — see [docker/signoz/README.md](../docker/signoz/README.md#future-dashboards-add-when-the-situation-matches).
+**SigNoz (item 2)** remains available (same lake + optional forward). Grafana is **deferred** until both branches and the LLM path are running.
 
-OpenMetadata (item **3**) similarly gets warehouse connectors + catalog views; its lake projection can follow the same ingest script pattern (`openmetadata` target) when that item runs.
+OpenMetadata (item **3**) similarly gets warehouse connectors + catalog views.
 
 Local Terraform is backlog **5**; GitHub Actions / VPS / `prd` are backlog **10**. Lake writes via `common/observability` remain required whether or not those UIs are running. Pipeline code must not call those APIs. Order: [backlog.md](backlog.md).
 
@@ -199,7 +198,7 @@ Local Terraform is backlog **5**; GitHub Actions / VPS / `prd` are backlog **10*
 
 - **Supabase** — user auth and session memory (not pipeline telemetry) — backlog **11**.
 - **Qdrant** — RAG over org standards in `docs/` (not pipeline telemetry) — backlog **12**.
-- **Streamlit** — summarizes lake `summaries/` and links to Airflow, SigNoz, OpenMetadata, Elementary; does not replace them — backlog **11**.
+- **Streamlit** — summarizes lake `summaries/` and links to Airflow, OpenObserve, SigNoz, OpenMetadata, Elementary; does not replace them — backlog **11**.
 
 Validation agents must reject generated pipelines that omit `common/observability` hooks or lake artifact upload.
 
@@ -209,6 +208,6 @@ Validation agents must reject generated pipelines that omit `common/observabilit
 
 - Build a custom logging microservice or ops dashboard as the system of record.
 - Store pipeline telemetry only in Supabase, Qdrant, or ClickHouse ops tables.
-- Call SigNoz / OpenMetadata / Elementary from dlt or dbt code.
-- Replace SigNoz/OM/Elementary native DBs with MinIO-as-primary for those products.
+- Call SigNoz / OpenObserve / OpenMetadata / Elementary from dlt or dbt code.
+- Replace reader native DBs with MinIO-as-primary for those products.
 - Skip lake writes when an observability UI is up.

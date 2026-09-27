@@ -12,7 +12,7 @@ from common.observability.lake import (
     publish_pipeline_event,
     publish_run_summary,
 )
-from common.observability.otel import get_tracer, record_dlt_load
+from common.observability.otel import emit_otlp_log, get_tracer, record_dlt_load
 
 
 _BRANCH_BY_PROJECT = {
@@ -213,6 +213,13 @@ def publish_orchestrated_run(
             span.set_status(
                 Status(StatusCode.OK) if status == "ok" else Status(StatusCode.ERROR, status)
             )
+        emit_otlp_log(
+            f"{event_type} status={status}"
+            + (f" dag={dag}" if dag else ""),
+            severity="INFO" if status == "ok" else "ERROR",
+            attributes=attrs,
+            service_name="nexusflow.airflow",
+        )
         from common.observability import otel as otel_mod
 
         otel_mod._force_flush()
