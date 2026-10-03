@@ -86,6 +86,7 @@ Compose already exists for local services. Delivery order is [backlog.md](backlo
 | **2** | SigNoz — live OTLP dashboards + lake→SigNoz ingest (done) |
 | **2.1** | OpenObserve product setup / dashboards (done) |
 | **3** | OpenMetadata product setup / catalog (done) |
+| **3.1** | OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links (done) |
 | **4** | MinIO IAM (admin / reader / loader-style) |
 | **5** | Local HashiCorp Terraform (API resources; BSL; no OpenTofu/Ansible) |
 | **9** | Basic auth for Elementary + dlt/dbt docs HTML (Caddy) |
@@ -153,6 +154,7 @@ dbt-clickhouse  1.10.2
 - [x] SigNoz ready — live OTLP + dashboards + lake→SigNoz (`observability-ingest.sh signoz`) — backlog **2**
 - [x] OpenObserve ready — OTLP + dashboards + lake replay — backlog **2.1**
 - [x] OpenMetadata ready — catalog warehouse products (`observability-ingest.sh openmetadata`) — backlog **3**
+- [x] OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links — backlog **3.1**
 - [ ] MinIO IAM — backlog **4**
 - [ ] Local Terraform — backlog **5**
 - [ ] Iceberg / Polaris / dbt-spark / Trino products path — backlog **6**
@@ -167,7 +169,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**See [backlog.md](backlog.md).** Warehouse `products` + Airflow + lake are done (item 0). Stack verify (1), SigNoz (2), OpenObserve (2.1), and OpenMetadata (3) are done. Next up: **4. MinIO IAM** → local Terraform → Iceberg → …
+**See [backlog.md](backlog.md).** Warehouse `products` + Airflow + lake are done (item 0). Stack verify (1), SigNoz (2), OpenObserve (2.1), and OpenMetadata (3 + 3.1) are done. Next up: **4. MinIO IAM** → local Terraform → Iceberg → …
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt silver/gold ✓ → lake telemetry ✓
