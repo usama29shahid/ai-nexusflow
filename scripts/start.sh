@@ -358,8 +358,19 @@ ensure_openobserve() {
 }
 
 ensure_openmetadata() {
-  echo "Starting OpenMetadata reader (profile openmetadata)..."
+  echo "Starting OpenMetadata reader (profile openmetadata; backlog 3)..."
+  # shellcheck source=scripts/openmetadata-credentials.sh
+  source "${ROOT}/scripts/openmetadata-credentials.sh"
+  ensure_openmetadata_env_credentials
+  if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]] && [[ -f scripts/load-secrets.sh ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source scripts/load-secrets.sh 2>/dev/null || true
+    set +a
+  fi
   docker compose --profile openmetadata up -d
+  echo "Catalog ingest: ./scripts/observability-ingest.sh openmetadata"
+  echo "UI: http://127.0.0.1:${OPENMETADATA_SERVER_PORT:-8585} (${OPENMETADATA_ADMIN_EMAIL:-admin@open-metadata.org})"
 }
 
 stop_signoz() {
@@ -378,7 +389,13 @@ stop_openobserve() {
 
 stop_openmetadata() {
   echo "Stopping OpenMetadata reader..."
-  docker compose --profile openmetadata down
+  # Service keys from docker/openmetadata/compose.yml (not container_name).
+  docker compose --profile openmetadata stop \
+    openmetadata-server elasticsearch postgresql execute-migrate-all 2>/dev/null || true
+  docker compose --profile openmetadata rm -f \
+    openmetadata-server elasticsearch postgresql execute-migrate-all 2>/dev/null || true
+  docker compose --profile openmetadata-ingestion stop ingestion 2>/dev/null || true
+  docker compose --profile openmetadata-ingestion rm -f ingestion 2>/dev/null || true
 }
 
 stop_observability_readers() {
@@ -542,7 +559,8 @@ case "${cmd}" in
     ensure_minio
     ensure_openmetadata
     echo "OpenMetadata up: http://127.0.0.1:${OPENMETADATA_SERVER_PORT:-8585}"
-    echo "  Login: admin@open-metadata.org / admin"
+    echo "  Login: ${OPENMETADATA_ADMIN_EMAIL:-admin@open-metadata.org}"
+    echo "  Catalog: ./scripts/observability-ingest.sh openmetadata"
     ;;
   observability)
     load_env_and_secrets

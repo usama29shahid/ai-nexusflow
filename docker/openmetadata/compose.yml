@@ -1,4 +1,5 @@
-# OpenMetadata quickstart (profile: openmetadata) — upstream 1.8.6 postgres variant, adapted for Nexus ports.
+# OpenMetadata quickstart (profile: openmetadata) — upstream 2.0.3 postgres variant, adapted for Nexus ports.
+# ES 9.3.0 matches OpenMetadata 2.0 search client (8.x indexes are incompatible).
 
 volumes:
   ingestion-volume-dag-airflow:
@@ -10,7 +11,7 @@ services:
   postgresql:
     profiles: [openmetadata]
     container_name: openmetadata-postgresql
-    image: docker.getcollate.io/openmetadata/postgresql:1.8.6
+    image: docker.getcollate.io/openmetadata/postgresql:${OPENMETADATA_VERSION:-2.0.3}
     restart: always
     command: "--work_mem=10MB"
     environment:
@@ -32,13 +33,13 @@ services:
   elasticsearch:
     profiles: [openmetadata]
     container_name: openmetadata-elasticsearch
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.4
+    image: docker.elastic.co/elasticsearch/elasticsearch:${OPENMETADATA_ES_VERSION:-9.3.0}
     environment:
       - discovery.type=single-node
-      # Local catalog index only — not the upstream 1 GB heap default.
-      - ES_JAVA_OPTS=${OPENMETADATA_ES_JAVA_OPTS:--Xms256m -Xmx256m}
+      # Upstream 2.0.x quickstart uses 1 GB heap; ES 9 needs that (not the old 256 MB local default).
+      - ES_JAVA_OPTS=${OPENMETADATA_ES_JAVA_OPTS:--Xms1024m -Xmx1024m}
       - xpack.security.enabled=false
-    mem_limit: ${OPENMETADATA_ES_MEM_LIMIT:-1g}
+    mem_limit: ${OPENMETADATA_ES_MEM_LIMIT:-2g}
     ports:
       - "127.0.0.1:${OPENMETADATA_ELASTICSEARCH_PORT:-9200}:9200"
     healthcheck:
@@ -52,7 +53,7 @@ services:
   execute-migrate-all:
     profiles: [openmetadata]
     container_name: openmetadata-migrate
-    image: docker.getcollate.io/openmetadata/server:1.8.6
+    image: docker.getcollate.io/openmetadata/server:${OPENMETADATA_VERSION:-2.0.3}
     command: "./bootstrap/openmetadata-ops.sh migrate"
     environment:
       OPENMETADATA_CLUSTER_NAME: ${OPENMETADATA_CLUSTER_NAME:-openmetadata}
@@ -269,7 +270,7 @@ services:
     profiles: [openmetadata]
     container_name: openmetadata-server
     restart: always
-    image: docker.getcollate.io/openmetadata/server:1.8.6
+    image: docker.getcollate.io/openmetadata/server:${OPENMETADATA_VERSION:-2.0.3}
     environment:
       OPENMETADATA_CLUSTER_NAME: ${OPENMETADATA_CLUSTER_NAME:-openmetadata}
       SERVER_PORT: ${SERVER_PORT:-8585}
@@ -482,7 +483,7 @@ services:
   ingestion:
     profiles: [openmetadata-ingestion]
     container_name: openmetadata-ingestion
-    image: docker.getcollate.io/openmetadata/ingestion:1.8.6
+    image: docker.getcollate.io/openmetadata/ingestion:${OPENMETADATA_VERSION:-2.0.3}
     depends_on:
       elasticsearch:
         condition: service_started

@@ -19,6 +19,10 @@ CLICKHOUSE_READER_PASSWORD={{ .Data.data.password }}
 CLICKHOUSE_ADMIN_USER={{ .Data.data.username }}
 CLICKHOUSE_ADMIN_PASSWORD={{ .Data.data.password }}
 {{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/clickhouse_catalog" $env) }}
+CLICKHOUSE_CATALOG_USER={{ .Data.data.username }}
+CLICKHOUSE_CATALOG_PASSWORD={{ .Data.data.password }}
+{{- end }}
 {{- with secret (printf "secret/data/nexusflow/%s/minio" $env) }}
 MINIO_ROOT_USER={{ .Data.data.root_user }}
 MINIO_ROOT_PASSWORD={{ .Data.data.root_password }}
@@ -35,4 +39,8 @@ AIRFLOW_ADMIN_PASSWORD={{ .Data.data.admin_password }}
 {{- with secret (printf "secret/data/nexusflow/%s/openobserve" $env) }}
 ZO_ROOT_USER_EMAIL={{ .Data.data.root_user_email }}
 ZO_ROOT_USER_PASSWORD={{ .Data.data.root_user_password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/openmetadata" $env) }}
+OPENMETADATA_ADMIN_EMAIL={{ .Data.data.admin_email }}
+OPENMETADATA_ADMIN_PASSWORD={{ .Data.data.admin_password }}
 {{- end }}

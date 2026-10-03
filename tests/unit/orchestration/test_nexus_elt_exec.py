@@ -89,6 +89,20 @@ class EltExecTest(unittest.TestCase):
         self.assertIn("airflow-dbt-layer.sh", cmd)
         self.assertIn("tag:products,tag:staging", cmd)
 
+    def test_openmetadata_ingest_passes_host_repo_root_for_nested_docker(self) -> None:
+        from nexus_elt_exec import elt_openmetadata_ingest_command
+
+        cmd = elt_openmetadata_ingest_command()
+        self.assertIn("NEXUS_REPO_ROOT", cmd)
+        self.assertIn('-e NEXUS_REPO_ROOT="${repo}"', cmd)
+        self.assertIn("OPENMETADATA_USE_COMPOSE_NETWORK=0", cmd)
+        self.assertIn("openmetadata-server:8585", cmd)
+        self.assertIn("docker.sock", cmd)
+        self.assertIn("observability-ingest.sh openmetadata", cmd)
+        self.assertIn("params.get('force'", cmd)
+        self.assertIn("dag_run.conf", cmd)
+        self.assertIn("--force", cmd)
+
     def test_dbt_layer_quotes_select_with_apostrophe(self) -> None:
         """Selectors with ' must remain one argv after bash -lc."""
         import shlex

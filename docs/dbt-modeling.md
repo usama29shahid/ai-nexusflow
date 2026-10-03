@@ -23,7 +23,7 @@ Profile **target** = env (`NEXUS_ENV`, default `dev` until `prd` / backlog **10*
 
 **Where `{{ target.name }}` goes:**
 
-- **ClickHouse:** into **layer database** names (`bronze_dev`, `silver_dev`, `gold_dev`, `elementary_dev`, …). In sources YAML, set `database: bronze_{{ target.name }}` and table `identifier: raw_route__products` (no env on the table). In `dbt_project.yml`, set `+schema` to the **unsuffixed** layer (`silver`, `gold`, `elementary`, …); `generate_schema_name` appends `_{{ target.name }}` → `silver_dev`. Do not put `_{{ target.name }}` in both places.
+- **ClickHouse:** into **layer database** names (`bronze_dev`, `silver_dev`, `gold_dev`, `elementary_dev`, …). In sources YAML, set `schema: bronze_{{ target.name }}` and table `identifier: raw_route__products` (no env on the table). Do **not** also set `database` to the layer name — dbt-clickhouse already uses `schema` as the CH database, and a layer-valued `database` breaks OpenMetadata lineage (OM stores CH DBs as schemas under `default`). In `dbt_project.yml`, set `+schema` to the **unsuffixed** layer (`silver`, `gold`, `elementary`, …); `generate_schema_name` appends `_{{ target.name }}` → `silver_dev`. Do not put `_{{ target.name }}` in both places.
 - **Iceberg / dbt-spark:** into the Polaris **catalog** only (`nexus_{{ target.name }}`). `+schema` stays `raw_{source}`, `stg_{source}`, `gold`, … — never `gold_{{ target.name }}`.
 
 `source()` examples: [dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md), [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).

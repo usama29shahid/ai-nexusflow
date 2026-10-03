@@ -71,6 +71,18 @@ openobserve_creds_in_file() {
     && grep -q '^ZO_ROOT_USER_PASSWORD=.\+' "${secrets_file}"
 }
 
+openmetadata_creds_in_file() {
+  [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
+    && grep -q '^OPENMETADATA_ADMIN_EMAIL=.\+' "${secrets_file}" \
+    && grep -q '^OPENMETADATA_ADMIN_PASSWORD=.\+' "${secrets_file}"
+}
+
+catalog_creds_in_file() {
+  [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
+    && grep -q '^CLICKHOUSE_CATALOG_USER=.\+' "${secrets_file}" \
+    && grep -q '^CLICKHOUSE_CATALOG_PASSWORD=.\+' "${secrets_file}"
+}
+
 vault_root_token() {
   python3 -c "import json; print(json.load(open('${INIT_FILE}'))['root_token'])"
 }
@@ -164,6 +176,65 @@ ensure_openobserve_secret() {
   exit 1
 }
 
+# OpenMetadata (backlog 3): seed KV if missing for admin login + ClickHouse catalog user.
+ensure_openmetadata_secret() {
+  if openmetadata_creds_in_file && catalog_creds_in_file; then
+    return 0
+  fi
+  if [[ ! -f "${INIT_FILE}" ]]; then
+    echo "Cannot seed openmetadata/catalog: missing ${INIT_FILE}" >&2
+    return 1
+  fi
+  local kv_base="secret/nexusflow/${NEXUS_ENV:-dev}"
+  local need_recreate=0
+  if ! openmetadata_creds_in_file; then
+    echo "Ensuring ${kv_base}/openmetadata (OpenMetadata admin)..."
+    if ! vault_exec_auth kv get "${kv_base}/openmetadata" >/dev/null 2>&1; then
+      local email password
+      email="$(grep -E '^OPENMETADATA_ADMIN_EMAIL=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+      email="${email:-admin@open-metadata.org}"
+      password="$(grep -E '^OPENMETADATA_ADMIN_PASSWORD=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+      password="${password:-admin}"
+      echo "  Seeding: ${kv_base}/openmetadata"
+      vault_exec_auth kv put "${kv_base}/openmetadata" \
+        admin_email="${email}" \
+        admin_password="${password}"
+    fi
+    need_recreate=1
+  fi
+  if ! catalog_creds_in_file; then
+    echo "Ensuring ${kv_base}/clickhouse_catalog (OpenMetadata ClickHouse reader)..."
+    if ! vault_exec_auth kv get "${kv_base}/clickhouse_catalog" >/dev/null 2>&1; then
+      local user password
+      user="$(grep -E '^CLICKHOUSE_CATALOG_USER=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+      user="${user:-nexus_catalog}"
+      password="$(grep -E '^CLICKHOUSE_CATALOG_PASSWORD=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+      if [[ -z "${password}" ]]; then
+        password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+      fi
+      echo "  Seeding: ${kv_base}/clickhouse_catalog"
+      vault_exec_auth kv put "${kv_base}/clickhouse_catalog" \
+        username="${user}" \
+        password="${password}"
+    fi
+    need_recreate=1
+  fi
+  if [[ "${need_recreate}" -eq 1 ]]; then
+    echo "Recreating Vault Agent so secrets.env picks up OpenMetadata / catalog..."
+    docker compose --profile vault up -d --no-deps --force-recreate vault-agent
+  fi
+  local i
+  for i in $(seq 1 30); do
+    if openmetadata_creds_in_file && catalog_creds_in_file; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for OPENMETADATA_ADMIN_* / CLICKHOUSE_CATALOG_* in ${secrets_file}." >&2
+  echo "  docker compose logs vault-agent" >&2
+  exit 1
+}
+
 vault_agent_running() {
   docker compose --profile vault ps vault-agent --status running -q 2>/dev/null | grep -q .
 }
@@ -232,6 +303,7 @@ if secrets_file_ready; then
   fi
   ensure_airflow_jwt_secret
   ensure_openobserve_secret
+  ensure_openmetadata_secret
   exit 0
 fi
 
@@ -241,6 +313,7 @@ docker compose --profile vault up -d vault-agent
 if wait_for_secrets_file 30; then
   ensure_airflow_jwt_secret
   ensure_openobserve_secret
+  ensure_openmetadata_secret
   exit 0
 fi
 

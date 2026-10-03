@@ -17,12 +17,14 @@ CREATE DATABASE IF NOT EXISTS published_{{NEXUS_ENV}};
 CREATE USER IF NOT EXISTS nexus_loader IDENTIFIED WITH sha256_password BY '{{LOADER_PASSWORD}}';
 CREATE USER IF NOT EXISTS nexus_transformer IDENTIFIED WITH sha256_password BY '{{TRANSFORMER_PASSWORD}}';
 CREATE USER IF NOT EXISTS nexus_reader IDENTIFIED WITH sha256_password BY '{{READER_PASSWORD}}';
+CREATE USER IF NOT EXISTS nexus_catalog IDENTIFIED WITH sha256_password BY '{{CATALOG_PASSWORD}}';
 CREATE USER IF NOT EXISTS nexus_admin IDENTIFIED WITH sha256_password BY '{{ADMIN_PASSWORD}}';
 
 -- Rotate passwords on re-bootstrap (CREATE USER IF NOT EXISTS does not update them).
 ALTER USER nexus_loader IDENTIFIED WITH sha256_password BY '{{LOADER_PASSWORD}}';
 ALTER USER nexus_transformer IDENTIFIED WITH sha256_password BY '{{TRANSFORMER_PASSWORD}}';
 ALTER USER nexus_reader IDENTIFIED WITH sha256_password BY '{{READER_PASSWORD}}';
+ALTER USER nexus_catalog IDENTIFIED WITH sha256_password BY '{{CATALOG_PASSWORD}}';
 ALTER USER nexus_admin IDENTIFIED WITH sha256_password BY '{{ADMIN_PASSWORD}}';
 
 -- Loader: Bronze only
@@ -50,6 +52,17 @@ GRANT CREATE TABLE, CREATE VIEW, INSERT, SELECT, ALTER, DROP, TRUNCATE, OPTIMIZE
 GRANT SELECT, SHOW ON gold_{{NEXUS_ENV}}.* TO nexus_reader;
 GRANT SELECT, SHOW ON marts_{{NEXUS_ENV}}.* TO nexus_reader;
 GRANT SELECT, SHOW ON published_{{NEXUS_ENV}}.* TO nexus_reader;
+
+-- Catalog (OpenMetadata): read system metadata + warehouse layers + elementary (no writes)
+GRANT SELECT, SHOW ON system.* TO nexus_catalog;
+GRANT SELECT, SHOW ON bronze_{{NEXUS_ENV}}.* TO nexus_catalog;
+GRANT SELECT, SHOW ON silver_{{NEXUS_ENV}}.* TO nexus_catalog;
+GRANT SELECT, SHOW ON gold_{{NEXUS_ENV}}.* TO nexus_catalog;
+GRANT SELECT, SHOW ON elementary_{{NEXUS_ENV}}.* TO nexus_catalog;
+GRANT SELECT, SHOW ON intermediate_{{NEXUS_ENV}}.* TO nexus_catalog;
+GRANT SELECT, SHOW ON marts_{{NEXUS_ENV}}.* TO nexus_catalog;
+GRANT SELECT, SHOW ON published_{{NEXUS_ENV}}.* TO nexus_catalog;
+GRANT SELECT ON INFORMATION_SCHEMA.COLUMNS TO nexus_catalog;
 
 -- Admin: full access (break-glass)
 GRANT ALL ON *.* TO nexus_admin WITH GRANT OPTION;

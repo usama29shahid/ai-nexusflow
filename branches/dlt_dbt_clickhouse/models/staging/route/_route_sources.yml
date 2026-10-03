@@ -5,7 +5,9 @@ sources:
     description: >
       Route API Bronze in bronze_{env}. Physical tables use dataset_table_separator __
       (e.g. raw_route__products). Nested arrays are peer Bronze tables, not silver roles.
-    database: "bronze_{{ target.name }}"
+      dbt-clickhouse uses `schema` as the ClickHouse database. Do **not** set `database` to
+      a layer name (breaks OpenMetadata lineage). Leave `database` unset for dbt runs; the
+      OM ingest path rewrites lake manifests so sources resolve under OM database `default`.
     schema: "bronze_{{ target.name }}"
     tables:
       - name: products

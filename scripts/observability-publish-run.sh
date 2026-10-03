@@ -20,10 +20,22 @@ target="${NEXUS_ENV:?NEXUS_ENV is required}"
 project="branches/dlt_dbt_clickhouse"
 
 if [[ "${status}" == "ok" ]]; then
+  # Preserve the last ``dbt test``/``dbt run`` run_results before docs generate
+  # overwrites target/run_results.json (status=success, message=null). OpenMetadata
+  # treats that generate artifact as compiled-only and skips TestCaseResults.
+  test_rr="${project}/target/run_results.test.json"
+  if [[ -f "${project}/target/run_results.json" ]]; then
+    cp -f "${project}/target/run_results.json" "${test_rr}"
+  fi
+
   uv run dbt docs generate \
     --project-dir "${project}" \
     --profiles-dir "${project}" \
     --target "${target}"
+
+  if [[ -f "${test_rr}" ]]; then
+    cp -f "${test_rr}" "${project}/target/run_results.json"
+  fi
 
   if ! uv run edr --help >/dev/null 2>&1; then
     echo "edr is not installed. Run: uv sync --extra elementary" >&2

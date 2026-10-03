@@ -67,3 +67,69 @@ def elt_bash_command(remote: str) -> str:
 def elt_dbt_layer(select: str) -> str:
     """``dbt run`` then ``dbt test`` for one selector. Never ``dbt build``."""
     return elt_bash_command(f"./scripts/airflow-dbt-layer.sh {shlex.quote(select)}")
+
+
+def elt_openmetadata_ingest_command() -> str:
+    """BashOperator command: OM lake→catalog reader ingest (nests docker for ``metadata``).
+
+    Mounts the host Docker socket into ``nexus-elt`` so
+    ``scripts/openmetadata_lake_ingest.py`` can ``docker run`` the official
+    OpenMetadata ingestion image on the Compose network. Does not call OM from
+    product DAGs — this is a separate reader job.
+
+    Optional ``force`` appends ``-- --force`` via Jinja when DAG param ``force``
+    or trigger conf ``{"force": true}`` is set (UI param and CLI ``--conf``).
+    """
+    # Host path for -v must be the Docker *host* path (daemon is on the host).
+    # Jinja for force is expanded on the full bash_command before shell runs.
+    return (
+        "set -euo pipefail\n"
+        'image="${NEXUS_ELT_IMAGE:-nexus-elt:latest}"\n'
+        'network="${NEXUS_COMPOSE_NETWORK:-ai-nexusflow_default}"\n'
+        'repo="${NEXUS_REPO_ROOT:?Set NEXUS_REPO_ROOT to the host clone path}"\n'
+        'envfile="${NEXUS_AIRFLOW_ELT_ENV_PATH:-/opt/airflow/nexus_elt.env}"\n'
+        'sock="${DOCKER_SOCK:-/var/run/docker.sock}"\n'
+        'if [[ ! -f "${envfile}" ]]; then\n'
+        '  echo "Missing ELT env file (${envfile}). Run ./scripts/start.sh airflow" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        'if [[ ! -S "${sock}" ]]; then\n'
+        '  echo "Missing Docker socket (${sock}) for nested OM ingestion containers" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        "docker run --rm \\\n"
+        '  --network "${network}" \\\n'
+        '  -v "${repo}:/workspace:rw" \\\n'
+        '  -v "${sock}:/var/run/docker.sock" \\\n'
+        "  -w /workspace \\\n"
+        '  --env-file "${envfile}" \\\n'
+        "  -e CLICKHOUSE_HOST=clickhouse \\\n"
+        "  -e MINIO_ENDPOINT_URL=http://minio:9000 \\\n"
+        "  -e AWS_ENDPOINT_URL=http://minio:9000 \\\n"
+        # Already on Compose DNS inside nexus-elt — call OM/MinIO directly.
+        # Nested ``docker run -v`` must use the host clone path (daemon-side),
+        # not /workspace — openmetadata_lake_ingest.docker_host_path rewrites it.
+        "  -e OPENMETADATA_URL=http://openmetadata-server:8585 \\\n"
+        "  -e OPENMETADATA_ADMIN_URL=http://openmetadata-server:8586 \\\n"
+        "  -e OPENMETADATA_USE_COMPOSE_NETWORK=0 \\\n"
+        '  -e NEXUS_REPO_ROOT="${repo}" \\\n'
+        "  -e DOCKER_HOST=unix:///var/run/docker.sock \\\n"
+        "  -e NEXUS_ELT_JOB=1 \\\n"
+        "  -e NEXUS_RUN_ID='{{ run_id }}' \\\n"
+        "  -e NEXUS_DAG_ID='{{ dag.dag_id }}' \\\n"
+        "  -e NEXUS_TASK_ID='{{ task.task_id }}' \\\n"
+        "  -e PYTHONPATH=/workspace \\\n"
+        "  -e UV_PROJECT_ENVIRONMENT=/opt/nexus/.venv \\\n"
+        '  "${image}" \\\n'
+        "  bash -lc '"
+        "./scripts/observability-ingest.sh openmetadata"
+        "{% set _force = params.get('force', false) "
+        "if params is defined else false %}"
+        "{% set _conf_force = (dag_run.conf or {}).get('force', false) "
+        "if dag_run is defined else false %}"
+        "{% if _force in [true, True, 'true', 'True', '1', 1] "
+        "or _conf_force in [true, True, 'true', 'True', '1', 1] %}"
+        " -- --force"
+        "{% endif %}"
+        "'\n"
+    )

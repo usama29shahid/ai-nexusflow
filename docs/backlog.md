@@ -14,14 +14,15 @@
 | 0 | Warehouse Route `products` — dlt → MinIO archive + ClickHouse Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers |
 | 1 | Stack verify — `./scripts/start.sh verify` (MinIO + OTel, ClickHouse, Airflow, SigNoz, OpenMetadata, Vault, lakehouse). `openmetadata-ingestion` stays optional |
 | 2 | SigNoz ready — OTLP live + products dashboard + lake→SigNoz ingest (`observability-ingest.sh signoz`) |
+| 2.1 | OpenObserve ready — primary observer under test (SigNoz retained); OTLP + dashboards + lake replay |
+| 3 | OpenMetadata ready — catalog warehouse tables from products (`observability-ingest.sh openmetadata`) |
+| 3.1 | OpenMetadata ELT projection — dbt lineage/DQ results, Airflow (dlt) pipelines, elementary schema + deep-dive links |
 
 ---
 
 ## Ordered backlog
 
 ```text
-2.1 OpenObserve ready — primary observer under test (SigNoz retained); OTLP + dashboards + lake replay
-3.  OpenMetadata ready — catalog warehouse tables from products
 4.  MinIO IAM — admin / reader / loader-style (mirror ClickHouse RBAC)
 5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
 6.  Iceberg branch parity — products-style path + Airflow + readers + RBAC + TF
@@ -39,7 +40,7 @@ Execute **one number at a time**. Do not start the next item until the current o
 
 ## Why this order
 
-1. **Readers (2 → 2.1 → 3) before MinIO IAM / Terraform** — telemetry and warehouse tables already exist from `products`. OpenObserve (2.1) is the lighter single-binary observer to evaluate as the day-to-day UI while keeping SigNoz; Grafana is deferred until both branches and LLM are running.
+1. **Readers (2 → 2.1 → 3) before MinIO IAM / Terraform** — telemetry and warehouse tables already exist from `products`. Items **2–3** are done (SigNoz, OpenObserve primary under test, OpenMetadata catalog). Grafana is deferred until both branches and LLM are running.
 2. **MinIO IAM (4) before Terraform (5)** — design roles, prove with scripts, then Terraform owns them (one owner per resource class).
 3. **Terraform before Iceberg ELT (6)** — reuse bucket/IAM/env patterns on the lakehouse path.
 4. **Endpoints (7) before facts/semantic (8)** — category/brand grains feed dimensional models.
@@ -66,7 +67,7 @@ Execute **one number at a time**. Do not start the next item until the current o
 
 ### 1. Stack verify — done
 
-`./scripts/start.sh verify` checks MinIO + OTel, `clickhouse`, `airflow`, `signoz`, `openmetadata`, Vault when `NEXUS_SECRETS_BACKEND=vault`, and `lakehouse`. It does not start or repair services. `openmetadata-ingestion` is skipped (catalog ingest is item 3). Runbook: [operations.md](operations.md). SigNoz Compose health uses `curl` because the standalone image has no `wget`.
+`./scripts/start.sh verify` checks MinIO + OTel, `clickhouse`, `airflow`, `signoz`, `openmetadata`, Vault when `NEXUS_SECRETS_BACKEND=vault`, and `lakehouse`. It does not start or repair services. `openmetadata-ingestion` is skipped (optional heavy OM Airflow; catalog ingest uses a one-shot image — item 3). Runbook: [operations.md](operations.md). SigNoz Compose health uses `curl` because the standalone image has no `wget`.
 
 ### 2. SigNoz ready — done
 
@@ -85,11 +86,11 @@ Compose profile + live OTLP forward already existed. Item **2** finished the **r
 
 **Done when:** live OTLP path verified on a products run **and** `observability-ingest.sh signoz` successfully indexes lake data into SigNoz (documented + repeatable).
 
-### 2.1 OpenObserve ready
+### 2.1 OpenObserve ready — done
 
 Compose profile + live OTLP forward + dashboards + lake replay. **Primary observer under test**; SigNoz (item 2) stays. Pipeline code must still not call OpenObserve APIs ([observability.md](observability.md)). Grafana deferred until both branches + LLM are running.
 
-**Deliverables:**
+**Delivered:**
 
 | # | Deliverable |
 | --- | --- |
@@ -103,9 +104,37 @@ Compose profile + live OTLP forward + dashboards + lake replay. **Primary observ
 
 **Done when:** live OTLP verified on a products run **and** lake replay indexes into OpenObserve; SigNoz still works when both profiles are up.
 
-### 3. OpenMetadata ready
+### 3. OpenMetadata ready — done
 
-Connect ClickHouse (later Iceberg/Trino); show warehouse models from the products run. Reader-only.
+Compose profile on **2.0.3** + Elasticsearch **9.3.0**. Catalogs warehouse products tables (ClickHouse + lake dbt artifacts). Reader-only. Pipeline code must still not call OpenMetadata APIs ([observability.md](observability.md)). Iceberg/Trino catalog stays backlog **6**.
+
+**Delivered:**
+
+| # | Deliverable |
+| --- | --- |
+| 3a | **Image:** `openmetadata/{postgresql,server,ingestion}:2.0.3` + Elasticsearch `9.3.0` |
+| 3b | **ClickHouse user:** `nexus_catalog` (SELECT/SHOW on `system.*` + bronze/silver/gold) via RBAC bootstrap |
+| 3c | **Catalog ingest:** `./scripts/observability-ingest.sh openmetadata` (one-shot ingestion image; verifies `raw_route__products`, `stg_route__products`, `dim_product`) |
+| 3d | **Lake dbt:** attaches `artifacts/dbt/dlt_dbt_clickhouse/{run_id}/` to service `nexus_clickhouse`; markers under `indexes/openmetadata/` |
+| 3e | **Vault:** KV `openmetadata` + `clickhouse_catalog` → Agent; env defaults for local login |
+| 3f | **Caddy:** `openmetadata.${NEXUS_PUBLIC_HOST}` (already wired) |
+| 3g | Smoke/docs: [docker/openmetadata/README.md](../docker/openmetadata/README.md), observability/ops/vault/rbac |
+
+**Done when:** `./scripts/start.sh openmetadata` is healthy **and** `observability-ingest.sh openmetadata` catalogs products tables from ClickHouse (+ lake dbt when present).
+
+### 3.1 OpenMetadata ELT projection — done (this branch)
+
+OM is the **central catalog / DQ / governance hub**. dbt docs HTML, Elementary HTML, and OpenObserve remain deep-dive UIs; lake stays SoR; pipelines still do not call OM APIs. Future Iceberg/Databricks sources follow the same reader pattern (backlog **6+**).
+
+| # | Deliverable |
+| --- | --- |
+| 3.1a | **dbt lineage:** sources use `schema: bronze_{env}` only (no layer `database`) so OM resolves `default.bronze_*` → silver → gold |
+| 3.1b | **dbt TestCaseResults:** lake `run_results.json` (+ optional `sources.json`); manifest rewrite for older lake artifacts; `searchAcrossDatabases` |
+| 3.1c | **Profiler + elementary schema:** catalog/profile `elementary_{env}`; `nexus_catalog` SELECT on elementary |
+| 3.1d | **Airflow pipelines:** ingest `route_clickhouse_products` (dlt/dbt orchestration) via Airflow Postgres backend |
+| 3.1e | **Deep-dive links:** CustomDashboard entries (`sourceUrl`) for Elementary + dbt docs + warehouse under `nexus_observability_links` (Caddy hostnames now; auth gate in item **9**) |
+
+**Done when:** `--force` ingest shows bronze→silver lineage, `testCaseResults` > 0 (DQ dashboard), Airflow pipeline entity when Airflow is up, elementary schema visible, and CustomDashboard deep-dive links create/update with browser-reachable `sourceUrl`s.
 
 ### 4. MinIO IAM
 

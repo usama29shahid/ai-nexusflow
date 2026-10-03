@@ -151,7 +151,9 @@ Start the stacks first. `./scripts/start.sh all` brings up MinIO, OTel, ClickHou
 ./scripts/start.sh signoz          # retained (item 2); sets JWT + OTLP ensure
 ./scripts/signoz-bootstrap.sh
 ./scripts/observability-ingest.sh signoz
-./scripts/start.sh openmetadata
+./scripts/start.sh openmetadata    # catalog UI (item 3); 2.0.3 + ES 9
+./scripts/clickhouse-rbac-bootstrap.sh   # ensures nexus_catalog
+./scripts/observability-ingest.sh openmetadata
 ```
 
 **OpenObserve:** UI `http://127.0.0.1:5080` — see [docker/openobserve/README.md](../docker/openobserve/README.md). Credentials from `.env` or Vault KV `openobserve`.
@@ -160,7 +162,7 @@ Start the stacks first. `./scripts/start.sh all` brings up MinIO, OTel, ClickHou
 
 **SigNoz ready check:** UI `http://127.0.0.1:3301` → Traces with `serviceName = nexusflow.dlt`; Dashboards → products / collector / uptime / ingestion.
 
-`openmetadata-ingestion` is skipped on purpose (heavy; catalog ingest is backlog item 3). Vault checks run only when `NEXUS_SECRETS_BACKEND=vault`, and they fail while Vault is sealed (`"sealed":false` is required). CloudBeaver and Caddy are checked when that profile is in `COMPOSE_PROFILES` or the container is already running.
+`openmetadata-ingestion` is skipped on purpose (optional heavy OM Airflow; catalog ingest uses a one-shot image — see backlog item 3). Vault checks run only when `NEXUS_SECRETS_BACKEND=vault`, and they fail while Vault is sealed (`"sealed":false` is required). CloudBeaver and Caddy are checked when that profile is in `COMPOSE_PROFILES` or the container is already running.
 
 One-shots that should be `Exited (0)`: `minio-init`, `airflow-init`, `openmetadata-migrate`. `polaris-setup` stays up.
 

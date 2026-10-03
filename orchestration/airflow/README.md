@@ -69,8 +69,13 @@ docker compose --profile airflow stop
 | --- | --- |
 | `nexus_airflow_smoke` | In-container smoke (no ELT image) |
 | `route_clickhouse_products` | Route `/products` → Bronze → silver → gold → observability |
+| `observability_openmetadata_ingest` | **Reader:** lake + ClickHouse → OpenMetadata (daily; optional `force` param) |
 
-Grain: **one DAG per source + target + endpoint**. Tasks: `assert_branch_enabled` → `bronze` → `silver` (`dbt run` then `dbt test`) → `gold` (same) → `observability`. `observability_failed` runs on `one_failed` and writes the lake closer with `airflow.dag.failed`. Never `dbt build`. `NEXUS_RUN_ID` is the Airflow `run_id` (keep it free of `'` — `nexus_elt_exec` passes it via shell-single-quoted `-e`).
+Grain for product ELT: **one DAG per source + target + endpoint**. Tasks: `assert_branch_enabled` → `bronze` → `silver` (`dbt run` then `dbt test`) → `gold` (same) → `observability`. `observability_failed` runs on `one_failed` and writes the lake closer with `airflow.dag.failed`. Never `dbt build`. `NEXUS_RUN_ID` is the Airflow `run_id` (keep it free of `'` — `nexus_elt_exec` passes it via shell-single-quoted `-e`).
+
+`observability_openmetadata_ingest` is **not** chained to products. It projects the lake into OM **once a day** (or on manual trigger). Without this DAG (or a manual `observability-ingest.sh openmetadata`), the OM catalog/DQ/profile stay stale. Requires OpenMetadata up (`./scripts/start.sh openmetadata`), `nexus-elt` rebuilt with Docker CLI (`./scripts/start.sh airflow`), and catalog credentials in `airflow_elt.env`. Re-ingest the same dbt `run_id` with param `force=true` (UI) or
+`--conf '{"force": true}'` (CLI). A soft-failed dbt OM ingest does **not** write the
+lake success marker, so the next daily run retries without force.
 
 Unpause the DAG, trigger it, confirm the three Bronze tables share that `run_id` and lake objects exist under `nexus-telemetry-{env}`.
 
