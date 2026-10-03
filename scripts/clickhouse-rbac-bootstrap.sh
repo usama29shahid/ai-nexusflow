@@ -21,20 +21,22 @@ ADMIN_PASSWORD="${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD required}"
 LOADER_PASSWORD="${CLICKHOUSE_LOADER_PASSWORD:-${CLICKHOUSE_PASSWORD}}"
 TRANSFORMER_PASSWORD="${CLICKHOUSE_TRANSFORMER_PASSWORD:-${CLICKHOUSE_PASSWORD}}"
 READER_PASSWORD="${CLICKHOUSE_READER_PASSWORD:-${CLICKHOUSE_PASSWORD}}"
+CATALOG_PASSWORD="${CLICKHOUSE_CATALOG_PASSWORD:-${CLICKHOUSE_PASSWORD}}"
 NEXUS_ADMIN_PASSWORD="${CLICKHOUSE_ADMIN_PASSWORD:-${CLICKHOUSE_PASSWORD}}"
 
 tpl="${ROOT}/scripts/sql/clickhouse_rbac_bootstrap.sql.tpl"
 
 echo "Applying ClickHouse RBAC for NEXUS_ENV=${NEXUS_ENV} as ${ADMIN_USER}..."
 python3 - "${tpl}" "${NEXUS_ENV}" \
-  "${LOADER_PASSWORD}" "${TRANSFORMER_PASSWORD}" "${READER_PASSWORD}" "${NEXUS_ADMIN_PASSWORD}" <<'PY' \
+  "${LOADER_PASSWORD}" "${TRANSFORMER_PASSWORD}" "${READER_PASSWORD}" \
+  "${CATALOG_PASSWORD}" "${NEXUS_ADMIN_PASSWORD}" <<'PY' \
   | docker compose exec -T clickhouse clickhouse-client \
       --user "${ADMIN_USER}" --password "${ADMIN_PASSWORD}" \
       --multiquery
 import re
 import sys
 
-src, env, loader_pw, transformer_pw, reader_pw, admin_pw = sys.argv[1:]
+src, env, loader_pw, transformer_pw, reader_pw, catalog_pw, admin_pw = sys.argv[1:]
 
 if not re.fullmatch(r"[a-z0-9_]+", env):
     raise SystemExit(f"Invalid NEXUS_ENV for SQL identifiers: {env!r}")
@@ -51,6 +53,7 @@ repl = {
     "{{LOADER_PASSWORD}}": sql_string(loader_pw),
     "{{TRANSFORMER_PASSWORD}}": sql_string(transformer_pw),
     "{{READER_PASSWORD}}": sql_string(reader_pw),
+    "{{CATALOG_PASSWORD}}": sql_string(catalog_pw),
     "{{ADMIN_PASSWORD}}": sql_string(admin_pw),
 }
 for k, v in repl.items():
@@ -58,4 +61,4 @@ for k, v in repl.items():
 sys.stdout.write(text)
 PY
 
-echo "RBAC bootstrap OK (nexus_loader, nexus_transformer, nexus_reader, nexus_admin)."
+echo "RBAC bootstrap OK (nexus_loader, nexus_transformer, nexus_reader, nexus_catalog, nexus_admin)."

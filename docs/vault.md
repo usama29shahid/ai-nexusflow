@@ -126,6 +126,8 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 | `polaris` | `client_secret` | `POLARIS_CLIENT_SECRET` | lakehouse profile |
 | `airflow` | `fernet_key`, `web_secret`, `jwt_secret`, `admin_password` | `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY`, `AIRFLOW__API_AUTH__JWT_SECRET`, `AIRFLOW_ADMIN_PASSWORD` | airflow profile |
 | `openobserve` | `root_user_email`, `root_user_password` | `ZO_ROOT_USER_EMAIL`, `ZO_ROOT_USER_PASSWORD` | openobserve profile (item **2.1**) |
+| `openmetadata` | `admin_email`, `admin_password` | `OPENMETADATA_ADMIN_EMAIL`, `OPENMETADATA_ADMIN_PASSWORD` | openmetadata login / catalog ingest (item **3**) |
+| `clickhouse_catalog` | `username`, `password` | `CLICKHOUSE_CATALOG_USER`, `CLICKHOUSE_CATALOG_PASSWORD` | OpenMetadata ClickHouse connector (`nexus_catalog`) |
 | *(future)* `route` | JWT / demo-user secrets when authenticated entities are implemented | TBD | dlt Route user entities — **not required for catalog-only** |
 
 `jwt_secret` is required for Airflow 3. Existing Vault paths seeded before this field get it on `./scripts/start.sh airflow` (`vault-ensure.sh` `kv patch` + Agent recreate) or on `vault-bootstrap.sh`. Do not copy a WSL JWT onto the VPS.

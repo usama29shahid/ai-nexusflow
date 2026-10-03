@@ -176,21 +176,28 @@ Milestone 1 implements the lake + instrumentation for the ClickHouse branch; lak
 
 ---
 
-## Reader tools (backlog items 2, 2.1, 3)
+## Reader tools (backlog items 2, 2.1, 3) — done
 
-SigNoz, OpenObserve, and OpenMetadata Compose profiles exist locally. **Product setup:** items **2** (SigNoz done), **2.1** (OpenObserve — this slice), **3** (OpenMetadata).
+SigNoz, OpenObserve, and OpenMetadata Compose profiles exist locally. **Product setup:** items **2** (SigNoz), **2.1** (OpenObserve — primary observer under test), **3** (OpenMetadata catalog) are done.
 
 **OpenObserve (item 2.1) includes:**
 
 1. **Live OTLP** — collector forwards when the profile is up. Start with **`./scripts/start.sh openobserve`** only (sets `ZO_ROOT_USER_*` from `.env` or Vault).
 2. **Lake → OpenObserve** — `./scripts/observability-ingest.sh openobserve` (markers under `indexes/openobserve/`). Requires a successful `/healthz` at `OPENOBSERVE_URL` (default `http://127.0.0.1:5080`). Set `OPENOBSERVE_INGEST_ALLOWED_HOURS` (default **2160** = 90d → `ZO_INGEST_ALLOWED_UPTO`); OpenObserve’s built-in default is only **5 hours**, which rejects historical lake traces/logs. Default replay signals are `traces,logs,events` (omit bulky `metrics` unless passed explicitly). Transient POST failures (retention window, 5xx, auth) are left unmarked for retry; permanent payload/schema errors get a `.rejected` marker so cron does not spam them (`--force` re-tries; a successful post deletes `.rejected`).
 3. **Dashboards** — [`scripts/openobserve-bootstrap.sh`](../scripts/openobserve-bootstrap.sh) upserts [`docker/openobserve/dashboards/`](../docker/openobserve/dashboards/) (products, collector, uptime, ingestion, Docker, Airflow, ClickHouse).
-4. **Ops receivers** — always-on: `prometheus/self`, `httpcheck`, `docker_stats`. `prometheus/clickhouse` (CH `:9363` Compose-only) is injected when the `clickhouse` profile is running. Airflow emits OTEL metrics to the collector.
+4. **Ops receivers** — always-on: `prometheus/self`, `httpcheck`, `docker_stats`. `prometheus/clickhouse` (CH `:9363` Compose-only) is injected when the `clickhouse` profile is running. Airflow emits OTEL metrics to the collector via Compose `AIRFLOW__METRICS__OTEL_*` (host `otel-collector:4318`). **Debug note:** Airflow 3.3 prints `The Airflow OpenTelemetry configs have been deprecated and will be removed in the future` when those keys are set — expected noise, not a failed DAG or missing metrics. Prefer standard `OTEL_*` only after Airflow drops `AIRFLOW__METRICS__OTEL_*` (see `docker-compose.yml` `x-airflow-common`).
 5. **Vault + Caddy** — KV `openobserve` → Agent; subdomain `openobserve.` with app login.
 
 **SigNoz (item 2)** remains available (same lake + optional forward). Grafana is **deferred** until both branches and the LLM path are running.
 
-OpenMetadata (item **3**) similarly gets warehouse connectors + catalog views.
+**OpenMetadata (items 3 + 3.1) includes:**
+
+1. **Stack:** `./scripts/start.sh openmetadata` → OpenMetadata **2.0.3** + Elasticsearch **9.3.0** (see [docker/openmetadata/README.md](../docker/openmetadata/README.md); wipe OM volumes when upgrading from 1.8.x).
+2. **ClickHouse catalog user:** `nexus_catalog` (SELECT/SHOW on `system.*` + bronze/silver/gold/elementary/…) via `./scripts/clickhouse-rbac-bootstrap.sh`.
+3. **Lake + warehouse → OpenMetadata** — `./scripts/observability-ingest.sh openmetadata` (manual) or Airflow DAG **`observability_openmetadata_ingest`** (daily, reader-only; param `force` for re-ingest). Runs metadata ingest, dbt artifact projection (lineage + TestCaseResults), Airflow pipeline ingest when the `airflow` profile is up, then `metadata profile`. Indexes products tables; fills Table Profile and Observability DQ from **dbt** results; markers under `indexes/openmetadata/`. CLI flags: `-- --force`, `-- --skip-profiler`, `-- --profiler-only`, `-- --skip-airflow`, `-- --skip-links`.
+4. **Central hub model:** OM holds catalog, lineage, profiles, and projected dbt DQ. Elementary HTML and dbt docs remain linked deep-dives (CustomDashboard service `nexus_observability_links`). OpenObserve/SigNoz remain pipeline telemetry readers. Public Caddy for Elementary/docs is backlog **9**.
+5. **Vault + Caddy** — KV `openmetadata` + `clickhouse_catalog` → Agent; subdomain `openmetadata.` with app login.
+6. **Optional** OM Airflow profile `openmetadata-ingestion` stays SKIP in verify (UI-driven connectors only).
 
 Local Terraform is backlog **5**; GitHub Actions / VPS / `prd` are backlog **10**. Lake writes via `common/observability` remain required whether or not those UIs are running. Pipeline code must not call those APIs. Order: [backlog.md](backlog.md).
 

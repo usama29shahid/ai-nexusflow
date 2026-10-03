@@ -26,6 +26,8 @@ class AirflowWriteEltEnvTest(unittest.TestCase):
                 "CLICKHOUSE_PASSWORD": "p#ass=word",
                 "MINIO_ROOT_USER": "minioadmin",
                 "MINIO_ROOT_PASSWORD": "minioadmin123",
+                "NEXUS_PUBLIC_HOST": "example.com",
+                "NEXUS_CADDY_SITE_SCHEME": "https://",
             }
             proc = subprocess.run(
                 [str(SCRIPT)],
@@ -39,6 +41,8 @@ class AirflowWriteEltEnvTest(unittest.TestCase):
             text = out.read_text(encoding="utf-8")
             self.assertIn("NEXUS_ENV=dev\n", text)
             self.assertIn("CLICKHOUSE_PASSWORD=p#ass=word\n", text)
+            self.assertIn("NEXUS_PUBLIC_HOST=example.com\n", text)
+            self.assertIn("NEXUS_CADDY_SITE_SCHEME=https://\n", text)
 
     def test_rejects_newline_preserves_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -49,6 +49,9 @@ x-airflow-common: &airflow-common
     AIRFLOW__FAB__ENABLE_PROXY_FIX: ${AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX:-False}
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     # OTel metrics → nexus otel-collector (OpenObserve / SigNoz Airflow boards).
+    # Airflow 3 logs: these AIRFLOW__METRICS__OTEL_* keys are deprecated and will be
+    # removed in favor of standard OTEL_* env vars — still the supported Compose path
+    # today; migrate when Airflow drops them (see docs/observability.md).
     AIRFLOW__METRICS__OTEL_ON: "True"
     AIRFLOW__METRICS__OTEL_HOST: otel-collector
     AIRFLOW__METRICS__OTEL_PORT: "4318"

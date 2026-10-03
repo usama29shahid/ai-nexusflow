@@ -246,7 +246,8 @@ else
   record SKIP "nexus-caddy" "profile not enabled and container not running"
 fi
 
-record SKIP "openmetadata-ingestion" "optional heavy profile; catalog ingest is backlog item 3"
+record SKIP "openmetadata-ingestion" "optional heavy OM Airflow; catalog ingest uses one-shot image (item 3)"
+
 
 echo
 echo "Result: ${pass} passed, ${fail} failed, ${skip} skipped"

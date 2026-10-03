@@ -28,10 +28,11 @@ dlt and dbt do **not** switch roles at runtime. Each process connects as a **dif
 
 | Surface | Credential |
 | --- | --- |
-| ClickHouse | `nexus_loader` / `nexus_transformer` / `nexus_reader` / `nexus_admin` |
+| ClickHouse | `nexus_loader` / `nexus_transformer` / `nexus_reader` / `nexus_catalog` / `nexus_admin` |
 | MinIO | Root for archive, telemetry, Airflow logs (unchanged) |
 | dlt | CH **loader** + MinIO root |
 | dbt | CH **transformer** |
+| OpenMetadata catalog ingest | CH **catalog** (`nexus_catalog`) |
 | Compose bootstrap | Shared `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` (admin seed only) |
 
 ---
@@ -43,6 +44,7 @@ dlt and dbt do **not** switch roles at runtime. Each process connects as a **dif
 | `nexus_loader` | **dlt only** | CREATE/INSERT on `bronze_{env}` (+ dlt metadata as needed); no write to silver/gold |
 | `nexus_transformer` | **dbt only** | SELECT `bronze_{env}`; DDL/DML on `silver_{env}`, `elementary_{env}`, and later gold/marts/published/intermediate |
 | `nexus_reader` | Consumers (BI/apps) | SELECT on `gold_{env}` / `marts_{env}` / `published_{env}` |
+| `nexus_catalog` | **OpenMetadata only** | SELECT/SHOW on `system.*` + `bronze_{env}` / `silver_{env}` / `gold_{env}` / `elementary_{env}` (+ intermediate/marts/published) (no writes) |
 | `nexus_admin` | Break-glass / bootstrap | Full CH; create users and GRANTs |
 
 Complexity of this slice: **MEDIUM** (CH done). MinIO IAM next (backlog **4**); lakehouse RBAC with Iceberg (backlog **6**).
@@ -51,6 +53,7 @@ Complexity of this slice: **MEDIUM** (CH done). MinIO IAM next (backlog **4**); 
 dlt  →  nexus_loader       →  bronze_{env}
 dbt  →  nexus_transformer  →  read bronze; write silver / elementary / (later gold+)
 BI   →  nexus_reader       →  read gold / marts / published
+OM   →  nexus_catalog      →  read system + bronze / silver / gold / elementary (catalog only)
 ops  →  nexus_admin        →  break-glass
 ```
 
@@ -65,7 +68,9 @@ Under `secret/nexusflow/{env}/` add siblings:
 | `clickhouse_loader` | `CLICKHOUSE_LOADER_USER`, `CLICKHOUSE_LOADER_PASSWORD` |
 | `clickhouse_transformer` | `CLICKHOUSE_TRANSFORMER_USER`, `CLICKHOUSE_TRANSFORMER_PASSWORD` |
 | `clickhouse_reader` | `CLICKHOUSE_READER_USER`, `CLICKHOUSE_READER_PASSWORD` |
+| `clickhouse_catalog` | `CLICKHOUSE_CATALOG_USER`, `CLICKHOUSE_CATALOG_PASSWORD` |
 | `clickhouse_admin` | `CLICKHOUSE_ADMIN_USER`, `CLICKHOUSE_ADMIN_PASSWORD` |
+| `openmetadata` | `OPENMETADATA_ADMIN_EMAIL`, `OPENMETADATA_ADMIN_PASSWORD` |
 
 Keep existing `clickhouse` and `minio` secrets for Compose/bootstrap as needed.  
 **Do not** use nested paths like `clickhouse/loader` (conflicts with the flat `clickhouse` leaf).
@@ -79,7 +84,7 @@ Keep existing `clickhouse` and `minio` secrets for Compose/bootstrap as needed.
 | MinIO archive + `nexus-telemetry-{env}` | MinIO root (unchanged) |
 | Elementary models in ClickHouse | `nexus_transformer` (dbt) |
 | OTLP / lake JSON events | `common/observability` + Collector — no direct SigNoz/OM API calls |
-| SigNoz / OpenMetadata / Elementary **UI** | Product setup: backlog items **2–3** / **9**; artifact/OTLP producers already live with `products` |
+| SigNoz / OpenObserve / OpenMetadata / Elementary **UI** | Product setup: backlog items **2–3** done / **9** for docs auth; artifact/OTLP producers already live with `products` |
 
 ---
 
@@ -97,7 +102,7 @@ Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`. T
 
 | Status | Item |
 | --- | --- |
-| Done (dev) | CREATE USER/GRANT, Vault siblings, dlt=`nexus_loader`, dbt=`nexus_transformer` |
+| Done (dev) | CREATE USER/GRANT, Vault siblings, dlt=`nexus_loader`, dbt=`nexus_transformer`, OM=`nexus_catalog` |
 | Canonical | This document; record [bronze-silver-cutover.md](bronze-silver-cutover.md) |
 | Scheduled | MinIO IAM — backlog **4**; Polaris/Trino RBAC — backlog **6** |
 | Out of scope | SSO/masking unless required |

@@ -272,6 +272,14 @@ else
     username="$(read_env_default CLICKHOUSE_ADMIN_USER nexus_admin)" \
     password="$(read_env_default CLICKHOUSE_ADMIN_PASSWORD "${_ch_pw}")"
 fi
+if kv_secret_exists "${kv_base}/clickhouse_catalog"; then
+  echo "  KV exists: ${kv_base}/clickhouse_catalog (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/clickhouse_catalog"
+  vault_exec kv put "${kv_base}/clickhouse_catalog" \
+    username="$(read_env_default CLICKHOUSE_CATALOG_USER nexus_catalog)" \
+    password="$(generate_if_blank CLICKHOUSE_CATALOG_PASSWORD "python3 -c 'import secrets; print(secrets.token_urlsafe(24))'")"
+fi
 if kv_secret_exists "${kv_base}/minio"; then
   echo "  KV exists: ${kv_base}/minio (skip seed)"
 else
@@ -309,6 +317,15 @@ else
   vault_exec kv put "${kv_base}/openobserve" \
     root_user_email="$(read_env_default ZO_ROOT_USER_EMAIL root@nexusflow.local)" \
     root_user_password="$(generate_if_blank ZO_ROOT_USER_PASSWORD "python3 -c 'import secrets; print(secrets.token_urlsafe(24))'")"
+fi
+if kv_secret_exists "${kv_base}/openmetadata"; then
+  echo "  KV exists: ${kv_base}/openmetadata (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/openmetadata"
+  # OM first boot uses admin@open-metadata.org / admin; keep Vault aligned (rotate in UI + KV together).
+  vault_exec kv put "${kv_base}/openmetadata" \
+    admin_email="$(read_env_default OPENMETADATA_ADMIN_EMAIL admin@open-metadata.org)" \
+    admin_password="$(read_env_default OPENMETADATA_ADMIN_PASSWORD admin)"
 fi
 
 echo "Starting Vault Agent..."
