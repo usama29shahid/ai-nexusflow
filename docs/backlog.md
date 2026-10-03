@@ -122,7 +122,7 @@ Compose profile on **2.0.3** + Elasticsearch **9.3.0**. Catalogs warehouse produ
 
 **Done when:** `./scripts/start.sh openmetadata` is healthy **and** `observability-ingest.sh openmetadata` catalogs products tables from ClickHouse (+ lake dbt when present).
 
-### 3.1 OpenMetadata ELT projection — done (this branch)
+### 3.1 OpenMetadata ELT projection — done
 
 OM is the **central catalog / DQ / governance hub**. dbt docs HTML, Elementary HTML, and OpenObserve remain deep-dive UIs; lake stays SoR; pipelines still do not call OM APIs. Future Iceberg/Databricks sources follow the same reader pattern (backlog **6+**).
 
