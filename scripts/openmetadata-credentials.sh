@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Ensure OPENMETADATA_ADMIN_* for catalog login (env mode).
-# Vault mode: secrets come from Agent-rendered secrets.env.
+# Ensure OPENMETADATA_ADMIN_* for catalog login.
+# Default backend is vault (Agent secrets.env). Legacy env mode still writes .env
+# only when NEXUS_SECRETS_BACKEND=env is set explicitly.
 #
 # OpenMetadata first boot always creates admin@open-metadata.org / admin.
 # Keep OPENMETADATA_ADMIN_* aligned with that (or rotate UI + Vault together).
@@ -10,7 +11,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 ensure_openmetadata_env_credentials() {
-  local backend="${NEXUS_SECRETS_BACKEND:-env}"
+  local backend="${NEXUS_SECRETS_BACKEND:-vault}"
   if [[ "${backend}" == "vault" ]]; then
     return 0
   fi

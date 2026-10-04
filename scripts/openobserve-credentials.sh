@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Ensure ZO_ROOT_USER_* for OpenObserve (env mode) and OPENOBSERVE_OTLP_BASIC_AUTH
-# for the collector. Vault mode: secrets come from Agent-rendered secrets.env.
+# Ensure ZO_ROOT_USER_* / OPENOBSERVE_OTLP_BASIC_AUTH for the collector.
+# Default backend is vault (Agent secrets.env). Legacy env mode still writes .env
+# only when NEXUS_SECRETS_BACKEND=env is set explicitly.
 #
 # Usage: sourced or run from start.sh before compose up openobserve / otel sync.
 set -euo pipefail
@@ -9,7 +10,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 ensure_openobserve_env_credentials() {
-  local backend="${NEXUS_SECRETS_BACKEND:-env}"
+  local backend="${NEXUS_SECRETS_BACKEND:-vault}"
   if [[ "${backend}" == "vault" ]]; then
     return 0
   fi

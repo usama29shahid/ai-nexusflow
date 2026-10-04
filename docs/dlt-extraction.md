@@ -70,7 +70,7 @@ ingestion/sources/                          # stub until a second backend shares
 
 ## Authentication
 
-Configure per source. Secrets from the environment — injected by [HashiCorp Vault Agent](vault.md) on the VPS (`NEXUS_SECRETS_BACKEND=vault`) or from `.env` for local bootstrap (`NEXUS_SECRETS_BACKEND=env`). Never commit keys.
+Configure per source. Secrets from the environment — injected by [HashiCorp Vault Agent](vault.md) (`NEXUS_SECRETS_BACKEND=vault` locally and on the VPS). MinIO writers use `MINIO_LOADER_*` from Agent-rendered secrets; `env` backend is not supported for those paths. Never commit keys.
 
 | Pattern | When |
 | --- | --- |

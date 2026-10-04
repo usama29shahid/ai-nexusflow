@@ -38,7 +38,7 @@ Build these on the **backlog path** so Actions/VPS Terraform only **connect** th
 
 1. **One codebase, one Compose file, one `start.sh`** — no “prod fork” of pipelines.
 2. **Names already final** — `bronze_{env}`, buckets `{purpose}-{env}`, RBAC users ([environments.md](environments.md), [rbac.md](rbac.md)).
-3. **Secrets contract** — apps read env vars; local may use `NEXUS_SECRETS_BACKEND=env`; VPS uses `vault` with the **same var names**.
+3. **Secrets contract** — apps read env vars; local and VPS use `NEXUS_SECRETS_BACKEND=vault` with the **same var names** (MinIO IAM passwords are Vault-only; `env` is refused for MinIO writers).
 4. **Edge routes exist locally** — Caddy profile `proxy` + subdomains; VPS flips mode (`NEXUS_EDGE_MODE=vps`, ACME email, empty scheme, `NEXUS_PUBLISH_BIND=127.0.0.1`), not a new proxy product ([edge-proxy.md](edge-proxy.md)).
 5. **ELT path matches VPS** — `nexus-elt` job image + Airflow DAG pattern already used locally.
 6. **Tests runnable headlessly** — `uv run python tests/...` suitable for Actions.

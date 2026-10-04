@@ -62,7 +62,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: s3://nexus-airflow-logs-${NEXUS_ENV:-dev}
     AIRFLOW__LOGGING__ENCRYPT_S3_LOGS: "False"
     AIRFLOW_CONN_MINIO_LOGS: >-
-      aws://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin123}@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=${AWS_REGION:-us-east-1}
+      aws://${MINIO_LOADER_USER:-nexus_loader}:${MINIO_LOADER_PASSWORD:-}@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=${AWS_REGION:-us-east-1}
     NEXUS_ENV: ${NEXUS_ENV:-dev}
     # Host clone path for docker run -v (Docker daemon resolves host paths).
     NEXUS_REPO_ROOT: ${NEXUS_REPO_ROOT:?Set NEXUS_REPO_ROOT in .env to the absolute clone path}
@@ -273,8 +273,8 @@ services:
     environment:
       NEXUS_ENV: ${NEXUS_ENV:-dev}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_ACCESS_KEY_ID: ${MINIO_LOADER_USER:-nexus_loader}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_LOADER_PASSWORD:-}
       AWS_ENDPOINT_URL: http://minio:9000
       # Set by start.sh when OpenObserve is up (Basic auth for otlphttp exporter).
       OPENOBSERVE_OTLP_BASIC_AUTH: ${OPENOBSERVE_OTLP_BASIC_AUTH:-}
@@ -310,8 +310,8 @@ services:
 
     environment:
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_ACCESS_KEY_ID: ${MINIO_LOADER_USER:-nexus_loader}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_LOADER_PASSWORD:-}
       AWS_ENDPOINT_URL_S3: http://minio:9000
       AWS_ENDPOINT_URL_STS: http://minio:9000
       POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,${POLARIS_CLIENT_ID:-root},${POLARIS_CLIENT_SECRET:-s3cr3t}"
@@ -386,8 +386,8 @@ services:
       - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${SPARK_UI_PORT:-4040}:4040"
 
     environment:
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_ACCESS_KEY_ID: ${MINIO_LOADER_USER:-nexus_loader}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_LOADER_PASSWORD:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       MINIO_API_PORT: ${MINIO_API_PORT:-9002}
 
@@ -450,8 +450,8 @@ services:
     environment:
       POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID:-root}
       POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET:-s3cr3t}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_LOADER_USER: ${MINIO_LOADER_USER:-nexus_loader}
+      MINIO_LOADER_PASSWORD: ${MINIO_LOADER_PASSWORD:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
 
     volumes:

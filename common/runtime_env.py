@@ -44,5 +44,5 @@ def load_runtime_env(repo_root: Path) -> None:
     root = Path(repo_root)
     load_dotenv(root / ".env")
     secrets_file = root / ".nexusflow" / "secrets.env"
-    if os.environ.get("NEXUS_SECRETS_BACKEND", "env") == "vault" and secrets_file.is_file():
+    if os.environ.get("NEXUS_SECRETS_BACKEND", "vault") == "vault" and secrets_file.is_file():
         load_dotenv(secrets_file, overwrite=True)

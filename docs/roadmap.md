@@ -53,7 +53,7 @@ Airflow → one DAG per source + target + endpoint (nexus-elt job image via dock
 - DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-{env}`) + ClickHouse `bronze_{env}.raw_{source}__{endpoint}`
 - **Done (backlog item 0):** Route `products` full-refresh dlt → archive + Bronze + lake events/OTLP; Airflow `route_clickhouse_products`; silver / Gold SCD2 ([gold-products-cutover.md](gold-products-cutover.md), [dlt-extraction.md](dlt-extraction.md))
 - **Done (backlog item 1):** local stack health via `./scripts/start.sh verify`.
-- **Next (follow [backlog.md](backlog.md)):** item **4** MinIO IAM → Terraform → Iceberg → … Catalog endpoints `categories` / `brands` are backlog item **7** (after Iceberg parity), not the immediate next step.
+- **Next (follow [backlog.md](backlog.md)):** item **5** local Terraform → Iceberg → … Catalog endpoints `categories` / `brands` are backlog item **7** (after Iceberg parity), not the immediate next step.
 - dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
 - Shared `NEXUS_RUN_ID` into dlt and dbt (`local-*` manual; Airflow DAG `run_id` when orchestrated)
 - Enhanced modeling (SCD variants, soft delete, hash keys): later modeling notes — [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md); facts/marts/semantic layer = backlog item **8**
@@ -87,7 +87,7 @@ Compose already exists for local services. Delivery order is [backlog.md](backlo
 | **2.1** | OpenObserve product setup / dashboards (done) |
 | **3** | OpenMetadata product setup / catalog (done) |
 | **3.1** | OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links (done) |
-| **4** | MinIO IAM (admin / reader / loader-style) |
+| **4** | MinIO IAM — loader / reader / platform_reader / admin (done; `./scripts/minio-iam-bootstrap.sh`) |
 | **5** | Local HashiCorp Terraform (API resources; BSL; no OpenTofu/Ansible) |
 | **9** | Basic auth for Elementary + dlt/dbt docs HTML (Caddy) |
 | **10** | VPS + GitHub Actions — both branches E2E, edge/DNS/`prd` naming |
@@ -155,7 +155,7 @@ dbt-clickhouse  1.10.2
 - [x] OpenObserve ready — OTLP + dashboards + lake replay — backlog **2.1**
 - [x] OpenMetadata ready — catalog warehouse products (`observability-ingest.sh openmetadata`) — backlog **3**
 - [x] OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links — backlog **3.1**
-- [ ] MinIO IAM — backlog **4**
+- [x] MinIO IAM — backlog **4**
 - [ ] Local Terraform — backlog **5**
 - [ ] Iceberg / Polaris / dbt-spark / Trino products path — backlog **6**
 - [ ] Catalog follow-on dlt endpoints (`categories`, `brands`) — backlog **7**
@@ -169,7 +169,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**See [backlog.md](backlog.md).** Warehouse `products` + Airflow + lake are done (item 0). Stack verify (1), SigNoz (2), OpenObserve (2.1), and OpenMetadata (3 + 3.1) are done. Next up: **4. MinIO IAM** → local Terraform → Iceberg → …
+**See [backlog.md](backlog.md).** Warehouse `products` + Airflow + lake are done (item 0). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1), and MinIO IAM (4) are done. Next up: **5. Local Terraform** → Iceberg → …
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt silver/gold ✓ → lake telemetry ✓

@@ -56,7 +56,7 @@ ensure_airflow_secrets() {
 }
 # Airflow crypto in .env only when secrets stay in env (not Vault).
 ensure_airflow_secrets_if_env() {
-  if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]]; then
+  if [[ "${NEXUS_SECRETS_BACKEND:-vault}" == "vault" ]]; then
     return 0
   fi
   ensure_airflow_secrets
@@ -94,26 +94,64 @@ export COMPOSE_PROFILES="${COMPOSE_PROFILES:-clickhouse,lakehouse}"
 
 ensure_airflow_secrets_if_env
 
-if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]]; then
-  echo "Secrets backend: vault — platform service (independent of branch profiles)..."
-  docker compose --profile vault up -d vault
-  chmod +x scripts/vault-bootstrap.sh
-  ./scripts/vault-bootstrap.sh
-  chmod +x scripts/load-secrets.sh
-  set -a
-  # shellcheck source=/dev/null
-  source scripts/load-secrets.sh
-  set +a
-else
-  echo "Secrets backend: env (.env)"
+if [[ "${NEXUS_SECRETS_BACKEND:-vault}" != "vault" ]]; then
+  echo "MinIO writers require NEXUS_SECRETS_BACKEND=vault (IAM passwords are Vault-only)." >&2
+  echo "Set NEXUS_SECRETS_BACKEND=vault in .env, then re-run ./scripts/setup.sh" >&2
+  exit 1
+fi
+
+echo "Secrets backend: vault — platform service (independent of branch profiles)..."
+docker compose --profile vault up -d vault
+chmod +x scripts/vault-bootstrap.sh
+./scripts/vault-bootstrap.sh
+chmod +x scripts/load-secrets.sh
+set -a
+# shellcheck source=/dev/null
+source scripts/load-secrets.sh
+set +a
+
+if [[ -z "${MINIO_LOADER_USER:-}" || -z "${MINIO_LOADER_PASSWORD:-}" ]]; then
+  echo "MINIO_LOADER_USER / MINIO_LOADER_PASSWORD are empty after Vault bootstrap." >&2
+  exit 1
 fi
 
 # shellcheck source=scripts/minio_license.sh
 source "${ROOT}/scripts/minio_license.sh"
 require_minio_license || exit 1
 
-echo "Starting infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES}; MinIO + OTel always)..."
+# MinIO + IAM before OTel / lakehouse / ClickHouse so writers never race a missing loader user.
+echo "Starting MinIO (shared infra first)..."
+docker compose up -d minio minio-init
+
+echo "Waiting for MinIO healthy and minio-init complete..."
+minio_ready=0
+for _ in $(seq 1 90); do
+  status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' minio 2>/dev/null || true)"
+  init_status="$(docker inspect -f '{{.State.Status}}' minio-init 2>/dev/null || true)"
+  init_code="$(docker inspect -f '{{.State.ExitCode}}' minio-init 2>/dev/null || true)"
+  if [[ "${status}" == "healthy" && "${init_status}" == "exited" ]]; then
+    if [[ "${init_code}" == "0" ]]; then
+      minio_ready=1
+      break
+    fi
+    echo "minio-init exited ${init_code}. Check: docker compose logs minio-init" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if [[ "${minio_ready}" -ne 1 ]]; then
+  echo "Timed out waiting for MinIO / minio-init." >&2
+  echo "  docker compose ps minio minio-init" >&2
+  exit 1
+fi
+
+chmod +x scripts/minio-iam-bootstrap.sh docker/minio/iam/apply.sh 2>/dev/null || true
+./scripts/minio-iam-bootstrap.sh --apply-only
+
+echo "Starting remaining infrastructure (COMPOSE_PROFILES=${COMPOSE_PROFILES}; OTel always)..."
 docker compose up -d
+# Fresh collector after IAM so awss3 exporter never starts against a missing user.
+docker compose up -d --force-recreate otel-collector
 
 echo "Syncing Python environment on the host..."
 uv sync

@@ -27,6 +27,22 @@ CLICKHOUSE_CATALOG_PASSWORD={{ .Data.data.password }}
 MINIO_ROOT_USER={{ .Data.data.root_user }}
 MINIO_ROOT_PASSWORD={{ .Data.data.root_password }}
 {{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/minio_loader" $env) }}
+MINIO_LOADER_USER={{ .Data.data.username }}
+MINIO_LOADER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/minio_reader" $env) }}
+MINIO_READER_USER={{ .Data.data.username }}
+MINIO_READER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/minio_platform_reader" $env) }}
+MINIO_PLATFORM_READER_USER={{ .Data.data.username }}
+MINIO_PLATFORM_READER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/minio_admin" $env) }}
+MINIO_ADMIN_USER={{ .Data.data.username }}
+MINIO_ADMIN_PASSWORD={{ .Data.data.password }}
+{{- end }}
 {{- with secret (printf "secret/data/nexusflow/%s/polaris" $env) }}
 POLARIS_CLIENT_SECRET={{ .Data.data.client_secret }}
 {{- end }}

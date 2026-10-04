@@ -108,8 +108,8 @@ class RouteProductsGuardsTest(unittest.TestCase):
     def test_filesystem_uses_minio_endpoint_url_override(self) -> None:
         env = {
             "MINIO_ENDPOINT_URL": "http://minio:9000",
-            "MINIO_ROOT_USER": "minioadmin",
-            "MINIO_ROOT_PASSWORD": "minioadmin123",
+            "MINIO_LOADER_USER": "nexus_loader",
+            "MINIO_LOADER_PASSWORD": "loader-secret",
         }
         with patch.dict(os.environ, env, clear=False):
             with patch.object(self.products, "filesystem", return_value=MagicMock()) as fs:
@@ -120,6 +120,10 @@ class RouteProductsGuardsTest(unittest.TestCase):
                 )
         self.assertEqual(endpoint, "http://minio:9000")
         self.assertEqual(
+            fs.call_args.kwargs["credentials"]["aws_access_key_id"],
+            "nexus_loader",
+        )
+        self.assertEqual(
             fs.call_args.kwargs["credentials"]["endpoint_url"],
             "http://minio:9000",
         )
@@ -127,8 +131,8 @@ class RouteProductsGuardsTest(unittest.TestCase):
     def test_filesystem_defaults_to_localhost_port(self) -> None:
         env = {
             "MINIO_API_PORT": "9002",
-            "MINIO_ROOT_USER": "minioadmin",
-            "MINIO_ROOT_PASSWORD": "minioadmin123",
+            "MINIO_LOADER_USER": "nexus_loader",
+            "MINIO_LOADER_PASSWORD": "loader-secret",
         }
         with patch.dict(os.environ, env, clear=False):
             os.environ.pop("MINIO_ENDPOINT_URL", None)

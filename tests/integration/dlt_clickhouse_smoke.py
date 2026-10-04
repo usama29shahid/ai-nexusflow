@@ -57,7 +57,7 @@ def _rows(run_id: str) -> list[dict[str, object]]:
 def main() -> None:
     _load_dotenv(REPO_ROOT / ".env")
     secrets_file = REPO_ROOT / ".nexusflow" / "secrets.env"
-    if os.environ.get("NEXUS_SECRETS_BACKEND", "env") == "vault" and secrets_file.is_file():
+    if os.environ.get("NEXUS_SECRETS_BACKEND", "vault") == "vault" and secrets_file.is_file():
         _load_dotenv(secrets_file, overwrite=True)
     env = os.environ.get("NEXUS_ENV", "dev")
     run_id = os.environ.get(
@@ -96,8 +96,8 @@ def main() -> None:
         bucket_url=bucket,
         destination_name="minio_archive",
         credentials={
-            "aws_access_key_id": _required("MINIO_ROOT_USER"),
-            "aws_secret_access_key": _required("MINIO_ROOT_PASSWORD"),
+            "aws_access_key_id": _required("MINIO_LOADER_USER"),
+            "aws_secret_access_key": _required("MINIO_LOADER_PASSWORD"),
             "endpoint_url": minio_endpoint,
             "region_name": os.environ.get("AWS_REGION", "us-east-1"),
         },

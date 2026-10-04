@@ -39,7 +39,7 @@ Reason RBAC started with the rename: Bronze physical names and CH connection con
 
 ## Explicitly deferred / scheduled elsewhere
 
-- MinIO IAM policies — [backlog.md](backlog.md) item **4**
+- MinIO IAM policies — implemented ([rbac.md](rbac.md); `./scripts/minio-iam-bootstrap.sh`)
 - OM / SigNoz / Elementary **UI** product setup — backlog **2–3** / **9**
 - Catalog endpoints `categories` / `brands` — backlog **7** (Airflow `route_clickhouse_products` is done)
 - Local Terraform modules — backlog **5**; VPS + GitHub Actions — backlog **10** (additive names/RBAC; [environments.md](environments.md))

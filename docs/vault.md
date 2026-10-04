@@ -8,7 +8,7 @@ Related:
 - [dlt extraction](dlt-extraction.md) — dlt reads secrets from the environment
 - [Environments](environments.md) — `NEXUS_ENV` and naming
 - [Architecture](architecture.md) — infra on host vs Docker
-- [Role-based access (RBAC)](rbac.md) — ClickHouse loader/transformer implemented; MinIO IAM = [backlog.md](backlog.md) item **4**
+- [Role-based access (RBAC)](rbac.md) — ClickHouse and MinIO IAM implemented (loader / reader / platform_reader / admin); lakehouse catalog RBAC = [backlog.md](backlog.md) item **6**
 
 Official HashiCorp references:
 
@@ -31,7 +31,7 @@ HashiCorp Vault (Docker)
   → docker compose | uv run dlt | dbt
 ```
 
-**dlt and dbt never import a Vault SDK.** They read the same environment variable names as today (`CLICKHOUSE_PASSWORD`, `MINIO_ROOT_PASSWORD`, …).
+**dlt and dbt never import a Vault SDK.** They read the same environment variable names as today (`CLICKHOUSE_LOADER_PASSWORD`, `MINIO_LOADER_PASSWORD`, …).
 
 ---
 
@@ -69,8 +69,8 @@ Controlled by `NEXUS_SECRETS_BACKEND` in `.env`:
 
 | Value | When | Behavior |
 | --- | --- | --- |
-| `env` | WSL local bootstrap, or when Vault is not enabled | Secrets live in `.env` only |
-| `vault` | Hostinger VPS (target default) | Secrets **must** come from Agent-rendered `.nexusflow/secrets.env`; `.env` holds config only |
+| `env` | Not supported for MinIO writers / IAM (start/setup refuse) | Legacy; set explicitly only for non-MinIO experiments |
+| `vault` | Default when unset; local + VPS | Secrets **must** come from Agent-rendered `.nexusflow/secrets.env`; `.env` holds config only |
 
 When `NEXUS_SECRETS_BACKEND=vault`, `./scripts/setup.sh` and manual runs **must** source secrets via `scripts/load-secrets.sh`. Missing Agent output **fails fast** with a clear message.
 
@@ -121,7 +121,11 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 | `clickhouse_transformer` | `username`, `password` | `CLICKHOUSE_TRANSFORMER_*` | dbt |
 | `clickhouse_reader` | `username`, `password` | `CLICKHOUSE_READER_*` | consumers |
 | `clickhouse_admin` | `username`, `password` | `CLICKHOUSE_ADMIN_*` | break-glass |
-| `minio` | `root_user`, `root_password` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Compose, dlt archive |
+| `minio` | `root_user`, `root_password` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Compose MinIO server, `minio-init` buckets, IAM bootstrap only |
+| `minio_loader` | `username`, `password` | `MINIO_LOADER_USER`, `MINIO_LOADER_PASSWORD` | dlt archive, telemetry, OTel `awss3`, Airflow logs, Polaris/Spark/Trino S3 |
+| `minio_reader` | `username`, `password` | `MINIO_READER_USER`, `MINIO_READER_PASSWORD` | Lake replay (SigNoz / OpenObserve / OpenMetadata ingest) |
+| `minio_platform_reader` | `username`, `password` | `MINIO_PLATFORM_READER_USER`, `MINIO_PLATFORM_READER_PASSWORD` | Demo share — all five buckets read-only |
+| `minio_admin` | `username`, `password` | `MINIO_ADMIN_USER`, `MINIO_ADMIN_PASSWORD` | Break-glass on the five buckets |
 | *(file, not KV)* | AIStor Free license | `.nexusflow/minio.license` (gitignored bind-mount) | MinIO AIStor server — **not** Agent-rendered |
 | `polaris` | `client_secret` | `POLARIS_CLIENT_SECRET` | lakehouse profile |
 | `airflow` | `fernet_key`, `web_secret`, `jwt_secret`, `admin_password` | `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY`, `AIRFLOW__API_AUTH__JWT_SECRET`, `AIRFLOW_ADMIN_PASSWORD` | airflow profile |
@@ -159,7 +163,7 @@ If you have used AWS Secrets Manager, the mapping is:
 
 **Platform injects secrets; applications never fetch them directly.**
 
-Authorization (who may `SELECT` / `INSERT` on ClickHouse) is defined in [rbac.md](rbac.md) for the products cutover (`nexus_loader` / `nexus_transformer` / …). MinIO bucket write stays on the shared root secret for now. Add **sibling** KV paths (`clickhouse_loader`, …) — do **not** nest under the `clickhouse` leaf.
+Authorization (who may `SELECT` / `INSERT` on ClickHouse, and who may `PutObject` on MinIO) is defined in [rbac.md](rbac.md). MinIO IAM passwords are Vault siblings (`minio_loader`, `minio_reader`, `minio_platform_reader`, `minio_admin`), not fields on the `minio` root secret. Add **sibling** KV paths — do **not** nest under the `minio` or `clickhouse` leaf.
 
 ---
 
@@ -201,7 +205,7 @@ Or manually:
 source scripts/load-secrets.sh
 ```
 
-When `NEXUS_SECRETS_BACKEND=env`, `./scripts/start.sh` sources `.env` only.
+MinIO IAM passwords are Vault-only. `./scripts/start.sh` / `./scripts/setup.sh` require `NEXUS_SECRETS_BACKEND=vault` for MinIO writers and apply IAM after MinIO is up.
 
 ---
 
@@ -231,9 +235,17 @@ Prefer **Vault UI** or CLI — not `.env` — when `NEXUS_SECRETS_BACKEND=vault`
 3. `set -a && source .env && source scripts/load-secrets.sh && set +a`
 4. Re-run `./scripts/clickhouse-rbac-bootstrap.sh` so ClickHouse `ALTER USER` matches Vault (SQL is piped; no password tempfile).
 
+**MinIO IAM** (`minio_loader` / `minio_reader` / `minio_platform_reader` / `minio_admin`):
+
+1. Update the password in Vault UI (or `vault kv put secret/nexusflow/{env}/minio_loader username=nexus_loader password=…`). Keep the password free of `@`, `:`, and `/` so the Airflow log connection URI stays valid. Bootstrap generates a `token_urlsafe` value that already is.
+2. Reload Vault Agent (or `docker compose --profile vault up -d --force-recreate vault-agent`).
+3. `set -a && source .env && source scripts/load-secrets.sh && set +a`
+4. Re-run `./scripts/minio-iam-bootstrap.sh` so MinIO matches Vault.
+5. Recreate `otel-collector` (`./scripts/start.sh minio`) and Airflow / lakehouse if they are up (loader secret).
+
 **Compose admin** (`secret/nexusflow/{env}/clickhouse` → `CLICKHOUSE_PASSWORD`): update Vault, reload Agent, recreate the ClickHouse container if it already started with the old env.
 
-**MinIO / other KV:** update Vault, reload Agent, recreate the affected service if needed.
+**MinIO root / other KV:** update Vault, reload Agent, recreate the affected service if needed. Root is the server and bucket bootstrap only — not the warehouse archive writer or Polaris/Spark/Trino S3 identity (those use `minio_loader`).
 
 ### Backup
 
@@ -315,7 +327,7 @@ Fail clearly in dlt when a required secret env var is missing (for example a fut
 | Done | `scripts/vault-ensure.sh`, `scripts/vault-bootstrap.sh`, `scripts/load-secrets.sh` |
 | Done | Verified: `dlt_clickhouse_smoke` with Vault-injected secrets |
 | Planned | Route catalog ingestion (no secrets); JWT secrets only when authenticated entities are added |
-| Scheduled | Per-role MinIO IAM — backlog **4**; lakehouse RBAC — backlog **6** |
+| Scheduled | Lakehouse RBAC — backlog **6** |
 | Implemented (dev) | ClickHouse `nexus_loader` / `nexus_transformer` / … — [rbac.md](rbac.md), [bronze-silver-cutover.md](bronze-silver-cutover.md) |
 
 Read this document before changing secrets layout, bootstrap scripts, or Compose Vault services.

@@ -21,7 +21,7 @@ Public hostname for the capstone is intentional. That does **not** mean raw Comp
 | `NEXUS_PUBLIC_HOST` | `localhost.com` | Real domain, e.g. `example.com` |
 | TLS | HTTP only (`Caddyfile.local`, `auto_https off`; scheme defaults to `http://`) | HTTPS + Let’s Encrypt (`Caddyfile.vps` selected by `NEXUS_EDGE_MODE=vps`; empty site scheme + `NEXUS_CADDY_ACME_EMAIL`) |
 | Ports exposed | `./scripts/start.sh` defaults backends to `0.0.0.0`; raw Compose defaults to `127.0.0.1` | Firewall **22, 80, 443**; backends **`NEXUS_PUBLISH_BIND=127.0.0.1`** (Compose default + start.sh); Caddy public; **start.sh + entrypoint reject** `0.0.0.0` on vps |
-| Secrets | `NEXUS_SECRETS_BACKEND=env` OK | **`vault`**; generate Fernet/passwords **on the VPS** ([vault.md](vault.md)) |
+| Secrets | **`vault`** (same as VPS; MinIO IAM passwords are Vault-only) | **`vault`**; generate Fernet/passwords **on the VPS** ([vault.md](vault.md)) |
 | Auth | App logins; static `docs.` / `elementary.` OK on loopback | **Auth gate required** before public DNS (home + Supabase/Google and/or Caddy in front of unauthenticated routes) |
 | ClickHouse / Polaris on edge | Local showcase OK | Gate or **omit** from public Caddy |
 | `proxy-hosts.sh` | Required for `*.localhost.com` | **Do not** use as the name service |

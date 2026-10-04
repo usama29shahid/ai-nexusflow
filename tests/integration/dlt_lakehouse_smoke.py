@@ -61,8 +61,8 @@ def _minio_fs(bucket_url: str, destination_name: str, endpoint: str):
         bucket_url=bucket_url,
         destination_name=destination_name,
         credentials={
-            "aws_access_key_id": _required("MINIO_ROOT_USER"),
-            "aws_secret_access_key": _required("MINIO_ROOT_PASSWORD"),
+            "aws_access_key_id": _required("MINIO_LOADER_USER"),
+            "aws_secret_access_key": _required("MINIO_LOADER_PASSWORD"),
             "endpoint_url": endpoint,
             "region_name": os.environ.get("AWS_REGION", "us-east-1"),
         },
@@ -89,8 +89,8 @@ def _configure_polaris_catalog(env: str, endpoint: str) -> str:
             "s3.endpoint": endpoint,
             "s3.path-style-access": "true",
             "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
-            "s3.access-key-id": _required("MINIO_ROOT_USER"),
-            "s3.secret-access-key": _required("MINIO_ROOT_PASSWORD"),
+            "s3.access-key-id": _required("MINIO_LOADER_USER"),
+            "s3.secret-access-key": _required("MINIO_LOADER_PASSWORD"),
         }
     )
     return catalog

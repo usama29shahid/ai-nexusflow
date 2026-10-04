@@ -15,7 +15,7 @@ Single-binary OSS image (`openobserve/openobserve:v1.0.4`). **Reader only** — 
 
 ## Ready to use
 
-**Always start with `./scripts/start.sh openobserve`.** That generates `ZO_ROOT_USER_*` in `.env` when `NEXUS_SECRETS_BACKEND=env`, or seeds/reads Vault KV `openobserve` when `vault`. Compose uses soft defaults for those vars (not `:?`) so other `docker compose` commands still parse; `start.sh` refuses to start the container if they are empty.
+**Always start with `./scripts/start.sh openobserve`.** Requires `NEXUS_SECRETS_BACKEND=vault` (same as MinIO writers). Credentials come from Vault KV `openobserve` → Agent `secrets.env`. Compose uses soft defaults for those vars (not `:?`) so other `docker compose` commands still parse; `start.sh` refuses to start the container if they are empty.
 
 ```bash
 ./scripts/start.sh openobserve
@@ -29,8 +29,7 @@ uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
 
 | Backend | Source |
 | --- | --- |
-| `env` | `.env` `ZO_ROOT_USER_EMAIL` / `ZO_ROOT_USER_PASSWORD` (auto-generated on first start) |
-| `vault` | KV `secret/nexusflow/{env}/openobserve` → Agent `secrets.env` |
+| `vault` (required) | KV `secret/nexusflow/{env}/openobserve` → Agent `secrets.env` (`ZO_ROOT_USER_EMAIL` / `ZO_ROOT_USER_PASSWORD`) |
 
 Collector OTLP forward uses the same password via `OPENOBSERVE_OTLP_BASIC_AUTH` (set by `start.sh`).
 

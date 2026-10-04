@@ -588,8 +588,8 @@ def _s3_client():
     return boto3.client(
         "s3",
         endpoint_url=minio_endpoint(),
-        aws_access_key_id=required_env("MINIO_ROOT_USER"),
-        aws_secret_access_key=required_env("MINIO_ROOT_PASSWORD"),
+        aws_access_key_id=required_env("MINIO_READER_USER"),
+        aws_secret_access_key=required_env("MINIO_READER_PASSWORD"),
         region_name=os.environ.get("AWS_REGION", "us-east-1"),
     )
 
@@ -618,9 +618,9 @@ def _run_python_on_compose_network(script: str, *, extra_binds: list[str] | None
         network,
         *sum((["-v", b] for b in binds), []),
         "-e",
-        f"MINIO_ROOT_USER={required_env('MINIO_ROOT_USER')}",
+        f"MINIO_READER_USER={required_env('MINIO_READER_USER')}",
         "-e",
-        f"MINIO_ROOT_PASSWORD={required_env('MINIO_ROOT_PASSWORD')}",
+        f"MINIO_READER_PASSWORD={required_env('MINIO_READER_PASSWORD')}",
         "-e",
         f"AWS_REGION={os.environ.get('AWS_REGION', 'us-east-1')}",
         "python:3.12-alpine",
@@ -637,8 +637,8 @@ import boto3, os
 c = boto3.client(
     "s3",
     endpoint_url="http://minio:9000",
-    aws_access_key_id=os.environ["MINIO_ROOT_USER"],
-    aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"],
+    aws_access_key_id=os.environ["MINIO_READER_USER"],
+    aws_secret_access_key=os.environ["MINIO_READER_PASSWORD"],
     region_name=os.environ.get("AWS_REGION", "us-east-1"),
 )
 keys = []
@@ -666,8 +666,8 @@ import boto3, os
 c = boto3.client(
     "s3",
     endpoint_url="http://minio:9000",
-    aws_access_key_id=os.environ["MINIO_ROOT_USER"],
-    aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"],
+    aws_access_key_id=os.environ["MINIO_READER_USER"],
+    aws_secret_access_key=os.environ["MINIO_READER_PASSWORD"],
     region_name=os.environ.get("AWS_REGION", "us-east-1"),
 )
 c.download_file({bucket!r}, {key!r}, "/out/{dest.name}")
@@ -1224,8 +1224,8 @@ import base64, boto3, os
 c = boto3.client(
     "s3",
     endpoint_url="http://minio:9000",
-    aws_access_key_id=os.environ["MINIO_ROOT_USER"],
-    aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"],
+    aws_access_key_id=os.environ["MINIO_READER_USER"],
+    aws_secret_access_key=os.environ["MINIO_READER_PASSWORD"],
     region_name=os.environ.get("AWS_REGION", "us-east-1"),
 )
 c.put_object(

@@ -87,7 +87,8 @@ COMPOSE_PROFILES (.env) examples:
 Vault is started when NEXUS_SECRETS_BACKEND=vault — do not put vault in COMPOSE_PROFILES
 just to enable secrets; start.sh handles it as platform infra.
 
-With vault backend, passwords come only from Agent-rendered secrets.env (via load_secrets).
+MinIO writers require NEXUS_SECRETS_BACKEND=vault. start.sh applies MinIO IAM after MinIO is up
+(--apply-only); full probe: ./scripts/minio-iam-bootstrap.sh
 stop-openmetadata loads .env config only; stop-signoz loads secrets too (recreates otel-collector).
 EOF
 }
@@ -142,9 +143,28 @@ load_env() {
   nexus_resolve_publish_bind || exit 1
 }
 
+# MinIO IAM passwords are Vault-only. Writers (OTel, dlt, Airflow logs, lakehouse)
+# cannot start under NEXUS_SECRETS_BACKEND=env.
+require_vault_backend() {
+  if [[ "${NEXUS_SECRETS_BACKEND:-vault}" != "vault" ]]; then
+    echo "MinIO writers require NEXUS_SECRETS_BACKEND=vault (IAM passwords are Vault-only)." >&2
+    echo "Set NEXUS_SECRETS_BACKEND=vault in .env, then: ./scripts/start.sh vault" >&2
+    exit 1
+  fi
+}
+
+require_minio_loader_creds() {
+  require_vault_backend
+  if [[ -z "${MINIO_LOADER_USER:-}" || -z "${MINIO_LOADER_PASSWORD:-}" ]]; then
+    echo "MINIO_LOADER_USER / MINIO_LOADER_PASSWORD are empty after loading secrets." >&2
+    echo "Run: ./scripts/start.sh vault" >&2
+    exit 1
+  fi
+}
+
 # Source Agent-rendered secrets.env when backend is vault. Call only when a command needs credentials.
 load_secrets() {
-  if [[ "${NEXUS_SECRETS_BACKEND:-env}" != "vault" ]]; then
+  if [[ "${NEXUS_SECRETS_BACKEND:-vault}" != "vault" ]]; then
     return 0
   fi
   ./scripts/vault-ensure.sh
@@ -156,7 +176,9 @@ load_secrets() {
 
 load_env_and_secrets() {
   load_env
+  require_vault_backend
   load_secrets
+  require_minio_loader_creds
 }
 
 # Shared infra has no Compose profile — always on, independent of branches.
@@ -197,12 +219,44 @@ sync_otel_collector_config() {
   docker compose up -d --force-recreate otel-collector
 }
 
+wait_minio_ready() {
+  local i status init_status init_code
+  echo "Waiting for MinIO healthy and minio-init complete..."
+  for i in $(seq 1 90); do
+    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' minio 2>/dev/null || true)"
+    init_status="$(docker inspect -f '{{.State.Status}}' minio-init 2>/dev/null || true)"
+    init_code="$(docker inspect -f '{{.State.ExitCode}}' minio-init 2>/dev/null || true)"
+    if [[ "${status}" == "healthy" && "${init_status}" == "exited" ]]; then
+      if [[ "${init_code}" == "0" ]]; then
+        return 0
+      fi
+      echo "minio-init exited ${init_code}. Check: docker compose logs minio-init" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for MinIO / minio-init." >&2
+  echo "  docker compose ps minio minio-init" >&2
+  exit 1
+}
+
+ensure_minio_iam() {
+  require_minio_loader_creds
+  chmod +x scripts/minio-iam-bootstrap.sh docker/minio/iam/apply.sh 2>/dev/null || true
+  # Apply on every shared-infra start so OTel/lakehouse never see a missing loader user.
+  # Full multipart probe stays manual: ./scripts/minio-iam-bootstrap.sh
+  ./scripts/minio-iam-bootstrap.sh --apply-only
+}
+
 ensure_shared_infra() {
   echo "Starting shared infra (MinIO AIStor Free + otel-collector; no profile)..."
+  require_minio_loader_creds
   # shellcheck source=scripts/minio_license.sh
   source "${ROOT}/scripts/minio_license.sh"
   require_minio_license || exit 1
   docker compose up -d minio minio-init
+  wait_minio_ready
+  ensure_minio_iam
   sync_otel_collector_config
 }
 
@@ -213,7 +267,7 @@ ensure_minio() {
 
 # Vault is platform infra, not a branch. Full bootstrap for explicit `vault` command.
 ensure_vault() {
-  if [[ "${NEXUS_SECRETS_BACKEND:-env}" != "vault" ]]; then
+  if [[ "${NEXUS_SECRETS_BACKEND:-vault}" != "vault" ]]; then
     return 0
   fi
   echo "Starting Vault (platform secrets; independent of branches)..."
@@ -270,7 +324,7 @@ build_nexus_elt_image() {
 
 ensure_airflow() {
   echo "Starting Airflow 3.3 (platform orchestration; ELT via nexus-elt job image)..."
-  if [[ "${NEXUS_SECRETS_BACKEND:-env}" != "vault" ]] && [[ -f .env ]]; then
+  if [[ "${NEXUS_SECRETS_BACKEND:-vault}" != "vault" ]] && [[ -f .env ]]; then
     if ! grep -q '^AIRFLOW__API_AUTH__JWT_SECRET=.\+' .env; then
       local jwt
       jwt="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -339,7 +393,7 @@ ensure_openobserve() {
   source "${ROOT}/scripts/openobserve-credentials.sh"
   ensure_openobserve_env_credentials
   # Vault: vault-ensure seeds KV; re-source secrets.env if Agent just wrote ZO_*.
-  if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]] && [[ -f scripts/load-secrets.sh ]]; then
+  if [[ "${NEXUS_SECRETS_BACKEND:-vault}" == "vault" ]] && [[ -f scripts/load-secrets.sh ]]; then
     set -a
     # shellcheck source=/dev/null
     source scripts/load-secrets.sh 2>/dev/null || true
@@ -362,7 +416,7 @@ ensure_openmetadata() {
   # shellcheck source=scripts/openmetadata-credentials.sh
   source "${ROOT}/scripts/openmetadata-credentials.sh"
   ensure_openmetadata_env_credentials
-  if [[ "${NEXUS_SECRETS_BACKEND:-env}" == "vault" ]] && [[ -f scripts/load-secrets.sh ]]; then
+  if [[ "${NEXUS_SECRETS_BACKEND:-vault}" == "vault" ]] && [[ -f scripts/load-secrets.sh ]]; then
     set -a
     # shellcheck source=/dev/null
     source scripts/load-secrets.sh 2>/dev/null || true
@@ -513,7 +567,7 @@ case "${cmd}" in
     # shellcheck source=/dev/null
     source .env
     set +a
-    if [[ "${NEXUS_SECRETS_BACKEND:-env}" != "vault" ]]; then
+    if [[ "${NEXUS_SECRETS_BACKEND:-vault}" != "vault" ]]; then
       echo "Set NEXUS_SECRETS_BACKEND=vault in .env to use Vault." >&2
       exit 1
     fi
@@ -530,7 +584,7 @@ case "${cmd}" in
     fi
     ;;
   proxy)
-    load_env
+    load_env_and_secrets
     ensure_minio
     ensure_proxy
     echo "Caddy up on :${NEXUS_PROXY_HTTP_PORT:-80}"
@@ -609,7 +663,7 @@ case "${cmd}" in
     echo
     echo "Ready (all stacks)."
     echo "  Profiles: ${COMPOSE_PROFILES} (+ MinIO + OTel always)"
-    echo "  Secrets:  NEXUS_SECRETS_BACKEND=${NEXUS_SECRETS_BACKEND:-env}"
+    echo "  Secrets:  NEXUS_SECRETS_BACKEND=${NEXUS_SECRETS_BACKEND:-vault}"
     echo "  Next:     ./scripts/start.sh smoke"
     echo "            ./scripts/start.sh dbt debug --project-dir branches/dlt_dbt_clickhouse"
     ;;
@@ -622,7 +676,7 @@ case "${cmd}" in
     echo
     echo "Ready."
     echo "  Profiles: ${COMPOSE_PROFILES:-none} (+ MinIO + OTel always)"
-    echo "  Secrets:  NEXUS_SECRETS_BACKEND=${NEXUS_SECRETS_BACKEND:-env}"
+    echo "  Secrets:  NEXUS_SECRETS_BACKEND=${NEXUS_SECRETS_BACKEND:-vault}"
     echo "  Next:     ./scripts/start.sh smoke"
     echo "            ./scripts/start.sh dbt debug --project-dir branches/dlt_dbt_clickhouse"
     echo "            ./scripts/start.sh airflow   # optional platform"
