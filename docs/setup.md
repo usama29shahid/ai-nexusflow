@@ -6,7 +6,7 @@ Same workflow on **WSL**, a **Hostinger VPS**, and **AWS EC2**: Linux + Docker E
 
 Airflow is Dockerized; DAG tasks run an ephemeral **`nexus-elt`** job container (`docker run` on the Compose network) with the same scripts as a manual `uv` run. Do **not** install dlt/dbt into the Airflow image. Locked decision: [architecture.md](architecture.md) (Airflow execution runtime), [orchestration/airflow/README.md](../orchestration/airflow/README.md).
 
-Secrets on the **Hostinger VPS** are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). Local WSL may use `NEXUS_SECRETS_BACKEND=env` in `.env` until Vault is running. ClickHouse RBAC (loader / transformer / reader / admin) is **implemented** — bootstrap via `./scripts/clickhouse-rbac-bootstrap.sh`; MinIO IAM is backlog item **4** — see [rbac.md](rbac.md), [backlog.md](backlog.md).
+Secrets are stored in **HashiCorp Vault** and injected at runtime by Vault Agent — not as plaintext in `.env`. See [vault.md](vault.md). **`NEXUS_SECRETS_BACKEND=vault` is required** for MinIO writers (OTel, dlt archive, Airflow logs, lakehouse S3): IAM passwords are Vault-only. `./scripts/start.sh` / `./scripts/setup.sh` refuse `env` for those paths and apply MinIO IAM after MinIO is up. ClickHouse RBAC and MinIO IAM (`nexus_loader` / `nexus_reader` / `nexus_platform_reader` / `nexus_admin`) — bootstrap via `./scripts/clickhouse-rbac-bootstrap.sh` and `./scripts/minio-iam-bootstrap.sh`. See [rbac.md](rbac.md), [backlog.md](backlog.md).
 
 Docker Compose runs **MinIO AIStor Free and OTel Collector always**, plus optional stacks via **profiles** (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`). Copy the Free license to `.nexusflow/minio.license` before the first start ([docker/minio/README.md](../docker/minio/README.md)). **Do not** run `uv sync` inside a Compose service that bind-mounts the repo — that created a root-owned `.venv` and `Permission denied (os error 13)`. On a **16 GB / 4-core** VPS, keep profiles strict (ClickHouse + Airflow day-to-day); do not start every stack at once.
 
@@ -119,8 +119,9 @@ Full standard: [vault.md](vault.md).
 
 | Mode | `NEXUS_SECRETS_BACKEND` | Where secrets live |
 | --- | --- | --- |
-| Local WSL (default) | `env` | `.env` (gitignored); AIStor license → `.nexusflow/minio.license` |
-| Hostinger VPS (target) | `vault` | Vault KV v2 → Agent → `.nexusflow/secrets.env`; AIStor license stays `.nexusflow/minio.license` |
+| Local WSL / Hostinger VPS | `vault` | Vault KV v2 → Agent → `.nexusflow/secrets.env`; AIStor license → `.nexusflow/minio.license` (gitignored, not in KV) |
+
+`NEXUS_SECRETS_BACKEND=env` is not supported for MinIO writers after backlog item **4** (IAM passwords are not kept in `.env`).
 
 Prefer `./scripts/start.sh` — it loads secrets, unseals Vault when needed, and starts Compose:
 
@@ -138,8 +139,6 @@ docker compose up -d
 ```
 
 Prefer `./scripts/start.sh` / `./scripts/setup.sh` — those refuse to start if `.nexusflow/minio.license` is missing. Bare `docker compose up` does **not** check; see [docker/minio/README.md](../docker/minio/README.md).
-
-When `NEXUS_SECRETS_BACKEND=env`, `load-secrets.sh` sources `.env` only.
 
 Never commit `.env`, Vault root token, unseal keys, or Agent credentials.
 

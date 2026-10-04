@@ -24,8 +24,8 @@ class AirflowWriteEltEnvTest(unittest.TestCase):
                 "NEXUS_AIRFLOW_ELT_ENV": str(out),
                 "NEXUS_ENV": "dev",
                 "CLICKHOUSE_PASSWORD": "p#ass=word",
-                "MINIO_ROOT_USER": "minioadmin",
-                "MINIO_ROOT_PASSWORD": "minioadmin123",
+                "MINIO_LOADER_USER": "nexus_loader",
+                "MINIO_LOADER_PASSWORD": "loader-secret",
                 "NEXUS_PUBLIC_HOST": "example.com",
                 "NEXUS_CADDY_SITE_SCHEME": "https://",
             }
@@ -43,6 +43,12 @@ class AirflowWriteEltEnvTest(unittest.TestCase):
             self.assertIn("CLICKHOUSE_PASSWORD=p#ass=word\n", text)
             self.assertIn("NEXUS_PUBLIC_HOST=example.com\n", text)
             self.assertIn("NEXUS_CADDY_SITE_SCHEME=https://\n", text)
+            self.assertIn("MINIO_LOADER_USER=nexus_loader\n", text)
+            self.assertIn("MINIO_LOADER_PASSWORD=loader-secret\n", text)
+            self.assertIn("AWS_ACCESS_KEY_ID=nexus_loader\n", text)
+            self.assertIn("AWS_SECRET_ACCESS_KEY=loader-secret\n", text)
+            self.assertNotIn("MINIO_ROOT_USER=", text)
+            self.assertNotIn("MINIO_ROOT_PASSWORD=", text)
 
     def test_rejects_newline_preserves_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -53,8 +59,8 @@ class AirflowWriteEltEnvTest(unittest.TestCase):
                 "NEXUS_AIRFLOW_ELT_ENV": str(out),
                 "NEXUS_ENV": "dev",
                 "CLICKHOUSE_PASSWORD": "bad\nvalue",
-                "MINIO_ROOT_USER": "minioadmin",
-                "MINIO_ROOT_PASSWORD": "minioadmin123",
+                "MINIO_LOADER_USER": "nexus_loader",
+                "MINIO_LOADER_PASSWORD": "loader-secret",
             }
             proc = subprocess.run(
                 [str(SCRIPT)],

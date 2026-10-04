@@ -21,9 +21,9 @@ keys=(
   AWS_REGION
   AWS_ACCESS_KEY_ID
   AWS_SECRET_ACCESS_KEY
-  MINIO_ROOT_USER
-  MINIO_ROOT_PASSWORD
   MINIO_API_PORT
+  MINIO_LOADER_USER
+  MINIO_LOADER_PASSWORD
   CLICKHOUSE_DB
   CLICKHOUSE_HTTP_PORT
   CLICKHOUSE_NATIVE_PORT
@@ -48,9 +48,13 @@ keys=(
   NEXUS_CADDY_SITE_SCHEME
 )
 
-# MinIO S3 client defaults when AWS_* are unset (local Compose).
-: "${AWS_ACCESS_KEY_ID:=${MINIO_ROOT_USER:-minioadmin}}"
-: "${AWS_SECRET_ACCESS_KEY:=${MINIO_ROOT_PASSWORD:-minioadmin123}}"
+# Warehouse job S3 defaults are the MinIO loader, not root.
+if [[ -z "${MINIO_LOADER_USER:-}" || -z "${MINIO_LOADER_PASSWORD:-}" ]]; then
+  echo "MINIO_LOADER_USER and MINIO_LOADER_PASSWORD are required (Vault minio_loader)." >&2
+  exit 1
+fi
+export AWS_ACCESS_KEY_ID="${MINIO_LOADER_USER}"
+export AWS_SECRET_ACCESS_KEY="${MINIO_LOADER_PASSWORD}"
 : "${AWS_REGION:=us-east-1}"
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
 

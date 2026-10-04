@@ -45,7 +45,7 @@ Route `products` warehouse ELT (dlt archive + ClickHouse Bronze/silver/Gold + Ai
 - Lakehouse skeleton: `branches/dlt_dbt_spark_iceberg` (disabled until backlog item **6**)
 - Branch switches: `config/branches.yaml`
 
-**Next:** [docs/backlog.md](docs/backlog.md) item **4** (MinIO IAM) → local Terraform → …
+**Next:** [docs/backlog.md](docs/backlog.md) item **5** (local Terraform) → Iceberg → …
 
 ---
 

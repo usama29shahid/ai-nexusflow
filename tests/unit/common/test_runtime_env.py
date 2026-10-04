@@ -41,6 +41,30 @@ class RuntimeEnvTest(unittest.TestCase):
                 self.assertEqual(os.environ.get("NEXUS_ENV"), "dev")
                 self.assertEqual(os.environ.get("CLICKHOUSE_PASSWORD"), "from-vault")
 
+    def test_unset_backend_defaults_to_vault_and_loads_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env").write_text("NEXUS_ENV=dev\n", encoding="utf-8")
+            nexus = root / ".nexusflow"
+            nexus.mkdir()
+            (nexus / "secrets.env").write_text(
+                "MINIO_LOADER_PASSWORD=from-vault\n", encoding="utf-8"
+            )
+            env = {
+                k: v
+                for k, v in os.environ.items()
+                if k
+                not in {
+                    "NEXUS_ELT_JOB",
+                    "NEXUS_SECRETS_BACKEND",
+                    "MINIO_LOADER_PASSWORD",
+                }
+            }
+            with patch.dict(os.environ, env, clear=True):
+                self.assertNotIn("NEXUS_SECRETS_BACKEND", os.environ)
+                load_runtime_env(root)
+                self.assertEqual(os.environ.get("MINIO_LOADER_PASSWORD"), "from-vault")
+
     def test_load_dotenv_skips_unreadable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "locked.env"

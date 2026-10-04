@@ -22,7 +22,7 @@ set -a
 source .env
 set +a
 
-if [[ "${NEXUS_SECRETS_BACKEND:-env}" != "vault" ]]; then
+if [[ "${NEXUS_SECRETS_BACKEND:-vault}" != "vault" ]]; then
   exit 0
 fi
 
@@ -75,6 +75,18 @@ openmetadata_creds_in_file() {
   [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
     && grep -q '^OPENMETADATA_ADMIN_EMAIL=.\+' "${secrets_file}" \
     && grep -q '^OPENMETADATA_ADMIN_PASSWORD=.\+' "${secrets_file}"
+}
+
+minio_iam_creds_in_file() {
+  [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
+    && grep -q '^MINIO_LOADER_USER=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_LOADER_PASSWORD=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_READER_USER=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_READER_PASSWORD=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_PLATFORM_READER_USER=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_PLATFORM_READER_PASSWORD=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_ADMIN_USER=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_ADMIN_PASSWORD=.\+' "${secrets_file}"
 }
 
 catalog_creds_in_file() {
@@ -235,6 +247,49 @@ ensure_openmetadata_secret() {
   exit 1
 }
 
+# MinIO IAM (backlog 4). Generate passwords into KV. Do not read them from .env.
+ensure_minio_iam_secrets() {
+  if minio_iam_creds_in_file; then
+    return 0
+  fi
+  if [[ ! -f "${INIT_FILE}" ]]; then
+    echo "Cannot seed MinIO IAM: missing ${INIT_FILE}" >&2
+    return 1
+  fi
+  local kv_base="secret/nexusflow/${NEXUS_ENV:-dev}"
+  local name user path password
+  echo "Ensuring MinIO IAM KV paths under ${kv_base}..."
+  for name in \
+    minio_loader:nexus_loader \
+    minio_reader:nexus_reader \
+    minio_platform_reader:nexus_platform_reader \
+    minio_admin:nexus_admin
+  do
+    user="${name#*:}"
+    name="${name%%:*}"
+    path="${kv_base}/${name}"
+    if vault_exec_auth kv get "${path}" >/dev/null 2>&1; then
+      echo "  KV exists: ${path}"
+      continue
+    fi
+    password="$(python3 -c 'import secrets; print("k" + secrets.token_urlsafe(24))')"
+    echo "  Seeding: ${path}"
+    vault_exec_auth kv put "${path}" username="${user}" password="${password}"
+  done
+  echo "Recreating Vault Agent so secrets.env picks up MinIO IAM..."
+  docker compose --profile vault up -d --no-deps --force-recreate vault-agent
+  local i
+  for i in $(seq 1 30); do
+    if minio_iam_creds_in_file; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for MINIO_LOADER_* / MINIO_READER_* / MINIO_PLATFORM_READER_* / MINIO_ADMIN_* in ${secrets_file}." >&2
+  echo "  docker compose logs vault-agent" >&2
+  exit 1
+}
+
 vault_agent_running() {
   docker compose --profile vault ps vault-agent --status running -q 2>/dev/null | grep -q .
 }
@@ -304,6 +359,7 @@ if secrets_file_ready; then
   ensure_airflow_jwt_secret
   ensure_openobserve_secret
   ensure_openmetadata_secret
+  ensure_minio_iam_secrets
   exit 0
 fi
 
@@ -314,6 +370,7 @@ if wait_for_secrets_file 30; then
   ensure_airflow_jwt_secret
   ensure_openobserve_secret
   ensure_openmetadata_secret
+  ensure_minio_iam_secrets
   exit 0
 fi
 

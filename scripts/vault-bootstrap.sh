@@ -288,6 +288,26 @@ else
     root_user="$(read_env_default MINIO_ROOT_USER minioadmin)" \
     root_password="$(read_env_default MINIO_ROOT_PASSWORD minioadmin123)"
 fi
+# IAM users (backlog 4). Passwords are generated into KV, never copied from .env.
+minio_iam_password() {
+  python3 -c 'import secrets; print("k" + secrets.token_urlsafe(24))'
+}
+seed_minio_iam() {
+  local path="$1"
+  local username="$2"
+  if kv_secret_exists "${path}"; then
+    echo "  KV exists: ${path} (skip seed)"
+    return 0
+  fi
+  echo "  Seeding: ${path}"
+  vault_exec kv put "${path}" \
+    username="${username}" \
+    password="$(minio_iam_password)"
+}
+seed_minio_iam "${kv_base}/minio_loader" nexus_loader
+seed_minio_iam "${kv_base}/minio_reader" nexus_reader
+seed_minio_iam "${kv_base}/minio_platform_reader" nexus_platform_reader
+seed_minio_iam "${kv_base}/minio_admin" nexus_admin
 if kv_secret_exists "${kv_base}/polaris"; then
   echo "  KV exists: ${kv_base}/polaris (skip seed)"
 else
@@ -328,13 +348,17 @@ else
     admin_password="$(read_env_default OPENMETADATA_ADMIN_PASSWORD admin)"
 fi
 
-echo "Starting Vault Agent..."
-docker compose --profile vault up -d vault-agent
+echo "Starting Vault Agent (force-recreate so new template keys are rendered)..."
+# Template bind-mount updates (e.g. minio_platform_reader) need Agent recreate;
+# plain `up -d` leaves a stale secrets.env.
+docker compose --profile vault up -d --no-deps --force-recreate vault-agent
 
 echo "Waiting for Agent-rendered secrets.env..."
 secrets_file="${NEXUS_SECRETS_FILE:-${ROOT}/.nexusflow/secrets.env}"
 for _ in $(seq 1 30); do
-  if [[ -f "${secrets_file}" ]] && grep -q '^CLICKHOUSE_PASSWORD=' "${secrets_file}"; then
+  if [[ -f "${secrets_file}" ]] && grep -q '^CLICKHOUSE_PASSWORD=' "${secrets_file}" \
+    && grep -q '^MINIO_LOADER_PASSWORD=.\+' "${secrets_file}" \
+    && grep -q '^MINIO_PLATFORM_READER_PASSWORD=.\+' "${secrets_file}"; then
     fix_nexusflow_permissions "${secrets_file}"
     echo "Vault bootstrap OK."
     echo "  secrets file: ${secrets_file}"

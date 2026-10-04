@@ -17,13 +17,13 @@
 | 2.1 | OpenObserve ready — primary observer under test (SigNoz retained); OTLP + dashboards + lake replay |
 | 3 | OpenMetadata ready — catalog warehouse tables from products (`observability-ingest.sh openmetadata`) |
 | 3.1 | OpenMetadata ELT projection — dbt lineage/DQ results, Airflow (dlt) pipelines, elementary schema + deep-dive links |
+| 4 | MinIO IAM — `nexus_loader` / `nexus_reader` / `nexus_platform_reader` / `nexus_admin` (Vault KV only; `./scripts/minio-iam-bootstrap.sh`). Root for bucket create only; Polaris/Spark/Trino S3 use loader |
 
 ---
 
 ## Ordered backlog
 
 ```text
-4.  MinIO IAM — admin / reader / loader-style (mirror ClickHouse RBAC)
 5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
 6.  Iceberg branch parity — products-style path + Airflow + readers + RBAC + TF
 7.  Remaining Route REST endpoints — categories, brands, …
@@ -136,9 +136,18 @@ OM is the **central catalog / DQ / governance hub**. dbt docs HTML, Elementary H
 
 **Done when:** `--force` ingest shows bronze→silver lineage, `testCaseResults` > 0 (DQ dashboard), Airflow pipeline entity when Airflow is up, elementary schema visible, and CustomDashboard deep-dive links create/update with browser-reachable `sourceUrl`s.
 
-### 4. MinIO IAM
+### 4. MinIO IAM — done
 
-Lift deferral in [rbac.md](rbac.md). Parallel ClickHouse intent: loader write, reader read, admin break-glass. Vault sibling paths when `NEXUS_SECRETS_BACKEND=vault`.
+Four IAM users + root for bootstrap. Usernames have no env suffix. Passwords are Vault KV (`minio_loader`, `minio_reader`, `minio_platform_reader`, `minio_admin`), rendered by Agent. Root remains the server and `minio-init` only. Polaris/Spark/Trino S3 use `nexus_loader`. Polaris **catalog** RBAC stays item **6**.
+
+| # | Deliverable |
+| --- | --- |
+| 4a | Policies in `docker/minio/iam/` — loader on all five buckets (multipart; Delete deny on append-only archives + telemetry; Delete allow on Iceberg warehouse), reader markers, platform_reader all-buckets read-only, admin break-glass |
+| 4b | `./scripts/minio-iam-bootstrap.sh` creates users from Vault and probes multipart, Iceberg write, platform_reader get/deny-put, reader markers |
+| 4c | dlt, observability, OTel, Airflow logs, Polaris/Spark/Trino → `nexus_loader`. Lake replay → `nexus_reader`. Demo share → `nexus_platform_reader` |
+| 4d | Log expiry (ILM) is **not** this item |
+
+**Done when:** bootstrap probe passes on local MinIO with `NEXUS_SECRETS_BACKEND=vault`.
 
 ### 5. Local Terraform
 
@@ -151,6 +160,7 @@ Today two paths create the same resource classes:
 | Resource | Current owner |
 | --- | --- |
 | MinIO buckets | Compose `minio-init` → `docker/minio/init/create-buckets.sh` |
+| MinIO IAM users + policies | `./scripts/minio-iam-bootstrap.sh` |
 | ClickHouse DBs + users/GRANTs | `./scripts/clickhouse-rbac-bootstrap.sh` |
 
 Terraform will also manage buckets, MinIO IAM, and ClickHouse DBs/users. **Do not decide the cutover in advance of implementation** — when item **5** starts, plan explicitly so only **one** owner Creates each resource class. Likely options to evaluate then:

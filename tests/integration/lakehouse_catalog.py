@@ -64,8 +64,8 @@ def polaris_catalog_config(env: str | None = None) -> dict[str, str]:
         "s3.endpoint": endpoint,
         "s3.path-style-access": "true",
         "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
-        "s3.access-key-id": required("MINIO_ROOT_USER"),
-        "s3.secret-access-key": required("MINIO_ROOT_PASSWORD"),
+        "s3.access-key-id": required("MINIO_LOADER_USER"),
+        "s3.secret-access-key": required("MINIO_LOADER_PASSWORD"),
     }
 
 
@@ -98,8 +98,8 @@ def find_latest_smoke_metadata_location(env: str | None = None) -> str | None:
     env = env or nexus_env()
     prefix = smoke_table_metadata_prefix(env)
     fs = s3fs.S3FileSystem(
-        key=required("MINIO_ROOT_USER"),
-        secret=required("MINIO_ROOT_PASSWORD"),
+        key=required("MINIO_LOADER_USER"),
+        secret=required("MINIO_LOADER_PASSWORD"),
         client_kwargs={"endpoint_url": minio_endpoint()},
     )
     if not fs.exists(f"{prefix}/"):

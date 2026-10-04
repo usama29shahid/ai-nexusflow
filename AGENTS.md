@@ -14,7 +14,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 - `docs/vault.md` — HashiCorp Vault secrets (KV paths, Agent injection, VPS ops). Read before changing secrets or bootstrap scripts.
 - `docs/edge-proxy.md` — Caddy edge; local vs VPS modes; deploy checklist for Actions/Terraform. When Caddy exits or VPS ports look wrong, use the **Debug: Caddy exit / NEXUS_PUBLISH_BIND** section before inventing a new failure mode.
 - `docs/ci-cd.md` — GitHub Actions + Terraform intent; production-shaped local; day-one deploy.
-- `docs/rbac.md` — ClickHouse loader/transformer/reader/admin (implemented). MinIO IAM = backlog item 4.
+- `docs/rbac.md` — ClickHouse loader/transformer/reader/admin and MinIO IAM loader/reader/platform_reader/admin (implemented). Lakehouse catalog RBAC = backlog item 6.
 - `docs/bronze-silver-cutover.md` — implementation record for warehouse Bronze rename, RBAC, and silver peer tables (canonical rules in environments / dbt-modeling / dlt-dbt-clickhouse / rbac).
 - `docs/dlt-dbt-clickhouse.md` and `docs/dlt-extraction.md` — warehouse ingestion rules.
 - `docs/dlt-dbt-spark-iceberg.md` — lakehouse rules.
@@ -25,7 +25,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 
 **Follow [docs/backlog.md](docs/backlog.md)** — one item at a time. Do not use old “Phase 2 blocks readers/Terraform” language to skip backlog items.
 
-Route **`products`** (archive + Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers) is the **reference endpoint pipeline** and backlog item 0 (done). Stack verify is backlog item 1 (done): `./scripts/start.sh verify`. SigNoz is backlog item 2 (done). OpenObserve is backlog item 2.1 (done). OpenMetadata is backlog item 3 (done). **Next: MinIO IAM (item 4)** → local Terraform → Iceberg parity → remaining Route endpoints → facts/marts/semantic layer → docs basic auth → VPS/Actions → Supabase/Streamlit → RAG later.
+Route **`products`** (archive + Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers) is the **reference endpoint pipeline** and backlog item 0 (done). Stack verify is backlog item 1 (done): `./scripts/start.sh verify`. SigNoz is backlog item 2 (done). OpenObserve is backlog item 2.1 (done). OpenMetadata is backlog item 3 (done). MinIO IAM is backlog item 4 (done). **Next: local Terraform (item 5)** → Iceberg parity → remaining Route endpoints → facts/marts/semantic layer → docs basic auth → VPS/Actions → Supabase/Streamlit → RAG later.
 
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
@@ -57,7 +57,7 @@ This applies to agents executing [docs/backlog.md](docs/backlog.md) or any Curso
 
 - Run Python, `uv`, dlt, and dbt on the host from the repository root; do not run `uv sync` in a bind-mounted Compose container.
 - Docker Compose runs infrastructure: MinIO AIStor Free + OTel Collector always; ClickHouse via `clickhouse`; Polaris/Spark Thrift/Trino via `lakehouse`; Airflow on-demand via `airflow`; CloudBeaver via `cloudbeaver`; SigNoz / OpenMetadata via `signoz` / `openmetadata`.
-- Use `.env` for local configuration; secrets on the VPS come from HashiCorp Vault via Agent (see `docs/vault.md`). Local WSL may use `NEXUS_SECRETS_BACKEND=env` until Vault is running. Never commit `.env`, `profiles.yml`, credentials, API keys, tokens, or `.nexusflow/minio.license`.
+- Use `.env` for local configuration (ports, profiles). Secrets come from HashiCorp Vault via Agent (`NEXUS_SECRETS_BACKEND=vault`; required for MinIO writers — see `docs/vault.md`). Never commit `.env`, `profiles.yml`, credentials, API keys, tokens, or `.nexusflow/minio.license`.
 - Default environment is `NEXUS_ENV=dev`. `prd` is a naming contract for backlog item **10** (VPS/Actions), not a second local stack.
 - dbt does not load `.env` itself; source it before dbt commands. Keep dbt `--target` equal to `NEXUS_ENV`.
 

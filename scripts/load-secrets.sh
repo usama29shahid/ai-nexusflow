@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Source repo .env and, when NEXUS_SECRETS_BACKEND=vault, Agent-rendered secrets.
+# Source repo .env and, when NEXUS_SECRETS_BACKEND=vault (default if unset),
+# Agent-rendered secrets.
 # Usage: source scripts/load-secrets.sh   (or: . scripts/load-secrets.sh)
 set -a
 
@@ -13,7 +14,7 @@ fi
 # shellcheck source=/dev/null
 source "${ROOT}/.env"
 
-backend="${NEXUS_SECRETS_BACKEND:-env}"
+backend="${NEXUS_SECRETS_BACKEND:-vault}"
 if [[ "${backend}" == "vault" ]]; then
   secrets_file="${NEXUS_SECRETS_FILE:-${ROOT}/.nexusflow/secrets.env}"
   if [[ ! -f "${secrets_file}" ]]; then

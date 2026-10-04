@@ -27,8 +27,8 @@ def _s3_client() -> BaseClient:
     return boto3.client(
         "s3",
         endpoint_url=minio_endpoint(),
-        aws_access_key_id=required_env("MINIO_ROOT_USER"),
-        aws_secret_access_key=required_env("MINIO_ROOT_PASSWORD"),
+        aws_access_key_id=required_env("MINIO_LOADER_USER"),
+        aws_secret_access_key=required_env("MINIO_LOADER_PASSWORD"),
         region_name=os.environ.get("AWS_REGION", "us-east-1"),
     )
 

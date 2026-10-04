@@ -9,6 +9,7 @@ Run from repo root:
     export NEXUS_ENV="${NEXUS_ENV:-dev}"
     unset NEXUS_RUN_ID
     ./scripts/clickhouse-rbac-bootstrap.sh   # once per env
+    ./scripts/minio-iam-bootstrap.sh         # once per env (Vault)
     uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
 """
 
@@ -132,8 +133,8 @@ def _filesystem_destination(*, env: str, run_id: str, dt: str):
         layout="{table_name}/dt={dt}/run_id={run_id}/part-{file_id}.{ext}",
         extra_placeholders={"dt": dt, "run_id": run_id},
         credentials={
-            "aws_access_key_id": _required("MINIO_ROOT_USER"),
-            "aws_secret_access_key": _required("MINIO_ROOT_PASSWORD"),
+            "aws_access_key_id": _required("MINIO_LOADER_USER"),
+            "aws_secret_access_key": _required("MINIO_LOADER_PASSWORD"),
             "endpoint_url": endpoint,
             "region_name": os.environ.get("AWS_REGION", "us-east-1"),
         },
