@@ -132,6 +132,7 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 | `openobserve` | `root_user_email`, `root_user_password` | `ZO_ROOT_USER_EMAIL`, `ZO_ROOT_USER_PASSWORD` | openobserve profile (item **2.1**) |
 | `openmetadata` | `admin_email`, `admin_password` | `OPENMETADATA_ADMIN_EMAIL`, `OPENMETADATA_ADMIN_PASSWORD` | openmetadata login / catalog ingest (item **3**) |
 | `clickhouse_catalog` | `username`, `password` | `CLICKHOUSE_CATALOG_USER`, `CLICKHOUSE_CATALOG_PASSWORD` | OpenMetadata ClickHouse connector (`nexus_catalog`) |
+| `backup` | `endpoint`, `access_key`, `secret_key` | `NEXUS_BACKUP_ENDPOINT`, `NEXUS_BACKUP_ACCESS_KEY`, `NEXUS_BACKUP_SECRET_KEY` | Optional R2/S3 archive mirror — [`./scripts/backup-archive.sh`](../scripts/backup-archive.sh) |
 | *(future)* `route` | JWT / demo-user secrets when authenticated entities are implemented | TBD | dlt Route user entities — **not required for catalog-only** |
 
 `jwt_secret` is required for Airflow 3. Existing Vault paths seeded before this field get it on `./scripts/start.sh airflow` (`vault-ensure.sh` `kv patch` + Agent recreate) or on `vault-bootstrap.sh`. Do not copy a WSL JWT onto the VPS.
@@ -145,7 +146,14 @@ Example write (after bootstrap — operator shell only):
 ```bash
 vault kv put secret/nexusflow/dev/clickhouse password='strong-random-password'
 vault kv put secret/nexusflow/dev/minio root_user='minioadmin' root_password='strong-random-password'
+# Optional off-site archive backup (Cloudflare R2 S3 API):
+vault kv put secret/nexusflow/dev/backup \
+  endpoint='https://<accountid>.r2.cloudflarestorage.com' \
+  access_key='…' \
+  secret_key='…'
 ```
+
+Bootstrap and `vault-ensure.sh` seed `backup` when missing (copies `NEXUS_BACKUP_*` from `.env` if set, else empty) so Agent recreate cannot break `secrets.env`. After cutover, remove real keys from `.env` and rotate via Vault UI/CLI + Agent recreate (`./scripts/start.sh airflow` refreshes `airflow_elt.env`).
 
 ---
 
@@ -247,13 +255,23 @@ Prefer **Vault UI** or CLI — not `.env` — when `NEXUS_SECRETS_BACKEND=vault`
 
 **MinIO root / other KV:** update Vault, reload Agent, recreate the affected service if needed. Root is the server and bucket bootstrap only — not the warehouse archive writer or Polaris/Spark/Trino S3 identity (those use `minio_loader`).
 
-### Backup
+### Backup (optional — good-to-have, not required for local day-to-day)
+
+Manual only — there is no automated Vault → R2 job. REST archive history uses [`./scripts/backup-archive.sh`](../scripts/backup-archive.sh); Vault is separate.
+
+Checklist:
+
+1. Vault running and unsealed (`./scripts/start.sh vault` or daily `vault-ensure`).
+2. Save a raft snapshot (from the host with `VAULT_ADDR` and a root/admin token, or via `docker exec` into the `vault` container):
 
 ```bash
 vault operator raft snapshot save nexusflow-vault-$(date -u +%Y%m%d).snap
 ```
 
-Store snapshots **off the VPS** (encrypted object storage or local secure copy).
+3. Store **unseal key + root token** in a password manager (from `.nexusflow/vault-init.json` after first init — **never** commit that file). A snapshot without the unseal key cannot be opened on a new host.
+4. Optional: copy the `.snap` off-box — e.g. `mc cp` into a private R2 bucket such as `nexus-vault-backup-{NEXUS_ENV}` on the **same** R2 account as archive backup (`NEXUS_BACKUP_*` in `.env`). Keep the bucket private; do not put unseal keys in R2.
+
+Restore outline (disaster): start Vault → unseal with the password-manager key → `vault operator raft snapshot restore` (follow [HashiCorp raft snapshot restore](https://developer.hashicorp.com/vault/docs/commands/operator/raft#restore)) → reload Vault Agent → re-run MinIO IAM / ClickHouse RBAC bootstrap if users drifted. Then restore MinIO archives from R2 if needed — [operations.md](operations.md#on-demand-restore).
 
 ### After VPS reboot
 

@@ -152,6 +152,10 @@ activemq-data/
 .envrc
 .nexusflow/
 
+# Vault raft snapshots (contain all KV secrets — keep off git; password manager + optional R2)
+*.snap
+nexusflow-vault-*.snap
+
 # Generated OTel collector config (scripts/render-otel-collector-config.py)
 docker/otel/.generated/
 

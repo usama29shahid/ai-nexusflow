@@ -103,6 +103,22 @@ class EltExecTest(unittest.TestCase):
         self.assertIn("dag_run.conf", cmd)
         self.assertIn("--force", cmd)
 
+    def test_backup_archive_nests_docker_sock(self) -> None:
+        from nexus_elt_exec import elt_backup_archive_command
+
+        cmd = elt_backup_archive_command()
+        self.assertIn("backup-archive.sh", cmd)
+        self.assertIn("docker.sock", cmd)
+        self.assertIn("NEXUS_REPO_ROOT", cmd)
+        self.assertIn("/opt/airflow/nexus_elt.env", cmd)
+        self.assertNotIn("secrets.env", cmd)
+        dag = (
+            REPO_ROOT / "orchestration" / "airflow" / "dags" / "ops_backup_archive.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("elt_backup_archive_command", dag)
+        self.assertIn('dag_id="ops_backup_archive"', dag)
+        self.assertIn("timedelta(days=1)", dag)
+
     def test_dbt_layer_quotes_select_with_apostrophe(self) -> None:
         """Selectors with ' must remain one argv after bash -lc."""
         import shlex

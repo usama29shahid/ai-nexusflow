@@ -60,3 +60,8 @@ ZO_ROOT_USER_PASSWORD={{ .Data.data.root_user_password }}
 OPENMETADATA_ADMIN_EMAIL={{ .Data.data.admin_email }}
 OPENMETADATA_ADMIN_PASSWORD={{ .Data.data.admin_password }}
 {{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/backup" $env) }}
+NEXUS_BACKUP_ENDPOINT={{ .Data.data.endpoint }}
+NEXUS_BACKUP_ACCESS_KEY={{ .Data.data.access_key }}
+NEXUS_BACKUP_SECRET_KEY={{ .Data.data.secret_key }}
+{{- end }}

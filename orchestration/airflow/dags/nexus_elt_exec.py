@@ -69,6 +69,48 @@ def elt_dbt_layer(select: str) -> str:
     return elt_bash_command(f"./scripts/airflow-dbt-layer.sh {shlex.quote(select)}")
 
 
+def elt_backup_archive_command() -> str:
+    """BashOperator command: MinIO REST archives → R2 via ``backup-archive.sh``.
+
+    Nests Docker (``mc``) like OM ingest: mount host ``docker.sock`` into
+    ``nexus-elt``. Requires ``NEXUS_BACKUP_*`` in ``airflow_elt.env`` (from
+    Vault ``backup`` KV via ``./scripts/start.sh airflow``).
+    """
+    return (
+        "set -euo pipefail\n"
+        'image="${NEXUS_ELT_IMAGE:-nexus-elt:latest}"\n'
+        'network="${NEXUS_COMPOSE_NETWORK:-ai-nexusflow_default}"\n'
+        'repo="${NEXUS_REPO_ROOT:?Set NEXUS_REPO_ROOT to the host clone path}"\n'
+        'envfile="${NEXUS_AIRFLOW_ELT_ENV_PATH:-/opt/airflow/nexus_elt.env}"\n'
+        'sock="${DOCKER_SOCK:-/var/run/docker.sock}"\n'
+        'if [[ ! -f "${envfile}" ]]; then\n'
+        '  echo "Missing ELT env file (${envfile}). Run ./scripts/start.sh airflow" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        'if [[ ! -S "${sock}" ]]; then\n'
+        '  echo "Missing Docker socket (${sock}) for nested mc backup containers" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        "docker run --rm \\\n"
+        '  --network "${network}" \\\n'
+        '  -v "${repo}:/workspace:rw" \\\n'
+        '  -v "${sock}:/var/run/docker.sock" \\\n'
+        "  -w /workspace \\\n"
+        '  --env-file "${envfile}" \\\n'
+        "  -e MINIO_ENDPOINT_URL=http://minio:9000 \\\n"
+        '  -e NEXUS_REPO_ROOT="${repo}" \\\n'
+        "  -e DOCKER_HOST=unix:///var/run/docker.sock \\\n"
+        "  -e NEXUS_ELT_JOB=1 \\\n"
+        "  -e NEXUS_RUN_ID='{{ run_id }}' \\\n"
+        "  -e NEXUS_DAG_ID='{{ dag.dag_id }}' \\\n"
+        "  -e NEXUS_TASK_ID='{{ task.task_id }}' \\\n"
+        "  -e PYTHONPATH=/workspace \\\n"
+        "  -e UV_PROJECT_ENVIRONMENT=/opt/nexus/.venv \\\n"
+        '  "${image}" \\\n'
+        "  bash -lc './scripts/backup-archive.sh'\n"
+    )
+
+
 def elt_openmetadata_ingest_command() -> str:
     """BashOperator command: OM lake→catalog reader ingest (nests docker for ``metadata``).
 
