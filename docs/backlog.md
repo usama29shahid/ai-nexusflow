@@ -191,6 +191,8 @@ Caddy gate for Elementary HTML, dbt docs, dlt docs. Local `proxy` first; require
 
 Edge/env Terraform for VPS + Actions lint/test/build/apply/deploy. Validate both branches’ first Airflow jobs and all services.
 
+**Ops (optional, not ordered here):** MinIO REST archive → R2 via `./scripts/backup-archive.sh` and manual Vault snapshots — [operations.md](operations.md#archive-backup-optional--minio--r2), [vault.md](vault.md). Does **not** reorder or block item **5**.
+
 ### 11. Supabase + Streamlit
 
 Supabase auth/session; Streamlit portfolio/control UI. Not pipeline telemetry storage.

@@ -241,6 +241,86 @@ Plain `./scripts/setup.sh` / `uv sync` does **not** install `edr`. After enablin
 
 ---
 
+## Archive backup (optional — MinIO → R2)
+
+Secondary copy of **REST JSONL history** only. Same bucket names and object keys on Cloudflare R2 (or any S3-compatible endpoint). Not a backlog item; does not replace item **5** (Terraform).
+
+| Copied | Not copied |
+| --- | --- |
+| `nexus-dlt-dbt-clickhouse-{env}` | ClickHouse volumes (rebuild via load + dbt) |
+| `nexus-dlt-dbt-spark-iceberg-archive-{env}` | Telemetry, Airflow logs, Iceberg warehouse, reader DBs |
+
+**Config** — R2/S3 API keys in Vault KV `secret/nexusflow/{env}/backup` (Agent → `NEXUS_BACKUP_*`). Each machine’s Vault holds **that** host’s R2 URL/keys. See [vault.md](vault.md).
+
+```bash
+# One-time (or rotate): from a shell with Vault CLI / docker exec into vault
+vault kv put secret/nexusflow/dev/backup \
+  endpoint='https://<accountid>.r2.cloudflarestorage.com' \
+  access_key='…' \
+  secret_key='…'
+./scripts/start.sh vault   # recreate Agent so secrets.env updates
+```
+
+Remove real `NEXUS_BACKUP_*` from `.env` after the KV path is set (bootstrap only seeds missing paths from `.env`).
+
+**Run** (MinIO up; Vault Agent rendered for loader + backup keys):
+
+```bash
+./scripts/backup-archive.sh
+```
+
+**Airflow (daily):** DAG `ops_backup_archive` (`schedule` = every 24h). Needs Airflow profile up, MinIO up, and `NEXUS_BACKUP_*` in `.nexusflow/airflow_elt.env` (written by `./scripts/start.sh airflow` from Vault). After changing R2 keys in Vault, re-run `./scripts/start.sh airflow` so the elt env refreshes. Manual trigger from the Airflow UI anytime.
+
+Uses `mc mirror` **without** `--remove`, so R2 keeps objects even if they disappear from local MinIO.
+
+If the script fails with **Access Denied** on create: create both archive buckets in the **same** Cloudflare account as the token (exact names above), or use an R2 API token with **Admin Read & Write**. Object Read & Write is enough for mirror once buckets exist.
+
+**Vault raft snapshots** (secrets themselves) stay a separate optional manual checklist — [vault.md](vault.md#backup-optional--good-to-have-not-required-for-local-day-to-day).
+
+---
+
+## On-demand restore
+
+Assume wiped disk, `down -v`, or a new host. Goal: history back + stack usable.
+
+### A — MinIO archive lost, R2 OK
+
+1. Clone repo; Vault + `.env` (config only). Ensure `secret/nexusflow/{env}/backup` is set so Agent renders `NEXUS_BACKUP_*`.
+2. `./scripts/start.sh minio` (empty archive buckets from minio-init).
+3. Reverse mirror with Docker `mc` on the Compose network (same image as backup). Example for `NEXUS_ENV=dev`:
+
+```bash
+# After sourcing .env + scripts/load-secrets.sh and resolving the minio network:
+# mc alias set local http://minio:9000 "$MINIO_LOADER_USER" "$MINIO_LOADER_PASSWORD"
+# mc alias set backup "$NEXUS_BACKUP_ENDPOINT" "$NEXUS_BACKUP_ACCESS_KEY" "$NEXUS_BACKUP_SECRET_KEY"
+# for b in nexus-dlt-dbt-clickhouse-dev nexus-dlt-dbt-spark-iceberg-archive-dev; do
+#   mc mirror --overwrite "backup/${b}" "local/${b}"
+# done
+```
+
+4. Confirm MinIO has `route/products/` prefixes (historical `run_id=` keys).
+
+### B — Clean host / empty ClickHouse
+
+1. Vault: unseal as usual (`./scripts/start.sh vault`) **or** Scenario C if secrets were lost.
+2. Start stacks; `./scripts/clickhouse-rbac-bootstrap.sh` and `./scripts/minio-iam-bootstrap.sh` if fresh.
+3. If archives empty: do **A** first.
+4. For **current** warehouse tables: run Route `products` dlt + `dbt run` ([dlt-dbt-clickhouse.md](dlt-dbt-clickhouse.md)). Historical JSONL stays in the archive; full Bronze replay-from-archive is documented as a pattern but has **no dedicated script** yet.
+5. Lakehouse Polaris reset only: `./scripts/lakehouse-restore.sh` (above).
+
+### C — Vault lost; you have `.snap` + password-manager keys
+
+1. Start Vault; unseal with the password-manager unseal key.
+2. Restore raft snapshot ([HashiCorp restore](https://developer.hashicorp.com/vault/docs/commands/operator/raft#restore)); reload Agent.
+3. Re-run MinIO IAM / ClickHouse RBAC bootstrap if needed.
+4. Continue with A/B for data.
+
+### D — No R2 and no MinIO
+
+REST **history** is gone. You can only call the Route API again for the **current** catalog. Manual Vault backup does not recover JSONL.
+
+---
+
 ## Cheat sheet
 
 ```text
@@ -255,6 +335,7 @@ Stop OM only        →  ./scripts/start.sh stop-openmetadata
 Stop reader UIs     →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
+Archive → R2        →  ./scripts/backup-archive.sh  or Airflow DAG ops_backup_archive (daily)
 dlt smoke           →  ./scripts/start.sh smoke
 Airflow first time  →  orchestration/airflow/README.md (.env host path; once per machine)
 Airflow             →  ./scripts/start.sh airflow  (UI :8081; recreate if key/.env changed)

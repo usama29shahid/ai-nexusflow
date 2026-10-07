@@ -347,6 +347,17 @@ else
     admin_email="$(read_env_default OPENMETADATA_ADMIN_EMAIL admin@open-metadata.org)" \
     admin_password="$(read_env_default OPENMETADATA_ADMIN_PASSWORD admin)"
 fi
+# Off-site archive backup (R2 / S3 API). Optional — empty until you put real keys.
+# First seed copies NEXUS_BACKUP_* from .env when present; otherwise empty placeholders.
+if kv_secret_exists "${kv_base}/backup"; then
+  echo "  KV exists: ${kv_base}/backup (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/backup (optional; set endpoint/access_key/secret_key for ./scripts/backup-archive.sh)"
+  vault_exec kv put "${kv_base}/backup" \
+    endpoint="$(read_env_default NEXUS_BACKUP_ENDPOINT "")" \
+    access_key="$(read_env_default NEXUS_BACKUP_ACCESS_KEY "")" \
+    secret_key="$(read_env_default NEXUS_BACKUP_SECRET_KEY "")"
+fi
 
 echo "Starting Vault Agent (force-recreate so new template keys are rendered)..."
 # Template bind-mount updates (e.g. minio_platform_reader) need Agent recreate;

@@ -12,6 +12,8 @@ Airflow runs in Docker (same Compose profile on WSL and VPS). Endpoint DAGs star
 
 Helper: [`dags/nexus_elt_exec.py`](dags/nexus_elt_exec.py). Copy `route_clickhouse_products` for the next endpoint. One UI lists every branch’s DAGs. Contract: [docs/architecture.md](../../docs/architecture.md).
 
+Ops: [`ops_backup_archive`](dags/ops_backup_archive.py) runs daily MinIO REST archive → R2 (`./scripts/backup-archive.sh`). Requires Vault `backup` KV and a refreshed `airflow_elt.env` (`./scripts/start.sh airflow`).
+
 ## First time on this machine (WSL or VPS)
 
 Do these once per machine (clone path / Linux user). Same list on the first VPS deploy.

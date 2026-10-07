@@ -8,6 +8,8 @@ One DAG per source + target + endpoint. Group folders by source+target. Filename
 | --- | --- | --- |
 | `nexus_airflow_smoke` | `nexus_airflow_smoke.py` | Compose profile smoke (in-container) |
 | `route_clickhouse_products` | `route_clickhouse/products.py` | Route products warehouse ELT |
+| `observability_openmetadata_ingest` | `observability_openmetadata_ingest.py` | Daily OM reader ingest |
+| `ops_backup_archive` | `ops_backup_archive.py` | Daily MinIO archive → R2 mirror |
 
 `nexus_elt_exec.py` is a helper (not a DAG): wraps `docker run` of `nexus-elt`. Copy that pattern for the next endpoint.
 

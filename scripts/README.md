@@ -2,7 +2,7 @@
 
 Host bootstrap. Python stays on the host; Docker runs infrastructure only.
 
-**Runbook:** [docs/operations.md](../docs/operations.md) — start/stop all services, lakehouse restore, Vault reboot.
+**Runbook:** [docs/operations.md](../docs/operations.md) — start/stop all services, lakehouse restore, Vault reboot, optional archive → R2 backup (`./scripts/backup-archive.sh`).
 
 ```bash
 cp .env.example .env   # or paste your .env

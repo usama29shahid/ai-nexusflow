@@ -50,6 +50,35 @@ class AirflowWriteEltEnvTest(unittest.TestCase):
             self.assertNotIn("MINIO_ROOT_USER=", text)
             self.assertNotIn("MINIO_ROOT_PASSWORD=", text)
 
+    def test_writes_backup_r2_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "airflow_elt.env"
+            env = {
+                **os.environ,
+                "NEXUS_AIRFLOW_ELT_ENV": str(out),
+                "NEXUS_ENV": "dev",
+                "MINIO_LOADER_USER": "nexus_loader",
+                "MINIO_LOADER_PASSWORD": "loader-secret",
+                "NEXUS_BACKUP_ENDPOINT": "https://acct.r2.cloudflarestorage.com",
+                "NEXUS_BACKUP_ACCESS_KEY": "ak",
+                "NEXUS_BACKUP_SECRET_KEY": "sk",
+            }
+            proc = subprocess.run(
+                [str(SCRIPT)],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            text = out.read_text(encoding="utf-8")
+            self.assertIn(
+                "NEXUS_BACKUP_ENDPOINT=https://acct.r2.cloudflarestorage.com\n", text
+            )
+            self.assertIn("NEXUS_BACKUP_ACCESS_KEY=ak\n", text)
+            self.assertIn("NEXUS_BACKUP_SECRET_KEY=sk\n", text)
+
     def test_rejects_newline_preserves_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "airflow_elt.env"

@@ -46,6 +46,10 @@ keys=(
   # Public Caddy hostnames for OM CustomDashboard sourceUrl (not Compose DNS).
   NEXUS_PUBLIC_HOST
   NEXUS_CADDY_SITE_SCHEME
+  # Optional R2/S3 archive backup (ops_backup_archive DAG / backup-archive.sh).
+  NEXUS_BACKUP_ENDPOINT
+  NEXUS_BACKUP_ACCESS_KEY
+  NEXUS_BACKUP_SECRET_KEY
 )
 
 # Warehouse job S3 defaults are the MinIO loader, not root.
