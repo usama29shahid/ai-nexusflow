@@ -12,11 +12,53 @@ Docker Compose runs **MinIO AIStor Free and OTel Collector always**, plus option
 
 ```text
 git clone
-cp .env.example .env          # or paste your .env
+cp .env.example .env          # or paste a host-local .env — never copy another machine's .env
 mkdir -p .nexusflow
-cp /path/to/aistor-license .nexusflow/minio.license   # gitignored; see docker/minio/README.md
+cp /path/to/aistor-license .nexusflow/minio.license   # gitignored file (not a directory)
+# Fill Compose-interpolation secrets in .env (see Before first setup.sh below)
 ./scripts/setup.sh            # docker compose up -d && uv sync
 ```
+
+### Before first `./scripts/setup.sh` (WSL / EC2 / VPS)
+
+Three things fail a clean host if skipped. License is always manual. Airflow and SigNoz values are required for **Compose file parse** even when those profiles are **off** — Docker Compose evaluates `${VAR:?…}` on included services before Vault starts. Filling them does **not** start Airflow or SigNoz.
+
+| # | Required | Why |
+| --- | --- | --- |
+| 1 | `.nexusflow/minio.license` as a **file** | AIStor Free license is gitignored; `setup.sh` only checks that it exists. Create `mkdir -p .nexusflow`, then copy the license. If Docker once mounted a missing path, the path may be a **directory** — remove it (`rmdir`) and copy the file. See [docker/minio/README.md](../docker/minio/README.md). |
+| 2 | `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY`, `AIRFLOW__API_AUTH__JWT_SECRET` non-empty in `.env` | Compose `${…:?}` on Airflow services. With `NEXUS_SECRETS_BACKEND=vault`, `setup.sh` does **not** auto-fill these (Vault owns live secrets later). Generate once per host — do not copy WSL values onto EC2. |
+| 3 | `SIGNOZ_TOKENIZER_JWT_SECRET` non-empty in `.env` | Same parse-time rule for the included [docker/signoz/compose.yml](../docker/signoz/compose.yml). Leave `signoz` out of `COMPOSE_PROFILES` if you do not want the UI. |
+
+Generate blanks on the host (unique per machine):
+
+```bash
+# Airflow crypto (required even without the airflow profile)
+python3 - <<'PY'
+from pathlib import Path
+import base64, os, secrets, re
+env = Path(".env")
+text = env.read_text()
+def set_var(text, key, value):
+    if re.search(rf"^{re.escape(key)}=", text, re.M):
+        return re.sub(rf"^{re.escape(key)}=.*$", f"{key}={value}", text, count=1, flags=re.M)
+    return text.rstrip() + f"\n{key}={value}\n"
+text = set_var(text, "AIRFLOW__CORE__FERNET_KEY", base64.urlsafe_b64encode(os.urandom(32)).decode())
+text = set_var(text, "AIRFLOW__WEBSERVER__SECRET_KEY", secrets.token_urlsafe(32))
+text = set_var(text, "AIRFLOW__API_AUTH__JWT_SECRET", secrets.token_urlsafe(32))
+env.write_text(text)
+print("Airflow crypto written to .env")
+PY
+
+# SigNoz tokenizer (required even without the signoz profile)
+jwt="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+if grep -q '^SIGNOZ_TOKENIZER_JWT_SECRET=' .env; then
+  sed -i "s|^SIGNOZ_TOKENIZER_JWT_SECRET=.*|SIGNOZ_TOKENIZER_JWT_SECRET=${jwt}|" .env
+else
+  printf '\nSIGNOZ_TOKENIZER_JWT_SECRET=%s\n' "${jwt}" >> .env
+fi
+```
+
+**EC2 / private remote host:** keep `NEXUS_ENV=dev`, `NEXUS_EDGE_MODE=local`, set `NEXUS_PUBLISH_BIND=127.0.0.1`, set `NEXUS_REPO_ROOT` to the absolute clone path, use a new Vault on that machine, and open only SSH (port 22) on the security group. Public HTTPS / `prd` is backlog item **10** — [edge-proxy.md](edge-proxy.md), [environments.md](environments.md).
 
 | Component | Purpose | Where it runs |
 | --- | --- | --- |
@@ -37,15 +79,18 @@ A later CI image for production Python is optional and does not change this Curs
 
 ## One-command bootstrap
 
-From the repository root:
+From the repository root (after the [Before first `./scripts/setup.sh`](#before-first-scriptssetupsh-wsl--ec2--vps) checklist):
 
 ```bash
 cp .env.example .env
+mkdir -p .nexusflow
+cp /path/to/aistor-license .nexusflow/minio.license
+# Generate Airflow + SigNoz Compose-interpolation secrets into .env (see above)
 chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
-The script copies `.env` if missing, checks Docker, installs **uv** if missing, starts Compose (using `COMPOSE_PROFILES`, default `clickhouse`), and runs `uv sync` on the host. It does **not** apt-install Docker on WSL (use Docker Desktop WSL integration). On a bare VPS/EC2, install Docker Engine once, then re-run the script.
+The script copies `.env` if missing, checks Docker, installs **uv** if missing, starts Vault + MinIO IAM + Compose (using `COMPOSE_PROFILES`; default when unset is `clickhouse,lakehouse`), and runs `uv sync` on the host. It does **not** apt-install Docker on WSL (use Docker Desktop WSL integration). On a bare VPS/EC2, install Docker Engine once, then re-run the script. It does **not** create the MinIO license file or (when `NEXUS_SECRETS_BACKEND=vault`) fill blank Airflow / SigNoz keys in `.env`.
 
 Day to day (deps unchanged):
 

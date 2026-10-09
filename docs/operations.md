@@ -324,7 +324,7 @@ REST **history** is gone. You can only call the Route API again for the **curren
 ## Cheat sheet
 
 ```text
-First time ever     →  ./scripts/setup.sh
+First time ever     →  docs/setup.md (license + Airflow/SigNoz .env keys) then ./scripts/setup.sh
 Start all stacks    →  ./scripts/start.sh all
 Start .env stacks   →  ./scripts/start.sh
 Stop all            →  ./scripts/start.sh down
