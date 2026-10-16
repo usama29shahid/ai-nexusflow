@@ -194,6 +194,31 @@ curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 | OpenMetadata | http://127.0.0.1:8585 |
 | Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
 
+### EC2 laptop SSH tunnels for UIs
+
+On EC2 with `NEXUS_PUBLISH_BIND=127.0.0.1` (recommended; security group port 22 only), Compose publishes UIs on the **instance loopback**. They are **not** reachable at the public IP. From your laptop, open an SSH session with local port forwards and **keep it open** while you use the browser — tunnels are not automatic.
+
+```bash
+# Host alias (e.g. nexus-ec2) or: ubuntu@<ec2-public-ip>
+# UIs: OpenObserve 5080, OpenMetadata 8585, MinIO console 9001, Airflow 8081
+ssh -L 5080:127.0.0.1:5080 -L 8585:127.0.0.1:8585 -L 9001:127.0.0.1:9001 -L 8081:127.0.0.1:8081 nexus-ec2
+```
+
+Then on the **laptop** open the same URLs as above (`http://127.0.0.1:5080`, `:8585`, `:9001`, `:8081`). The one-liner is **console/UI only** — for MinIO S3 API from the laptop, also forward `9002` (`-L 9002:127.0.0.1:9002`). Add more `-L` lines for other UIs (CloudBeaver `8978`, SigNoz `3301`, ClickHouse HTTP `8123`, …) as needed.
+
+Optional: under your **existing** `Host nexus-ec2` (keep `HostName` / `User` / `IdentityFile`), add these lines so plain `ssh nexus-ec2` always forwards — do **not** replace the whole Host block with only forwards:
+
+```sshconfig
+  LocalForward 5080 127.0.0.1:5080
+  LocalForward 8585 127.0.0.1:8585
+  LocalForward 9001 127.0.0.1:9001
+  LocalForward 8081 127.0.0.1:8081
+  # Optional MinIO S3 API:
+  # LocalForward 9002 127.0.0.1:9002
+```
+
+See also [setup.md](setup.md) (EC2 / private remote host).
+
 ### Elementary report (host CLI)
 
 Needs ClickHouse up and an `elementary` profile (copy from [`profiles.example.yml`](../branches/dlt_dbt_clickhouse/profiles.example.yml) into branch `profiles.yml` or `~/.dbt/profiles.yml`).
