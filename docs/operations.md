@@ -194,6 +194,80 @@ curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 | OpenMetadata | http://127.0.0.1:8585 |
 | Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
 
+### EC2 laptop SSH tunnels for UIs
+
+On EC2 with `NEXUS_PUBLISH_BIND=127.0.0.1` (recommended; security group port 22 only), Compose publishes UIs on the **instance loopback**. They are **not** reachable at the public IP (including Vault at `:8200`).
+
+Open tunnels from **either WSL Ubuntu or Windows PowerShell** (same `ssh -L` one-liner). Pick **one** place for the tunnel session and keep that window open while you use the browser — do not start the same forwards from both at once (ports will collide). Check/kill busy ports in the **same** environment where you run `ssh`.
+
+```bash
+# Host alias (e.g. nexus-ec2) or: ubuntu@<ec2-public-ip>
+# Same command in WSL bash and Windows PowerShell (OpenSSH).
+# Vault 8200 | ClickHouse HTTP 8123 | CloudBeaver 8978
+# MinIO console 9001 | MinIO API 9002 | Airflow 8081
+# OpenObserve 5080 | OpenMetadata 8585
+ssh -L 8200:127.0.0.1:8200 -L 8123:127.0.0.1:8123 -L 8978:127.0.0.1:8978 -L 9001:127.0.0.1:9001 -L 9002:127.0.0.1:9002 -L 8081:127.0.0.1:8081 -L 5080:127.0.0.1:5080 -L 8585:127.0.0.1:8585 nexus-ec2
+```
+
+Then in the browser open e.g. `http://127.0.0.1:8200` (Vault), `:8123` (ClickHouse), `:8978` (CloudBeaver), `:9001` / `:9002` (MinIO), `:8081` (Airflow), `:5080` (OpenObserve), `:8585` (OpenMetadata).
+
+Add more `-L` lines when those profiles are up: SigNoz `3301`, OpenMetadata admin `8586`, ClickHouse native `9000`.
+
+Optional: under your **existing** `Host nexus-ec2` in `~/.ssh/config` (WSL) or `%USERPROFILE%\.ssh\config` (Windows) — keep `HostName` / `User` / `IdentityFile`; do **not** replace the whole Host block with only forwards:
+
+```sshconfig
+  LocalForward 8200 127.0.0.1:8200
+  LocalForward 8123 127.0.0.1:8123
+  LocalForward 8978 127.0.0.1:8978
+  LocalForward 9001 127.0.0.1:9001
+  LocalForward 9002 127.0.0.1:9002
+  LocalForward 8081 127.0.0.1:8081
+  LocalForward 5080 127.0.0.1:5080
+  LocalForward 8585 127.0.0.1:8585
+  # When needed:
+  # LocalForward 3301 127.0.0.1:3301
+  # LocalForward 8586 127.0.0.1:8586
+  # LocalForward 9000 127.0.0.1:9000
+```
+
+#### Busy ports / `Address already in use`
+
+SSH can still log you into EC2 while **some** `-L` forwards fail. If you see `bind [127.0.0.1]:8081: Address already in use` (or `9001` / `5080` / `8585` / …), that UI tunnel is **not** active — usually an old `ssh nexus-ec2` in the **same** shell environment still holds the port.
+
+**WSL Ubuntu** (when you tunnel from WSL):
+
+```bash
+ss -ltnp | grep -E ':(8200|8123|8978|9001|9002|8081|5080|8585)\s'
+pkill -f 'ssh .*nexus-ec2' || true
+# then re-run the ssh -L one-liner above
+```
+
+**Windows PowerShell** (when you tunnel from PowerShell):
+
+```powershell
+netstat -ano | findstr ":8200 :8123 :8978 :9001 :9002 :8081 :5080 :8585"
+
+# Close only nexus-ec2 tunnels (keeps other ssh sessions)
+Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" |
+  Where-Object { $_.CommandLine -match 'nexus-ec2' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+
+# Nuclear option — kills EVERY ssh.exe on Windows:
+# Get-Process ssh -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# then re-run the ssh -L one-liner above
+```
+
+After reconnect, confirm there are **no** `Address already in use` lines, then open the UI (e.g. Airflow `http://127.0.0.1:8081`).
+
+#### After EC2 stop / start
+
+1. On the instance: `./scripts/start.sh` (with `airflow` in `COMPOSE_PROFILES`). This unseals Vault, rewrites secrets, and ensures Airflow gets `.nexusflow/airflow_elt.env` mounted on the scheduler. Do **not** rely on bare `docker compose --profile airflow up` for day-to-day — missing `nexus_elt.env` makes DAG tasks fail immediately.
+2. If Airflow was already up without that file: `./scripts/start.sh airflow`.
+3. On WSL **or** PowerShell (whichever you use for tunnels): free busy ports (above), open a **fresh** SSH tunnel, then browse the UIs.
+
+See also [setup.md](setup.md) (EC2 / private remote host), [orchestration/airflow/README.md](../orchestration/airflow/README.md).
+
 ### Elementary report (host CLI)
 
 Needs ClickHouse up and an `elementary` profile (copy from [`profiles.example.yml`](../branches/dlt_dbt_clickhouse/profiles.example.yml) into branch `profiles.yml` or `~/.dbt/profiles.yml`).

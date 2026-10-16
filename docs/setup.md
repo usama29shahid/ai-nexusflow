@@ -58,7 +58,7 @@ else
 fi
 ```
 
-**EC2 / private remote host:** keep `NEXUS_ENV=dev`, `NEXUS_EDGE_MODE=local`, set `NEXUS_PUBLISH_BIND=127.0.0.1`, set `NEXUS_REPO_ROOT` to the absolute clone path, use a new Vault on that machine, and open only SSH (port 22) on the security group. Public HTTPS / `prd` is backlog item **10** — [edge-proxy.md](edge-proxy.md), [environments.md](environments.md).
+**EC2 / private remote host:** keep `NEXUS_ENV=dev`, `NEXUS_EDGE_MODE=local`, set `NEXUS_PUBLISH_BIND=127.0.0.1`, set `NEXUS_REPO_ROOT` to the absolute clone path, use a new Vault on that machine, and open only SSH (port 22) on the security group. Reach MinIO / Airflow / OpenObserve / OpenMetadata from your laptop with **SSH local port forwards** (not the public IP) — copy-paste command in [operations.md](operations.md#ec2-laptop-ssh-tunnels-for-uis). Public HTTPS / `prd` is backlog item **10** — [edge-proxy.md](edge-proxy.md), [environments.md](environments.md).
 
 | Component | Purpose | Where it runs |
 | --- | --- | --- |
