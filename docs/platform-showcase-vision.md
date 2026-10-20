@@ -321,7 +321,7 @@ This vision belongs to backlog items **11–12** (Streamlit / RAG) and must not 
 ### Before this capability
 
 - Verify `dlt_dbt_clickhouse` end to end with observability lake writes (done — backlog **0**).
-- Readers, MinIO IAM, local Terraform, Iceberg parity, endpoints, semantic layer, docs auth, VPS — backlog **1–10**.
+- Readers, MinIO IAM, endpoints, semantic layer, Streamlit/RAG, docs auth, Terraform, VPS, Iceberg — backlog **1–12**; execution order in [backlog.md](backlog.md).
 - Airflow orchestration over enabled capabilities.
 - Establish stable dlt, dbt, run-ID, artifact, and observability contracts.
 

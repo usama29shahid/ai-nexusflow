@@ -23,15 +23,17 @@
 
 ## Ordered backlog
 
+Item **numbers** are stable IDs. The list below is **execution order** (next up = first line).
+
 ```text
-5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
-6.  Iceberg branch parity — products-style path + Airflow + readers + RBAC + TF
-7.  Remaining Route REST endpoints — categories, brands, …
+7.  Remaining Route REST endpoints — categories, brands, … (warehouse / ClickHouse only)
 8.  Facts, marts, semantic layer — RAG-ready metrics (dbt semantic layer)
-9.  Basic auth — Elementary + dlt/dbt docs HTML (Caddy) before public/VPS
-10. VPS + GitHub Actions — both branches E2E + service validation
 11. Supabase + Streamlit shell — auth/session + portfolio/control UI
-12. Later: RAG / multi-agent — consumes semantic layer + docs standards
+12. RAG / multi-agent — consumes semantic layer + docs standards
+9.  Basic auth — Elementary + dlt/dbt docs HTML (Caddy) before public/VPS
+5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
+10. VPS + GitHub Actions — warehouse + readers E2E; Hostinger CI/CD after local/EC2 prove-out
+6.  Iceberg branch parity — review Spark ELT design (keep or change), then products-style path + Airflow + readers + RBAC + TF
 ```
 
 Execute **one number at a time**. Do not start the next item until the current one is verified on its feature branch. Open a PR when asked; **merge to `main` only when the user explicitly confirms**.
@@ -41,13 +43,10 @@ Execute **one number at a time**. Do not start the next item until the current o
 ## Why this order
 
 1. **Readers (2 → 2.1 → 3) before MinIO IAM / Terraform** — telemetry and warehouse tables already exist from `products`. Items **2–3** are done (SigNoz, OpenObserve primary under test, OpenMetadata catalog). Grafana is deferred until both branches and LLM are running.
-2. **MinIO IAM (4) before Terraform (5)** — design roles, prove with scripts, then Terraform owns them (one owner per resource class).
-3. **Terraform before Iceberg ELT (6)** — reuse bucket/IAM/env patterns on the lakehouse path.
-4. **Endpoints (7) before facts/semantic (8)** — category/brand grains feed dimensional models.
-5. **Semantic layer before RAG (12)** — agents ground on declared metrics, not ad-hoc SQL.
-6. **Docs basic auth (9) before VPS (10)** — [edge-proxy.md](edge-proxy.md) requires a gate on `docs.` / `elementary.` before public DNS.
-7. **VPS + Actions after a fuller local platform** — avoid redeploying while endpoints/facts/auth still churn. Alternate (VPS right after Iceberg) only if Hostinger practice is the immediate goal.
-8. **Supabase + Streamlit (11) before RAG** — app auth + UI shell; not a second telemetry store.
+2. **MinIO IAM (4) before Terraform (5)** — design roles, prove with scripts, then Terraform owns them (one owner per resource class). Scripts remain the live path until item **5**.
+3. **Endpoints (7) → facts/semantic (8) → Streamlit (11) → RAG (12) next** — learn RAG on the warehouse path. Category/brand grains feed metrics; agents ground on the semantic layer behind an app shell. Warehouse only until Iceberg (6).
+4. **After RAG: docs auth (9) → Terraform (5) → VPS/Actions (10)** — gate `docs.` / `elementary.` before public DNS ([edge-proxy.md](edge-proxy.md)); prove the stack on local (and EC2 if desired), then make Hostinger deploy repeatable. Terraform still lands before Iceberg so the lakehouse path can reuse modules.
+5. **Iceberg last (6)** — re-read [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md) (current ELT may stay); then implement. Branch stays disabled until then.
 
 ---
 
@@ -151,7 +150,7 @@ Four IAM users + root for bootstrap. Usernames have no env suffix. Passwords are
 
 ### 5. Local Terraform
 
-Modules under `infrastructure/terraform/` against local endpoints. Hostinger DNS/edge and Actions stay in item **10**. HashiCorp Terraform only (BSL); no OpenTofu/Ansible.
+Runs **after RAG (12) and docs auth (9)**, and **before VPS/Actions (10) and Iceberg (6)**. Modules under `infrastructure/terraform/` against local endpoints. Hostinger DNS/edge and Actions stay in item **10**. HashiCorp Terraform only (BSL); no OpenTofu/Ansible. Until this item starts, bootstrap scripts remain the only Create path for buckets, MinIO IAM, and ClickHouse DBs/users — do not add `.tf` files from items 7–12.
 
 **Known issue — dual ownership (resolve when implementing item 5):**
 
@@ -173,11 +172,11 @@ Document the chosen approach in `infrastructure/terraform/README.md` when item *
 
 ### 6. Iceberg branch parity
 
-Enable `dlt_dbt_spark_iceberg`; products-style dlt → Iceberg → dbt-spark → Trino; Airflow; lake; readers; Polaris/MinIO RBAC; extend Terraform ([dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md)).
+**Last** in execution order. Start by re-reading [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md) (dlt → Iceberg Bronze, dbt-spark via Spark Thrift, Trino serve). Confirm that design or update the doc, then enable `dlt_dbt_spark_iceberg` and build products-style path + Airflow + lake + readers + Polaris/MinIO RBAC + extend Terraform. Mirror warehouse endpoints (item 7) here when the design is locked. Branch stays `enabled: false` until this item.
 
 ### 7. Remaining Route endpoints
 
-Copy warehouse `products` norms ([dlt-extraction.md](dlt-extraction.md)); one DAG per endpoint; mirror on Iceberg when warehouse path is proven.
+**Next up.** Copy warehouse `products` norms ([dlt-extraction.md](dlt-extraction.md)); one DAG per endpoint. **ClickHouse warehouse only** — do not mirror on Iceberg until item **6**.
 
 ### 8. Facts, marts, semantic layer
 
@@ -185,21 +184,21 @@ Add `fct_*` / marts per [dbt-modeling.md](dbt-modeling.md); dbt semantic models 
 
 ### 9. Basic auth for docs
 
-Caddy gate for Elementary HTML, dbt docs, dlt docs. Local `proxy` first; required before VPS public hostnames ([edge-proxy.md](edge-proxy.md)).
+Caddy gate for Elementary HTML, dbt docs, dlt docs. Local `proxy` first; required before VPS public hostnames ([edge-proxy.md](edge-proxy.md)). Runs after RAG (**12**), before Terraform (**5**) and public Hostinger DNS.
 
 ### 10. VPS + GitHub Actions
 
-Edge/env Terraform for VPS + Actions lint/test/build/apply/deploy. Validate both branches’ first Airflow jobs and all services.
+Edge/env Terraform for VPS + Actions lint/test/build/apply/deploy. After local (and optional EC2) prove-out of the warehouse + RAG stack: validate warehouse Airflow jobs and readers. Lakehouse / both-branch E2E waits for item **6**.
 
-**Ops (optional, not ordered here):** MinIO REST archive → R2 via `./scripts/backup-archive.sh` and manual Vault snapshots — [operations.md](operations.md#archive-backup-optional--minio--r2), [vault.md](vault.md). Does **not** reorder or block item **5**.
+**Ops (optional, not ordered here):** MinIO REST archive → R2 via `./scripts/backup-archive.sh` and manual Vault snapshots — [operations.md](operations.md#archive-backup-optional--minio--r2), [vault.md](vault.md). Independent of delivery order; does not replace Terraform (item **5**).
 
 ### 11. Supabase + Streamlit
 
-Supabase auth/session; Streamlit portfolio/control UI. Not pipeline telemetry storage.
+Supabase auth/session; Streamlit portfolio/control UI. Not pipeline telemetry storage. Before RAG (12).
 
-### 12. RAG (later)
+### 12. RAG
 
-Multi-agent + RAG over `docs/` + semantic layer. Do not start before items 8 and 11 are in place.
+Multi-agent + RAG over `docs/` + semantic layer. Do not start before items **8** and **11** are in place. After this item: docs auth (9), Terraform (5), VPS/Actions (10), then Iceberg (6).
 
 ---
 
