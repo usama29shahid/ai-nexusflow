@@ -2,7 +2,7 @@
 
 AI-NexusFlow is a **multi-branch data engineering execution platform**. The same ingestion requirement can be routed to the most appropriate implementation. It is one platform with two selectable backends, not a pile of unrelated pipelines.
 
-The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. Build order is [backlog.md](backlog.md) (RAG / Streamlit = items **11–12** after semantic layer and platform ops). Portfolio phase labels in [roadmap.md](roadmap.md) are not hard gates.
+The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. Build order is [backlog.md](backlog.md) (warehouse endpoints → semantic layer → Streamlit/RAG, then docs auth / Terraform / VPS, Iceberg last). Portfolio phase labels in [roadmap.md](roadmap.md) are not hard gates.
 
 End state:
 
@@ -230,9 +230,9 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 
 **Observability producers** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`. Warehouse `products` path already does this (backlog item **0**).
 
-**Readers, IAM, Terraform, VPS** — order in [backlog.md](backlog.md): SigNoz/OM product setup (**2–3**), MinIO IAM (**4**), local Terraform (**5**), Iceberg parity (**6**), …, VPS + GitHub Actions (**10**). Local Terraform configures API resources against Compose; Actions + VPS Terraform own edge/DNS/`prd` and deploy (`git pull` + `./scripts/start.sh`) — Actions is **not** a second ELT runner ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
+**Readers, IAM, Terraform, VPS, Iceberg** — follow [backlog.md](backlog.md) execution order. Readers (**2–3**) and MinIO IAM (**4**) are done. Next is warehouse endpoints → semantic layer → Streamlit/RAG (**7 → 8 → 11 → 12**), then docs auth (**9**), local Terraform (**5**), VPS + GitHub Actions (**10**), Iceberg parity (**6**, last). Local Terraform configures API resources against Compose; Actions + VPS Terraform own edge/DNS/`prd` and deploy (`git pull` + `./scripts/start.sh`) — Actions is **not** a second ELT runner ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
 
-**LLM / RAG / Streamlit** — backlog items **11–12**; agents select and generate against enabled capabilities.
+**LLM / RAG / Streamlit** — backlog items **11–12** (after semantic layer **8**); agents select and generate against enabled capabilities.
 
 ---
 

@@ -21,7 +21,7 @@ Map to numbers: [backlog.md](backlog.md) items 0–12.
 
 Same source problem, **two** independent backends — plus **orchestration** and a **tool-agnostic observability data lake**.
 
-**Do not start `dlt_dbt_spark_iceberg` until `dlt_dbt_clickhouse` is verified** (warehouse `products` path done). Iceberg ELT is backlog **item 6**, after stack verify, readers, MinIO IAM, and local Terraform (items 1–5).
+**Do not start `dlt_dbt_spark_iceberg` until `dlt_dbt_clickhouse` is verified** (warehouse `products` path done). Iceberg ELT is backlog **item 6** and is **last** in [backlog.md](backlog.md) execution order (after RAG and local Terraform).
 
 Python, uv, DLT, and dbt stay on the **host**. Docker Compose runs MinIO (always), branch stacks (`clickhouse`, `lakehouse`), **Airflow** (`airflow` profile), OTel Collector, and optional reader Compose profiles (`signoz`, `openmetadata`).
 
@@ -53,7 +53,7 @@ Airflow → one DAG per source + target + endpoint (nexus-elt job image via dock
 - DLT: dual destination — MinIO **archive** (`nexus-dlt-dbt-clickhouse-{env}`) + ClickHouse `bronze_{env}.raw_{source}__{endpoint}`
 - **Done (backlog item 0):** Route `products` full-refresh dlt → archive + Bronze + lake events/OTLP; Airflow `route_clickhouse_products`; silver / Gold SCD2 ([gold-products-cutover.md](gold-products-cutover.md), [dlt-extraction.md](dlt-extraction.md))
 - **Done (backlog item 1):** local stack health via `./scripts/start.sh verify`.
-- **Next (follow [backlog.md](backlog.md)):** item **5** local Terraform → Iceberg → … Catalog endpoints `categories` / `brands` are backlog item **7** (after Iceberg parity), not the immediate next step.
+- **Next (follow [backlog.md](backlog.md)):** item **7** remaining Route endpoints (warehouse only) → facts/semantic (**8**) → Streamlit (**11**) → RAG (**12**) → docs auth (**9**) → Terraform (**5**) → VPS (**10**) → Iceberg (**6**, last).
 - dbt target `dev`; models and tests in `branches/dlt_dbt_clickhouse`
 - Shared `NEXUS_RUN_ID` into dlt and dbt (`local-*` manual; Airflow DAG `run_id` when orchestrated)
 - Enhanced modeling (SCD variants, soft delete, hash keys): later modeling notes — [enhanced-modeling-strategy.md](enhanced-modeling-strategy.md); facts/marts/semantic layer = backlog item **8**
@@ -72,13 +72,13 @@ Airflow → lakehouse source DAGs when branch enabled
 
 Open lakehouse. Folder: `branches/dlt_dbt_spark_iceberg`. Standards: [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
-**Both capabilities “done” when:** warehouse and lakehouse products-style paths run under Airflow, the lake receives every run, and you can show data in ClickHouse and Iceberg/MinIO (Trino). That aligns with backlog through item **6**, not a gate that blocks items 1–5.
+**Both capabilities “done” when:** warehouse and lakehouse products-style paths run under Airflow, the lake receives every run, and you can show data in ClickHouse and Iceberg/MinIO (Trino). That is the portfolio end of item **6**; it does not block the warehouse → RAG path ahead of Iceberg.
 
 ---
 
 ## Platform ops — readers, IAM, Terraform, VPS (backlog 1–5, 9–10)
 
-Compose already exists for local services. Delivery order is [backlog.md](backlog.md):
+Compose already exists for local services. Remaining ops run after RAG per [backlog.md](backlog.md) (**9 → 5 → 10**; Iceberg **6** last):
 
 | Backlog | What |
 | --- | --- |
@@ -88,9 +88,9 @@ Compose already exists for local services. Delivery order is [backlog.md](backlo
 | **3** | OpenMetadata product setup / catalog (done) |
 | **3.1** | OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links (done) |
 | **4** | MinIO IAM — loader / reader / platform_reader / admin (done; `./scripts/minio-iam-bootstrap.sh`) |
-| **5** | Local HashiCorp Terraform (API resources; BSL; no OpenTofu/Ansible) |
-| **9** | Basic auth for Elementary + dlt/dbt docs HTML (Caddy) |
-| **10** | VPS + GitHub Actions — both branches E2E, edge/DNS/`prd` naming |
+| **9** | Basic auth for Elementary + dlt/dbt docs HTML (Caddy) — after RAG |
+| **5** | Local HashiCorp Terraform (API resources; BSL; no OpenTofu/Ansible) — after **9** |
+| **10** | VPS + GitHub Actions — warehouse + readers E2E, edge/DNS/`prd`; lakehouse E2E with item **6** |
 
 **CI/CD intent (when item 10 lands):** GitHub Actions is the primary path (lint, test, build, `terraform plan/apply`, VPS deploy). Local Terraform (item **5**) configures resources against Compose; it does **not** replace Actions deploy or `./scripts/start.sh`. Details: [ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md).
 
@@ -169,7 +169,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**See [backlog.md](backlog.md).** Warehouse `products` + Airflow + lake are done (item 0). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1), and MinIO IAM (4) are done. Next up: **5. Local Terraform** → Iceberg → …
+**See [backlog.md](backlog.md).** Warehouse `products` + Airflow + lake are done (item 0). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1), and MinIO IAM (4) are done. Next up: **7. Remaining Route endpoints** (warehouse) → **8** → **11** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt silver/gold ✓ → lake telemetry ✓
