@@ -41,7 +41,7 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 # Profiles that map to execution branches (config/branches.yaml)
 BRANCH_PROFILES="clickhouse lakehouse"
 # Profiles for platform tooling (not a data branch)
-PLATFORM_PROFILES="vault airflow cloudbeaver signoz openobserve openmetadata proxy"
+PLATFORM_PROFILES="vault airflow cloudbeaver cube signoz openobserve openmetadata proxy"
 
 usage() {
   cat <<'EOF'
@@ -55,6 +55,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   minio         Start MinIO + OTel Collector only (always-on shared infra)
   vault         Start + bootstrap HashiCorp Vault (platform; secrets)
   airflow       Start Airflow profile only (platform; on-demand)
+  cube          Start Cube Core semantic layer (http://127.0.0.1:4000)
   proxy         Start Caddy edge proxy (http://*.NEXUS_PUBLIC_HOST)
   signoz        Start SigNoz reader profile (trace UI)
   openobserve   Start OpenObserve reader (backlog 2.1; primary UI under test)
@@ -350,6 +351,11 @@ ensure_airflow() {
   docker compose --profile airflow up -d --build
 }
 
+ensure_cube() {
+  echo "Starting Cube Core (profile cube; ClickHouse reader)..."
+  docker compose --profile cube up -d cube
+}
+
 ensure_proxy() {
   echo "Starting Caddy edge proxy (profile proxy)..."
   echo "  Host: ${NEXUS_CADDY_SITE_SCHEME:-http://}*.${NEXUS_PUBLIC_HOST:-localhost.com}"
@@ -486,7 +492,7 @@ start_profiles() {
 
   echo "Branch / optional profiles: COMPOSE_PROFILES=${COMPOSE_PROFILES:-"(none — shared infra only)"}"
   echo "  Branch stacks:   clickhouse | lakehouse"
-  echo "  Platform (opt.): airflow | cloudbeaver | signoz | openobserve | openmetadata | vault via NEXUS_SECRETS_BACKEND"
+  echo "  Platform (opt.): airflow | cloudbeaver | cube | signoz | openobserve | openmetadata | vault via NEXUS_SECRETS_BACKEND"
   echo "  Always:          MinIO, otel-collector"
 
   # Always bring shared infra up first (explicit; not only via compose no-profile side effect).
@@ -573,6 +579,12 @@ case "${cmd}" in
     fi
     ensure_vault
     echo "Vault ready (platform). Secrets: ${NEXUS_SECRETS_FILE:-.nexusflow/secrets.env}"
+    ;;
+  cube)
+    load_env_and_secrets
+    ensure_minio
+    ensure_cube
+    echo "Cube playground: http://127.0.0.1:${CUBE_HTTP_PORT:-4000}"
     ;;
   airflow)
     load_env_and_secrets

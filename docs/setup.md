@@ -257,6 +257,7 @@ There is no application `docker compose build` for Python. Images are pulled. Th
 | Spark UI | `http://localhost:4040` |
 | Trino UI | `http://localhost:8080` |
 | CloudBeaver | `http://localhost:8978` |
+| Cube playground | `http://127.0.0.1:4000` (profile `cube`) |
 | Airflow UI | `http://127.0.0.1:8081` |
 
 From **another container**, use Compose DNS: `clickhouse:8123`, `minio:9000`, `polaris:8181`, `spark-thrift:10000`, `trino:8080` (MinIO listens on 9000 inside the network; the host maps API to 9002). CloudBeaver connects to ClickHouse at `clickhouse:8123` and Trino at `trino:8080`; do not use `localhost` for those connections inside CloudBeaver.

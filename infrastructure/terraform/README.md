@@ -25,6 +25,6 @@ VPS Terraform (backlog item **10**, invoked from GitHub Actions) **must** implem
 - HTTPS via `NEXUS_EDGE_MODE=vps` (loads `Caddyfile.vps`; rejects `http://` scheme; requires ACME email)
 - `NEXUS_PUBLISH_BIND=127.0.0.1` for backends (Compose **default**; **start.sh** and Caddy entrypoint reject `0.0.0.0` when mode=vps); Caddy 80/443 public; host firewall 22/80/443
 - Compose profile `proxy` on the VPS
-- Vault secrets on the machine; auth gate before public `docs.` / `elementary.` / home
+- Vault secrets on the machine; auth gate before public `docs.` / `elementary.` / `cube.` / home
 
 Until that contract is implemented, keep the edge **local-only**.

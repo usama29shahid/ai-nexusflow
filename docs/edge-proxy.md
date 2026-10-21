@@ -22,7 +22,7 @@ Public hostname for the capstone is intentional. That does **not** mean raw Comp
 | TLS | HTTP only (`Caddyfile.local`, `auto_https off`; scheme defaults to `http://`) | HTTPS + Let’s Encrypt (`Caddyfile.vps` selected by `NEXUS_EDGE_MODE=vps`; empty site scheme + `NEXUS_CADDY_ACME_EMAIL`) |
 | Ports exposed | `./scripts/start.sh` defaults backends to `0.0.0.0`; raw Compose defaults to `127.0.0.1` | Firewall **22, 80, 443**; backends **`NEXUS_PUBLISH_BIND=127.0.0.1`** (Compose default + start.sh); Caddy public; **start.sh + entrypoint reject** `0.0.0.0` on vps |
 | Secrets | **`vault`** (same as VPS; MinIO IAM passwords are Vault-only) | **`vault`**; generate Fernet/passwords **on the VPS** ([vault.md](vault.md)) |
-| Auth | App logins; static `docs.` / `elementary.` OK on loopback | **Auth gate required** before public DNS (home + Supabase/Google and/or Caddy in front of unauthenticated routes) |
+| Auth | App logins; static `docs.` / `elementary.` and Cube playground OK on loopback | **Auth gate required** before public DNS (home + Supabase/Google and/or Caddy in front of unauthenticated routes, including Cube) |
 | ClickHouse / Polaris on edge | Local showcase OK | Gate or **omit** from public Caddy |
 | `proxy-hosts.sh` | Required for `*.localhost.com` | **Do not** use as the name service |
 
@@ -55,7 +55,7 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 
 **Local:** App login is enough for Airflow / Vault / MinIO / CloudBeaver / etc. Strong passwords; never demo defaults on a shared host.
 
-**Before any public / VPS edge:** gate unauthenticated surfaces (`docs.`, `elementary.`, future home with Supabase + Google auth). Caddy is TLS + routing, not a substitute for app passwords.
+**Before any public / VPS edge:** gate unauthenticated surfaces (`docs.`, `elementary.`, Cube playground on `:4000`, future home with Supabase + Google auth). Cube dev mode has no app login, so it uses the same Caddy basic auth as the static docs pages (backlog **9**). Caddy is TLS + routing, not a substitute for app passwords.
 
 ## Publish table
 
@@ -70,6 +70,7 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 | `trino.` / `spark.` | UIs | As needed. Trino sets `http-server.process-forwarded=true` so Caddy’s `X-Forwarded-For` is accepted | As needed; Thrift never on edge |
 | `signoz.` / `openobserve.` / `openmetadata.` | Readers | App login | App login |
 | `docs.` / `elementary.` | Static | Loopback OK | **Auth gate required** |
+| `cube.` | Cube playground `:4000` | Loopback OK (dev mode, no app login) | **Same auth gate as docs** |
 
 ## Deployment contract (Terraform / GitHub Actions — backlog item 10)
 
@@ -85,7 +86,7 @@ When implementing `infrastructure/terraform/` and VPS deploy Actions, satisfy al
 6. **Include profile `proxy`** in the VPS Compose profile set used by deploy/`start.sh`.
 7. **Render Airflow/MinIO public URLs** for HTTPS, e.g. `AIRFLOW__API__BASE_URL=https://airflow.${NEXUS_PUBLIC_HOST}` (Compose also accepts `AIRFLOW__WEBSERVER__BASE_URL`), `ENABLE_PROXY_FIX=True`, `MINIO_BROWSER_REDIRECT_URL=https://minio.${NEXUS_PUBLIC_HOST}`.
 8. **Secrets:** `NEXUS_SECRETS_BACKEND=vault`; generate Fernet, JWT, and admin passwords on that machine — do not copy WSL `.env` ([vault.md](vault.md)).
-9. **Auth gate** for `docs.` / `elementary.` / home must exist before pointing public DNS at the box.
+9. **Auth gate** for `docs.` / `elementary.` / Cube playground / home must exist before pointing public DNS at the box.
 10. **Same execution path:** Actions deploy = `git pull` + `./scripts/start.sh` (or documented equivalent). Actions is not a second ELT runner.
 
 Canonical pointers: [ci-cd.md](ci-cd.md), [infrastructure/terraform/README.md](../infrastructure/terraform/README.md).
@@ -124,5 +125,5 @@ Do not copy WSL `.env` or `.nexusflow/` keys. Generate Vault and Airflow Fernet 
 1. ~~Airflow ELT-job-image on main~~.
 2. ~~Local Caddy + `proxy` profile + hosts script~~ (this slice).
 3. Keep local **production-shaped** (same scripts, names, images, edge routes) — [ci-cd.md](ci-cd.md).
-4. Auth gate (home + Supabase/Google and/or Caddy for static routes) — **before** public DNS.
+4. Auth gate (home + Supabase/Google and/or Caddy for static docs routes and the Cube playground) — **before** public DNS.
 5. Backlog item **10**: GitHub Actions + Terraform (`NEXUS_EDGE_MODE=vps`, DNS, HTTPS, Vault, `127.0.0.1` binds) — day-one deploy automated via the contract above.

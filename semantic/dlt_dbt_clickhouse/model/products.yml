@@ -1,0 +1,55 @@
+cubes:
+  - name: products
+    description: >
+      Current Route products (gold dim_product where is_active = 1).
+      Catalog snapshot, not an order fact. sold * price is units already
+      reported by the source times list price.
+    sql: >
+      SELECT
+        product_id,
+        title,
+        brand_name,
+        category_name,
+        quantity,
+        sold,
+        price
+      FROM dim_product
+      WHERE is_active = 1
+
+    measures:
+      - name: product_count
+        type: count
+        description: Number of current products.
+
+      - name: units_sold
+        sql: sold
+        type: sum
+        description: Sum of the Route sold counter on current products.
+
+      - name: avg_price
+        sql: price
+        type: avg
+        description: Average list price of current products.
+
+      - name: catalog_sales
+        sql: sold * price
+        type: sum
+        description: Sum of sold times list price on current products.
+
+    dimensions:
+      - name: product_id
+        sql: product_id
+        type: string
+        primary_key: true
+
+      - name: title
+        sql: title
+        type: string
+
+      - name: brand_name
+        sql: brand_name
+        type: string
+
+      - name: category_name
+        sql: category_name
+        type: string

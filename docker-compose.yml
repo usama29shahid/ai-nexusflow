@@ -2,6 +2,7 @@
 #   clickhouse  — ClickHouse (dlt_dbt_clickhouse)
 #   lakehouse   — Spark Thrift, Polaris, Trino (dlt_dbt_spark_iceberg)
 #   cloudbeaver — CloudBeaver web IDE
+#   cube        — Cube Core semantic layer (ClickHouse reader)
 #   airflow     — Airflow (on-demand orchestration)
 #   vault       — HashiCorp Vault + Agent (NEXUS_SECRETS_BACKEND=vault)
 #   proxy       — Caddy edge (*.NEXUS_PUBLIC_HOST); see docs/edge-proxy.md
@@ -468,6 +469,36 @@ services:
       timeout: 10s
       retries: 20
       start_period: 60s
+
+  # ============================================================
+  # Cube Core — semantic layer (profile: cube)
+  # Reads ClickHouse gold_{env}. Model: semantic/dlt_dbt_clickhouse/model
+  # ============================================================
+  cube:
+    image: cubejs/cube:v1.8.8
+    container_name: nexus-cube
+    restart: unless-stopped
+    profiles: [cube]
+
+    ports:
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${CUBE_HTTP_PORT:-4000}:4000"
+      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${CUBE_SQL_PORT:-15432}:15432"
+
+    environment:
+      CUBEJS_DEV_MODE: "true"
+      CUBEJS_DB_TYPE: clickhouse
+      CUBEJS_DB_HOST: clickhouse
+      CUBEJS_DB_PORT: "8123"
+      CUBEJS_DB_NAME: gold_${NEXUS_ENV:-dev}
+      CUBEJS_DB_USER: ${CLICKHOUSE_READER_USER:-nexus_reader}
+      CUBEJS_DB_PASS: ${CLICKHOUSE_READER_PASSWORD:-}
+      CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-local-cube-dev-secret}
+      CUBEJS_PG_SQL_PORT: "15432"
+      CUBEJS_SQL_USER: ${CUBEJS_SQL_USER:-cube}
+      CUBEJS_SQL_PASSWORD: ${CUBEJS_SQL_PASSWORD:-cube}
+
+    volumes:
+      - ./semantic/dlt_dbt_clickhouse/model:/cube/conf/model:ro
 
   # ============================================================
   # CloudBeaver — web database IDE (profile: cloudbeaver)

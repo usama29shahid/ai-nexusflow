@@ -88,7 +88,7 @@ Compose already exists for local services. Remaining ops run after RAG per [back
 | **3** | OpenMetadata product setup / catalog (done) |
 | **3.1** | OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links (done) |
 | **4** | MinIO IAM — loader / reader / platform_reader / admin (done; `./scripts/minio-iam-bootstrap.sh`) |
-| **9** | Basic auth for Elementary + dlt/dbt docs HTML (Caddy) — after RAG |
+| **9** | Basic auth for Elementary + dlt/dbt docs HTML and the Cube playground (Caddy) — after RAG |
 | **5** | Local HashiCorp Terraform (API resources; BSL; no OpenTofu/Ansible) — after **9** |
 | **10** | VPS + GitHub Actions — warehouse + readers E2E, edge/DNS/`prd`; lakehouse E2E with item **6** |
 
@@ -160,7 +160,7 @@ dbt-clickhouse  1.10.2
 - [ ] Iceberg / Polaris / dbt-spark / Trino products path — backlog **6**
 - [ ] Catalog follow-on dlt endpoints (`categories`, `brands`) — backlog **7**
 - [ ] Facts, marts, semantic layer — backlog **8**
-- [ ] Docs basic auth (Elementary / dbt / dlt HTML) — backlog **9**
+- [ ] Docs basic auth (Elementary / dbt / dlt HTML + Cube playground) — backlog **9**
 - [ ] VPS + GitHub Actions — backlog **10**
 - [ ] Supabase + Streamlit — backlog **11**
 - [ ] LLM / RAG multi-agent — backlog **12**

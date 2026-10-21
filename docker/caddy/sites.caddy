@@ -66,6 +66,12 @@
 	reverse_proxy openmetadata-server:8585
 }
 
+# Playground only. SQL API :15432 stays off the edge. Basic auth is backlog item 9.
+{$NEXUS_CADDY_SITE_SCHEME}cube.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	reverse_proxy cube:4000
+}
+
 # Static artifacts (regenerate on the host; do not run `dbt docs serve`)
 {$NEXUS_CADDY_SITE_SCHEME}docs.{$NEXUS_PUBLIC_HOST} {
 	import encode_headers
