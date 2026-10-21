@@ -66,6 +66,7 @@ SUBDOMAINS=(
   openmetadata
   docs
   elementary
+  cube
 )
 
 hosts_block() {
