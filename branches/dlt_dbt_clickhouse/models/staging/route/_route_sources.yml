@@ -68,3 +68,62 @@ sources:
           - name: _dlt_id
             data_tests:
               - not_null
+
+      - name: categories
+        identifier: raw_route__categories
+        description: Categories endpoint (append-only Bronze, full-refresh loads).
+        columns:
+          - name: _id
+            description: Route category id (natural key).
+            data_tests:
+              - not_null
+          - name: run_id
+            description: Nexus shared run id (NEXUS_RUN_ID).
+            data_tests:
+              - not_null
+          - name: _dlt_id
+            description: dlt row id.
+            data_tests:
+              - not_null
+          - name: _extracted_at
+            description: Extract timestamp stamped by categories.py.
+
+      - name: brands
+        identifier: raw_route__brands
+        description: Brands endpoint (append-only Bronze, full-refresh loads).
+        columns:
+          - name: _id
+            description: Route brand id (natural key).
+            data_tests:
+              - not_null
+          - name: run_id
+            description: Nexus shared run id (NEXUS_RUN_ID).
+            data_tests:
+              - not_null
+          - name: _dlt_id
+            description: dlt row id.
+            data_tests:
+              - not_null
+          - name: _extracted_at
+            description: Extract timestamp stamped by brands.py.
+
+      - name: subcategories
+        identifier: raw_route__subcategories
+        description: Subcategories endpoint (append-only Bronze, full-refresh loads).
+        columns:
+          - name: _id
+            description: Route subcategory id (natural key).
+            data_tests:
+              - not_null
+          - name: category
+            description: Parent category id (scalar FK, not a nested object).
+          - name: run_id
+            description: Nexus shared run id (NEXUS_RUN_ID).
+            data_tests:
+              - not_null
+          - name: _dlt_id
+            description: dlt row id.
+            data_tests:
+              - not_null
+          - name: _extracted_at
+            description: Extract timestamp stamped by subcategories.py.

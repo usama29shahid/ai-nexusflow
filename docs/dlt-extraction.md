@@ -12,7 +12,7 @@ This document is the org standard for RAG, agents, and every new endpoint script
 
 **Canonical implementation:** [`branches/dlt_dbt_clickhouse/dlt/route/products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py).
 
-That script is the first real warehouse dlt pipeline. The next endpoint (`categories`, `brands`, or another source under `dlt/{source}/`) **must** follow the same norms unless this document is updated first. Do not invent a parallel pattern.
+That script is the canonical warehouse dlt pipeline. `categories.py`, `brands.py`, and `subcategories.py` already follow it. The next endpoint (another Route resource, or another source under `dlt/{source}/`) **must** follow the same norms unless this document is updated first. Do not invent a parallel pattern.
 
 | Norm | Rule |
 | --- | --- |

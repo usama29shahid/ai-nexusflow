@@ -140,6 +140,9 @@ def test_build_airflow_workflow_postgres_backend():
         "includes"
     ]
     assert "route_clickhouse_products" in includes
+    assert "route_clickhouse_categories" in includes
+    assert "route_clickhouse_brands" in includes
+    assert "route_clickhouse_subcategories" in includes
 
 
 def test_rewrite_manifest_sources_for_om():
@@ -175,6 +178,18 @@ def test_required_tables_include_products():
     assert "raw_route__products" in mod.REQUIRED_TABLES
     assert "stg_route__products" in mod.REQUIRED_TABLES
     assert "dim_product" in mod.REQUIRED_TABLES
+    for name in (
+        "raw_route__categories",
+        "stg_route__categories",
+        "dim_category",
+        "raw_route__brands",
+        "stg_route__brands",
+        "dim_brand",
+        "raw_route__subcategories",
+        "stg_route__subcategories",
+        "dim_subcategory",
+    ):
+        assert name in mod.REQUIRED_TABLES
 
 
 def test_docker_host_path_rewrites_workspace_under_nexus_repo_root():

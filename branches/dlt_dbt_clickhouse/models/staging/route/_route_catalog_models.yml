@@ -1,0 +1,364 @@
+version: 2
+
+models:
+  - name: stg_route__categories
+    description: >
+      Silver current-grain table for Route /categories in silver_{env}.
+      FULL_LOAD: scope Bronze by --full-refresh, optional var run_id, or
+      lookback_days (default 15), then dedupe by pk_hash. Natural key is
+      category_id from Bronze _id. row_hash covers name, slug, and image.
+    config:
+      tags: ["staging", "route", "categories"]
+      meta:
+        load_type: full_load
+        layer: silver
+    columns:
+      - name: category_id
+        description: Natural key from Bronze _id.
+        data_tests:
+          - not_null
+          - unique
+      - name: pk_hash
+        description: Surrogate hash of category_id.
+        data_tests:
+          - not_null
+          - unique
+      - name: row_hash
+        description: Hash of name, slug, and image. Timestamps excluded.
+        data_tests:
+          - not_null
+      - name: ingestion_hash
+        description: Hash of category_id + run_id.
+        data_tests:
+          - not_null
+          - unique
+      - name: name
+        description: Category display name.
+        data_tests:
+          - not_null
+      - name: slug
+        description: Category URL slug.
+      - name: image
+        description: Category image URL.
+      - name: source_created_at
+        description: Route createdAt; not in row_hash.
+      - name: source_updated_at
+        description: Route updatedAt; not in row_hash.
+      - name: run_id
+        description: Shared Nexus run id stamped on the Bronze load.
+        data_tests:
+          - not_null
+      - name: _extracted_at
+        description: Platform extract time from categories.py.
+      - name: _inserted_at
+        description: Silver build time.
+        data_tests:
+          - not_null
+      - name: _dlt_id
+        description: dlt row id.
+        data_tests:
+          - not_null
+          - unique
+      - name: _source
+        description: Ingestion source system code.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["route"]
+      - name: _endpoint
+        description: REST endpoint name for this pipeline.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["categories"]
+
+  - name: stg_route__brands
+    description: >
+      Silver current-grain table for Route /brands. Same FULL_LOAD contract as
+      categories. Natural key brand_id from Bronze _id. row_hash covers name,
+      slug, and image.
+    config:
+      tags: ["staging", "route", "brands"]
+      meta:
+        load_type: full_load
+        layer: silver
+    columns:
+      - name: brand_id
+        description: Natural key from Bronze _id.
+        data_tests:
+          - not_null
+          - unique
+      - name: pk_hash
+        description: Surrogate hash of brand_id.
+        data_tests:
+          - not_null
+          - unique
+      - name: row_hash
+        description: Hash of name, slug, and image. Timestamps excluded.
+        data_tests:
+          - not_null
+      - name: ingestion_hash
+        description: Hash of brand_id + run_id.
+        data_tests:
+          - not_null
+          - unique
+      - name: name
+        description: Brand display name.
+        data_tests:
+          - not_null
+      - name: slug
+        description: Brand URL slug.
+      - name: image
+        description: Brand image URL.
+      - name: source_created_at
+        description: Route createdAt; not in row_hash.
+      - name: source_updated_at
+        description: Route updatedAt; not in row_hash.
+      - name: run_id
+        description: Shared Nexus run id stamped on the Bronze load.
+        data_tests:
+          - not_null
+      - name: _extracted_at
+        description: Platform extract time from brands.py.
+      - name: _inserted_at
+        description: Silver build time.
+        data_tests:
+          - not_null
+      - name: _dlt_id
+        description: dlt row id.
+        data_tests:
+          - not_null
+          - unique
+      - name: _source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["route"]
+      - name: _endpoint
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["brands"]
+
+  - name: stg_route__subcategories
+    description: >
+      Silver current-grain table for Route /subcategories. Natural key
+      subcategory_id from Bronze _id. Parent category is the scalar Bronze
+      column category, renamed category_id. No image column on this endpoint.
+      row_hash covers name, slug, and category_id.
+    config:
+      tags: ["staging", "route", "subcategories"]
+      meta:
+        load_type: full_load
+        layer: silver
+    columns:
+      - name: subcategory_id
+        description: Natural key from Bronze _id.
+        data_tests:
+          - not_null
+          - unique
+      - name: pk_hash
+        description: Surrogate hash of subcategory_id.
+        data_tests:
+          - not_null
+          - unique
+      - name: row_hash
+        description: Hash of name, slug, and category_id. Timestamps excluded.
+        data_tests:
+          - not_null
+      - name: ingestion_hash
+        description: Hash of subcategory_id + run_id.
+        data_tests:
+          - not_null
+          - unique
+      - name: name
+        description: Subcategory display name.
+        data_tests:
+          - not_null
+      - name: slug
+        description: Subcategory URL slug.
+      - name: category_id
+        description: Parent category id from Bronze category.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("stg_route__categories")
+                field: category_id
+      - name: source_created_at
+        description: Route createdAt; not in row_hash.
+      - name: source_updated_at
+        description: Route updatedAt; not in row_hash.
+      - name: run_id
+        description: Shared Nexus run id stamped on the Bronze load.
+        data_tests:
+          - not_null
+      - name: _extracted_at
+        description: Platform extract time from subcategories.py.
+      - name: _inserted_at
+        description: Silver build time.
+        data_tests:
+          - not_null
+      - name: _dlt_id
+        description: dlt row id.
+        data_tests:
+          - not_null
+          - unique
+      - name: _source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["route"]
+      - name: _endpoint
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["subcategories"]
+
+unit_tests:
+  - name: test_stg_route__categories_id_map
+    description: >
+      Maps Bronze _id to category_id and keeps name. row_hash is the
+      dbt_utils hash of name, slug, and image so dropping image from the
+      hash changes this value.
+    model: stg_route__categories
+    overrides:
+      vars:
+        lookback_days: 36500
+        run_id: r1
+    given:
+      - input: source("route_raw", "categories")
+        rows:
+          - _id: "c1"
+            name: "Music"
+            slug: "music"
+            image: "https://img/c.jpg"
+            created_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+            _source: "route"
+            _endpoint: "categories"
+            _nexus_env: "dev"
+            _dlt_load_id: "l1"
+            _dlt_id: "d1"
+    expect:
+      rows:
+        - category_id: "c1"
+          name: "Music"
+          slug: "music"
+          run_id: "r1"
+          row_hash: "edc08d6c72f7b003bea3a610e444b81b"
+
+  - name: test_stg_route__brands_id_map
+    description: >
+      Maps Bronze _id to brand_id and keeps name. row_hash is the
+      dbt_utils hash of name, slug, and image.
+    model: stg_route__brands
+    overrides:
+      vars:
+        lookback_days: 36500
+        run_id: r1
+    given:
+      - input: source("route_raw", "brands")
+        rows:
+          - _id: "b1"
+            name: "Canon"
+            slug: "canon"
+            image: "https://img/b.png"
+            created_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+            _source: "route"
+            _endpoint: "brands"
+            _nexus_env: "dev"
+            _dlt_load_id: "l1"
+            _dlt_id: "d1"
+    expect:
+      rows:
+        - brand_id: "b1"
+          name: "Canon"
+          slug: "canon"
+          run_id: "r1"
+          row_hash: "d2821a4a0d892a8fc51011b06459d35c"
+
+  - name: test_stg_route__subcategories_parent_map
+    description: >
+      Maps Bronze _id to subcategory_id and scalar category to category_id.
+      row_hash is the dbt_utils hash of name, slug, and category_id.
+    model: stg_route__subcategories
+    overrides:
+      vars:
+        lookback_days: 36500
+        run_id: r1
+    given:
+      - input: source("route_raw", "subcategories")
+        rows:
+          - _id: "s1"
+            name: "Computer Accessories"
+            slug: "computer-accessories"
+            category: "c1"
+            created_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+            _source: "route"
+            _endpoint: "subcategories"
+            _nexus_env: "dev"
+            _dlt_load_id: "l1"
+            _dlt_id: "d1"
+    expect:
+      rows:
+        - subcategory_id: "s1"
+          name: "Computer Accessories"
+          category_id: "c1"
+          run_id: "r1"
+          row_hash: "0ad90ce3298a37748b0e3949fcab7958"
+
+  - name: test_stg_route__subcategories_dedupe_latest
+    description: >
+      Two Bronze rows for one subcategory in the lookback window collapse to
+      the latest extract. The kept row_hash includes the new parent category.
+    model: stg_route__subcategories
+    overrides:
+      vars:
+        lookback_days: 36500
+    given:
+      - input: source("route_raw", "subcategories")
+        rows:
+          - _id: "s1"
+            name: "Computer Accessories"
+            slug: "computer-accessories"
+            category: "c1"
+            created_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+            _source: "route"
+            _endpoint: "subcategories"
+            _nexus_env: "dev"
+            _dlt_load_id: "l1"
+            _dlt_id: "d9"
+          - _id: "s1"
+            name: "Computer Accessories v2"
+            slug: "computer-accessories"
+            category: "c2"
+            created_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-08T00:00:00.000Z"
+            run_id: "r_new"
+            _extracted_at: "2026-09-07T00:00:00.000Z"
+            _source: "route"
+            _endpoint: "subcategories"
+            _nexus_env: "dev"
+            _dlt_load_id: "l2"
+            _dlt_id: "d1"
+    expect:
+      rows:
+        - subcategory_id: "s1"
+          name: "Computer Accessories v2"
+          slug: "computer-accessories"
+          category_id: "c2"
+          run_id: "r_new"
+          _dlt_id: "d1"
+          row_hash: "2b3961c9b68acbed02abb86021f6253d"

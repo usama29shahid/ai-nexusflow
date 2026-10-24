@@ -2,7 +2,7 @@
 
 **Status: implemented for Route products (dev verified).**  
 **Purpose:** Implementation record and historical lock. Normative rules live in the docs below — do not duplicate full tables here.  
-**Next:** categories/brands; optional DROP of legacy `warehouse.raw_route_*` tables. Gold products SCD2: see [gold-products-cutover.md](gold-products-cutover.md).
+**Next:** optional DROP of legacy `warehouse.raw_route_*` tables. Catalog endpoints `categories` / `brands` / `subcategories` are implemented (backlog 7). Gold products SCD2: see [gold-products-cutover.md](gold-products-cutover.md).
 
 | Topic | Canonical doc |
 | --- | --- |
@@ -41,7 +41,7 @@ Reason RBAC started with the rename: Bronze physical names and CH connection con
 
 - MinIO IAM policies — implemented ([rbac.md](rbac.md); `./scripts/minio-iam-bootstrap.sh`)
 - OM / SigNoz / Elementary **UI** product setup — backlog **2–3** / **9**
-- Catalog endpoints `categories` / `brands` — backlog **7** (Airflow `route_clickhouse_products` is done)
+- Catalog endpoints `categories` / `brands` / `subcategories` — implemented (backlog **7**); Airflow `route_clickhouse_{products,categories,brands,subcategories}`
 - Local Terraform modules — backlog **5**; VPS + GitHub Actions — backlog **10** (additive names/RBAC; [environments.md](environments.md))
 - `dlt_smoke` rename to new bronze pattern
 - Silver incremental / delta (FULL_LOAD only today)

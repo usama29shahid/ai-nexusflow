@@ -63,8 +63,9 @@ That forces empty models and forbids a mart from reading a dimension directly.
 
 ```text
 stg_route__products   ──► int_product_keys ──► dim_product
-stg_route__categories ──► int_category_keys ──► dim_category
-stg_route__brands     ──► int_brand_keys ──► dim_brand
+stg_route__categories ──► dim_category
+stg_route__brands     ──► dim_brand
+stg_route__subcategories ──► dim_subcategory
 dim_product ──► fct_product_snapshot
 dim_product ──► mart_product_performance
 int_product_keys ──► int_catalog_enrich ──► mart_product_performance
@@ -73,6 +74,8 @@ int_product_keys ──► int_catalog_enrich ──► mart_product_performance
 ```
 
 A domain mart may depend on a conformed dim, a fact, an event, or another `int_*`. An event does not have to become a periodic fact first.
+
+Catalog dims are implemented as `stg_route__categories` → `dim_category`, `stg_route__brands` → `dim_brand`, and `stg_route__subcategories` → `dim_subcategory` (no `int_*` key models). `int_product_keys` is still not built; `dim_product` reads `stg_route__products` directly.
 
 **Do not skip ownership:** API JSON does not land in a mart. Domain fields do not get bolted onto a **shared** dim unless the requirement **names a separate dim**.
 
@@ -97,6 +100,9 @@ One staging model per Bronze resource where practical. Live in `models/staging/{
 | `raw_route__products` | `stg_route__products` |
 | `raw_route__products__images` | `stg_route__products__images` |
 | `raw_route__products__subcategory` | `stg_route__products__subcategory` |
+| `raw_route__categories` | `stg_route__categories` |
+| `raw_route__brands` | `stg_route__brands` |
+| `raw_route__subcategories` | `stg_route__subcategories` |
 
 dbt folder stays `models/staging/route/`.
 

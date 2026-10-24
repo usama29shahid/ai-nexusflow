@@ -1,0 +1,61 @@
+"""Route categories → ClickHouse: one DAG per source + target + endpoint."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from airflow.providers.standard.operators.bash import BashOperator
+from airflow.sdk import DAG
+from airflow.utils.trigger_rule import TriggerRule
+
+from nexus_elt_exec import elt_bash_command, elt_dbt_layer
+
+with DAG(
+    dag_id="route_clickhouse_categories",
+    description="Route /categories dlt Bronze + silver + gold + observability",
+    start_date=datetime(2024, 1, 1),
+    schedule=None,
+    catchup=False,
+    tags=["route", "clickhouse", "categories"],
+) as dag:
+    assert_branch_enabled = BashOperator(
+        task_id="assert_branch_enabled",
+        bash_command=elt_bash_command(
+            "./scripts/assert-branch-enabled.sh dlt_dbt_clickhouse"
+        ),
+    )
+    bronze = BashOperator(
+        task_id="bronze",
+        bash_command=elt_bash_command(
+            "uv run python branches/dlt_dbt_clickhouse/dlt/route/categories.py "
+            "--run-id '{{ run_id }}'"
+        ),
+    )
+    silver = BashOperator(
+        task_id="silver",
+        bash_command=elt_dbt_layer("tag:categories,tag:staging"),
+    )
+    gold = BashOperator(
+        task_id="gold",
+        bash_command=elt_dbt_layer("tag:categories,tag:gold"),
+    )
+    observability = BashOperator(
+        task_id="observability",
+        bash_command=elt_bash_command("./scripts/observability-publish-run.sh"),
+    )
+    observability_failed = BashOperator(
+        task_id="observability_failed",
+        trigger_rule=TriggerRule.ONE_FAILED,
+        bash_command=elt_bash_command(
+            "./scripts/observability-publish-run.sh failed"
+        ),
+    )
+
+    assert_branch_enabled >> bronze >> silver >> gold >> observability
+    [
+        assert_branch_enabled,
+        bronze,
+        silver,
+        gold,
+        observability,
+    ] >> observability_failed

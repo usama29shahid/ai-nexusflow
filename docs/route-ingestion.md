@@ -11,7 +11,7 @@ It defines:
 
 Route API is a **public educational/demo** ecommerce API. Treat its data as **synthetic/demo**, not production business data.
 
-ClickHouse Route **`products`** dlt (archive + Bronze + observability) is **implemented** — see [dlt-extraction.md](dlt-extraction.md) Reference pipeline. dbt staging/Gold, Airflow source DAG, and other catalog endpoints (`categories`, `brands`) are not yet.
+ClickHouse Route **`products`**, **`categories`**, **`brands`**, and **`subcategories`** (archive + Bronze + silver + Gold dim + Airflow) are **implemented** — see [dlt-extraction.md](dlt-extraction.md) Reference pipeline. Authenticated entities are not yet.
 
 ## Related standards
 
@@ -65,9 +65,9 @@ Script name, dlt resource name, Bronze table name, archive `{endpoint}` segment,
 | Resource | Script | Bronze table | Archive segment | Notes |
 |---|---|---|---|---|
 | `products` | [`products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py) | `products` | `products` | **Implemented** (ClickHouse branch) — reference pipeline |
-| `categories` | `categories.py` | `categories` | `categories` | Public catalog — must mirror products norms |
-| `brands` | `brands.py` | `brands` | `brands` | Public catalog — must mirror products norms |
-| `subcategories` | `subcategories.py` | `subcategories` | `subcategories` | Optional catalog follow-on |
+| `categories` | [`categories.py`](../branches/dlt_dbt_clickhouse/dlt/route/categories.py) | `categories` | `categories` | **Implemented** — full-refresh; silver `stg_route__categories`, gold `dim_category` |
+| `brands` | [`brands.py`](../branches/dlt_dbt_clickhouse/dlt/route/brands.py) | `brands` | `brands` | **Implemented** — same shape as categories; gold `dim_brand` |
+| `subcategories` | [`subcategories.py`](../branches/dlt_dbt_clickhouse/dlt/route/subcategories.py) | `subcategories` | `subcategories` | **Implemented** — scalar `category` → `category_id`; gold `dim_subcategory` |
 | `orders` / cart / wishlist / addresses | TBD | TBD | TBD | JWT — after catalog verified |
 
 Mandatory patterns for every new Route (and other source) endpoint script: [dlt-extraction.md](dlt-extraction.md) **Reference pipeline**.
@@ -76,7 +76,7 @@ Mandatory patterns for every new Route (and other source) endpoint script: [dlt-
 
 **First verified dlt slice:** Route `products` → MinIO archive + ClickHouse Bronze + observability lake/OTLP.
 
-**Next catalog endpoints:** `categories`, `brands` — copy `products.py` norms (do not invent a second style).
+**Catalog endpoints implemented:** `products`, `categories`, `brands`, `subcategories` — each copies `products.py` norms (full-refresh, not incremental).
 
 **Follow-on:** authenticated entities (cart, wishlist, orders, addresses, customer profile) once catalog → Bronze → staging → basic Gold is solid.
 
@@ -133,7 +133,7 @@ Do not start lakehouse Route implementation until ClickHouse Route is verified (
 
 Catalog slice (when modeled):
 
-- `dim_product`, `dim_category`, `dim_brand`
+- `dim_product`, `dim_category`, `dim_brand`, `dim_subcategory` (catalog dims implemented; facts/marts still later)
 - Optional product-related facts/marts as requirements demand
 
 Later authenticated / transactional modeling examples:
