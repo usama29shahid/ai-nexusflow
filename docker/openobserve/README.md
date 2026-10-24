@@ -21,6 +21,9 @@ Single-binary OSS image (`openobserve/openobserve:v1.0.4`). **Reader only** — 
 ./scripts/start.sh openobserve
 ./scripts/openobserve-bootstrap.sh
 uv run python branches/dlt_dbt_clickhouse/dlt/route/products.py
+uv run python branches/dlt_dbt_clickhouse/dlt/route/categories.py
+uv run python branches/dlt_dbt_clickhouse/dlt/route/brands.py
+uv run python branches/dlt_dbt_clickhouse/dlt/route/subcategories.py
 # Traces: service_name = nexusflow.dlt ; attribute nexus.run_id
 ./scripts/observability-ingest.sh openobserve   # backfill last 24h
 ```
@@ -38,6 +41,9 @@ Collector OTLP forward uses the same password via `OPENOBSERVE_OTLP_BASIC_AUTH` 
 | File | Title |
 | --- | --- |
 | `route-products.json` | Nexus Route products |
+| `route-categories.json` | Nexus Route categories |
+| `route-brands.json` | Nexus Route brands |
+| `route-subcategories.json` | Nexus Route subcategories |
 | `opentelemetry-collector.json` | OpenTelemetry Collector |
 | `uptime-monitoring.json` | Uptime Monitoring |
 | `ingestion.json` | Ingestion |

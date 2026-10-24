@@ -158,7 +158,7 @@ dbt-clickhouse  1.10.2
 - [x] MinIO IAM — backlog **4**
 - [ ] Local Terraform — backlog **5**
 - [ ] Iceberg / Polaris / dbt-spark / Trino products path — backlog **6**
-- [ ] Catalog follow-on dlt endpoints (`categories`, `brands`) — backlog **7**
+- [x] Catalog follow-on dlt endpoints (`categories`, `brands`, `subcategories`) — backlog **7**
 - [ ] Facts, marts, semantic layer — backlog **8**
 - [ ] Docs basic auth (Elementary / dbt / dlt HTML + Cube playground) — backlog **9**
 - [ ] VPS + GitHub Actions — backlog **10**
@@ -169,7 +169,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**See [backlog.md](backlog.md).** Warehouse `products` + Airflow + lake are done (item 0). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1), and MinIO IAM (4) are done. Next up: **7. Remaining Route endpoints** (warehouse) → **8** → **11** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
+**See [backlog.md](backlog.md).** Warehouse `products` + catalog endpoints (`categories`, `brands`, `subcategories`) + Airflow + lake are done (items 0 and 7). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1), and MinIO IAM (4) are done. Next up: **8. Facts, marts, semantic layer** → **11** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt silver/gold ✓ → lake telemetry ✓

@@ -1,7 +1,9 @@
 # Gold products SCD2 (decision / implementation log)
 
 **Status: implemented (code + docs; verify with dbt run/test against ClickHouse).**  
-**Purpose:** Implementation record for first Gold slice. Normative rules live in [dbt-modeling.md](dbt-modeling.md).
+**Purpose:** Implementation record for Gold SCD2. Normative rules live in [dbt-modeling.md](dbt-modeling.md).
+
+Catalog dims `dim_category`, `dim_brand`, and `dim_subcategory` use the same Pattern A as `dim_product` (full-refresh silver in, SCD2 gold). `dim_product` still embeds brand and category attributes; it does not foreign-key to those dims.
 
 | Topic | Canonical doc |
 | --- | --- |
@@ -25,10 +27,11 @@
 | 2026-09-10 | DRY: single `scd_bound_opens` projection for reappear+change; YAML anchors for shared unit-test fixtures. |
 | 2026-09-10 | `scd2_bound_at()` = compile-time `run_started_at` literal (no `now64` CTE drift); shared across Gold models in one dbt run. |
 | 2026-09-12 | Bridge incremental truly-new stays on `_extracted_at` (first-ever, like dim `source_created_at`). Pattern A delete on a replace closes at the product's silver extract so URL / subcategory-id swap has no duration overlap. |
+| 2026-10-22 | Add `dim_category`, `dim_brand`, `dim_subcategory` SCD2 from full-refresh catalog silver. `dim_product` embeds stay. |
 
 ## Locked decisions
 
-- All three Gold tables are **SCD2**; change detection uses silver/Gold **`row_hash`** (same column name — no `scd_hash` alias).
+- Gold tables are **SCD2**: `dim_product`, `brg_product_image`, `brg_product_subcategory`, `dim_category`, `dim_brand`, and `dim_subcategory`. Change detection uses silver/Gold **`row_hash`** (same column name — no `scd_hash` alias).
 - **Change seam:** one `scd_bound_at` per dbt invocation (`scd2_bound_at()` ← `run_started_at` literal); on attribute change, prior `valid_to` = new `valid_from` = that bound (general rule for all Gold SCD2).
 - **Bridge membership replace:** old `valid_to` = new `valid_from` = that product's silver `_extracted_at`. Full wipe (no sibling silver) still expires at `scd_bound_at`.
 - Delete = **Pattern A expire** active row (`is_active=0`, `is_deleted=1` as **Int8**); no new tombstone version row. Dim and bridge full wipe: `valid_to=scd_bound_at`. Bridge replace (sibling silver still on that product): `valid_to` = product silver `_extracted_at` (see membership-replace bullet).

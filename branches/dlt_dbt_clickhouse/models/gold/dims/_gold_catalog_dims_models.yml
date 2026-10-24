@@ -1,0 +1,601 @@
+version: 2
+
+models:
+  - name: dim_category
+    description: >
+      SCD2 Pattern A dimension for Route categories. First-ever valid_from uses
+      source_created_at; change and reappear open at scd_bound_at. Current grain
+      comes from stg_route__categories.
+    config:
+      tags: ["gold", "scd2", "categories", "elementary", "dims"]
+      meta:
+        elementary:
+          timestamp_column: inserted_at
+    columns:
+      - name: dim_category_sk
+        description: Version surrogate key.
+        data_tests:
+          - not_null
+          - unique
+      - name: category_id
+        description: Natural category key.
+        data_tests:
+          - not_null
+          - unique:
+              config:
+                where: "is_active = 1"
+      - name: pk_hash
+        description: Hash of category_id.
+        data_tests:
+          - not_null
+      - name: row_hash
+        description: Attribute hash from silver (name, slug, image).
+        data_tests:
+          - not_null
+      - name: name
+        description: Category name on this version.
+      - name: is_active
+        description: 1 when this version is current.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: is_deleted
+        description: 1 when Pattern A expired the key because it left the latest silver snapshot.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+
+  - name: dim_brand
+    description: >
+      SCD2 Pattern A dimension for Route brands. Same clock rules as dim_category.
+      Current grain comes from stg_route__brands.
+    config:
+      tags: ["gold", "scd2", "brands", "elementary", "dims"]
+      meta:
+        elementary:
+          timestamp_column: inserted_at
+    columns:
+      - name: dim_brand_sk
+        description: Version surrogate key.
+        data_tests:
+          - not_null
+          - unique
+      - name: brand_id
+        description: Natural brand key.
+        data_tests:
+          - not_null
+          - unique:
+              config:
+                where: "is_active = 1"
+      - name: pk_hash
+        description: Hash of brand_id.
+        data_tests:
+          - not_null
+      - name: row_hash
+        description: Attribute hash from silver (name, slug, image).
+        data_tests:
+          - not_null
+      - name: name
+        description: Brand name on this version.
+      - name: is_active
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: is_deleted
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+
+  - name: dim_subcategory
+    description: >
+      SCD2 Pattern A dimension for Route subcategories. category_id is the
+      parent category natural key. Same clock rules as dim_category.
+    config:
+      tags: ["gold", "scd2", "subcategories", "elementary", "dims"]
+      meta:
+        elementary:
+          timestamp_column: inserted_at
+    columns:
+      - name: dim_subcategory_sk
+        description: Version surrogate key.
+        data_tests:
+          - not_null
+          - unique
+      - name: subcategory_id
+        description: Natural subcategory key.
+        data_tests:
+          - not_null
+          - unique:
+              config:
+                where: "is_active = 1"
+      - name: category_id
+        description: Parent category natural key.
+        data_tests:
+          - not_null
+      - name: pk_hash
+        description: Hash of subcategory_id.
+        data_tests:
+          - not_null
+      - name: row_hash
+        description: Attribute hash from silver (name, slug, category_id).
+        data_tests:
+          - not_null
+      - name: name
+        description: Subcategory name on this version.
+      - name: is_active
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: is_deleted
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+
+unit_tests:
+  - name: test_dim_category_initial_load_current
+    description: First load opens one active category version from silver.
+    model: dim_category
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref("stg_route__categories")
+        rows:
+          - &cat_stg
+            category_id: "c1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Music"
+            slug: "music"
+            image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+    expect:
+      rows:
+        - category_id: "c1"
+          pk_hash: "pk1"
+          row_hash: "rh1"
+          name: "Music"
+          is_active: 1
+          is_deleted: 0
+          run_id: "r1"
+
+  - name: test_dim_category_reappear_after_delete
+    description: Reappear opens at scd_bound_at, not source_created_at.
+    model: dim_category
+    overrides:
+      macros: &cat_scd_incr
+        is_incremental: true
+        scd2_bound_at: "cast('2026-09-12 12:00:00.000' as DateTime64(3, 'UTC'))"
+    given:
+      - input: this
+        rows:
+          - &cat_gold_deleted
+            dim_category_sk: "sk_old"
+            category_id: "c1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Music"
+            slug: "music"
+            image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "2026-09-11T08:00:00.000Z"
+            is_active: 0
+            is_deleted: 1
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-11T08:00:00.000Z"
+      - input: ref("stg_route__categories")
+        rows:
+          - <<: *cat_stg
+            run_id: "r_reappear"
+            _extracted_at: "2026-09-12T11:00:00.000Z"
+    expect:
+      rows:
+        - category_id: "c1"
+          row_hash: "rh1"
+          run_id: "r_reappear"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_category_incremental_truly_new
+    description: Brand-new key opens at source_created_at.
+    model: dim_category
+    overrides:
+      macros: *cat_scd_incr
+    given:
+      - input: this
+        rows: []
+      - input: ref("stg_route__categories")
+        rows:
+          - <<: *cat_stg
+            category_id: "c2"
+            pk_hash: "pk2"
+            row_hash: "rh2"
+            name: "Books"
+            slug: "books"
+            source_created_at: "2026-08-01T00:00:00.000Z"
+            run_id: "r_new"
+    expect:
+      rows:
+        - category_id: "c2"
+          name: "Books"
+          run_id: "r_new"
+          valid_from: "2026-08-01T00:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_category_incremental_pattern_a_delete
+    description: Active key missing from silver expires in place.
+    model: dim_category
+    overrides:
+      macros: *cat_scd_incr
+    given:
+      - input: this
+        rows:
+          - &cat_gold_active
+            <<: *cat_gold_deleted
+            dim_category_sk: "sk_active"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            updated_at: "2026-09-01T00:00:00.000Z"
+      - input: ref("stg_route__categories")
+        rows: []
+    expect:
+      rows:
+        - category_id: "c1"
+          dim_category_sk: "sk_active"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 1
+
+  - name: test_dim_category_incremental_attribute_change
+    description: Attribute change expires the prior version and opens a new one at scd_bound_at.
+    model: dim_category
+    overrides:
+      macros: *cat_scd_incr
+    given:
+      - input: this
+        rows:
+          - *cat_gold_active
+      - input: ref("stg_route__categories")
+        rows:
+          - <<: *cat_stg
+            row_hash: "rh2"
+            name: "Music v2"
+            run_id: "r_change"
+    expect:
+      rows:
+        - category_id: "c1"
+          row_hash: "rh1"
+          name: "Music"
+          run_id: "r_old"
+          valid_from: "2026-09-01T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 0
+        - category_id: "c1"
+          row_hash: "rh2"
+          name: "Music v2"
+          run_id: "r_change"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          valid_to: "9999-01-01T23:59:59.999Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_brand_initial_load_current
+    description: First load opens one active brand version from silver.
+    model: dim_brand
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref("stg_route__brands")
+        rows:
+          - &brand_stg
+            brand_id: "b1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Canon"
+            slug: "canon"
+            image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+    expect:
+      rows:
+        - brand_id: "b1"
+          name: "Canon"
+          is_active: 1
+          is_deleted: 0
+          run_id: "r1"
+
+  - name: test_dim_brand_incremental_pattern_a_delete
+    description: Active brand missing from silver expires in place.
+    model: dim_brand
+    overrides:
+      macros: &brand_scd_incr
+        is_incremental: true
+        scd2_bound_at: "cast('2026-09-12 12:00:00.000' as DateTime64(3, 'UTC'))"
+    given:
+      - input: this
+        rows:
+          - dim_brand_sk: "sk_active"
+            brand_id: "b1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Canon"
+            slug: "canon"
+            image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-01T00:00:00.000Z"
+      - input: ref("stg_route__brands")
+        rows: []
+    expect:
+      rows:
+        - brand_id: "b1"
+          dim_brand_sk: "sk_active"
+          is_active: 0
+          is_deleted: 1
+          valid_to: "2026-09-12T12:00:00.000Z"
+
+  - name: test_dim_brand_reappear_after_delete
+    description: Brand reappear opens at scd_bound_at.
+    model: dim_brand
+    overrides:
+      macros: *brand_scd_incr
+    given:
+      - input: this
+        rows:
+          - dim_brand_sk: "sk_old"
+            brand_id: "b1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Canon"
+            slug: "canon"
+            image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "2026-09-11T08:00:00.000Z"
+            is_active: 0
+            is_deleted: 1
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-11T08:00:00.000Z"
+      - input: ref("stg_route__brands")
+        rows:
+          - <<: *brand_stg
+            run_id: "r_reappear"
+    expect:
+      rows:
+        - brand_id: "b1"
+          run_id: "r_reappear"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_brand_incremental_attribute_change
+    description: Brand attribute change expires the prior version and opens a new one.
+    model: dim_brand
+    overrides:
+      macros: *brand_scd_incr
+    given:
+      - input: this
+        rows:
+          - dim_brand_sk: "sk_active"
+            brand_id: "b1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Canon"
+            slug: "canon"
+            image: null
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-01T00:00:00.000Z"
+      - input: ref("stg_route__brands")
+        rows:
+          - <<: *brand_stg
+            row_hash: "rh2"
+            name: "Canon v2"
+            run_id: "r_change"
+    expect:
+      rows:
+        - brand_id: "b1"
+          row_hash: "rh1"
+          name: "Canon"
+          run_id: "r_old"
+          valid_from: "2026-09-01T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 0
+        - brand_id: "b1"
+          row_hash: "rh2"
+          name: "Canon v2"
+          run_id: "r_change"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          valid_to: "9999-01-01T23:59:59.999Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_subcategory_initial_load_current
+    description: First load opens one active subcategory version and keeps the parent category id.
+    model: dim_subcategory
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref("stg_route__subcategories")
+        rows:
+          - &sub_stg
+            subcategory_id: "s1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Computer Accessories"
+            slug: "computer-accessories"
+            category_id: "c1"
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r1"
+            _extracted_at: "2026-09-06T00:00:00.000Z"
+    expect:
+      rows:
+        - subcategory_id: "s1"
+          category_id: "c1"
+          name: "Computer Accessories"
+          is_active: 1
+          is_deleted: 0
+          run_id: "r1"
+
+  - name: test_dim_subcategory_incremental_attribute_change
+    description: Parent category change is an attribute change on the subcategory version.
+    model: dim_subcategory
+    overrides:
+      macros: &sub_scd_incr
+        is_incremental: true
+        scd2_bound_at: "cast('2026-09-12 12:00:00.000' as DateTime64(3, 'UTC'))"
+    given:
+      - input: this
+        rows:
+          - dim_subcategory_sk: "sk_active"
+            subcategory_id: "s1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Computer Accessories"
+            slug: "computer-accessories"
+            category_id: "c1"
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-01T00:00:00.000Z"
+      - input: ref("stg_route__subcategories")
+        rows:
+          - <<: *sub_stg
+            row_hash: "rh2"
+            category_id: "c2"
+            run_id: "r_change"
+    expect:
+      rows:
+        - subcategory_id: "s1"
+          category_id: "c1"
+          row_hash: "rh1"
+          run_id: "r_old"
+          valid_from: "2026-09-01T00:00:00.000Z"
+          valid_to: "2026-09-12T12:00:00.000Z"
+          is_active: 0
+          is_deleted: 0
+        - subcategory_id: "s1"
+          category_id: "c2"
+          row_hash: "rh2"
+          run_id: "r_change"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          valid_to: "9999-01-01T23:59:59.999Z"
+          is_active: 1
+          is_deleted: 0
+
+  - name: test_dim_subcategory_incremental_pattern_a_delete
+    description: Active subcategory missing from silver expires in place.
+    model: dim_subcategory
+    overrides:
+      macros: *sub_scd_incr
+    given:
+      - input: this
+        rows:
+          - dim_subcategory_sk: "sk_active"
+            subcategory_id: "s1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Computer Accessories"
+            slug: "computer-accessories"
+            category_id: "c1"
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "9999-01-01T23:59:59.999Z"
+            is_active: 1
+            is_deleted: 0
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-01T00:00:00.000Z"
+      - input: ref("stg_route__subcategories")
+        rows: []
+    expect:
+      rows:
+        - subcategory_id: "s1"
+          dim_subcategory_sk: "sk_active"
+          is_active: 0
+          is_deleted: 1
+
+  - name: test_dim_subcategory_reappear_after_delete
+    description: Subcategory reappear opens at scd_bound_at.
+    model: dim_subcategory
+    overrides:
+      macros: *sub_scd_incr
+    given:
+      - input: this
+        rows:
+          - dim_subcategory_sk: "sk_old"
+            subcategory_id: "s1"
+            pk_hash: "pk1"
+            row_hash: "rh1"
+            name: "Computer Accessories"
+            slug: "computer-accessories"
+            category_id: "c1"
+            source_created_at: "2026-09-01T00:00:00.000Z"
+            source_updated_at: "2026-09-02T00:00:00.000Z"
+            run_id: "r_old"
+            valid_from: "2026-09-01T00:00:00.000Z"
+            valid_to: "2026-09-11T08:00:00.000Z"
+            is_active: 0
+            is_deleted: 1
+            inserted_at: "2026-09-01T00:00:00.000Z"
+            updated_at: "2026-09-11T08:00:00.000Z"
+      - input: ref("stg_route__subcategories")
+        rows:
+          - <<: *sub_stg
+            run_id: "r_reappear"
+    expect:
+      rows:
+        - subcategory_id: "s1"
+          category_id: "c1"
+          run_id: "r_reappear"
+          valid_from: "2026-09-12T12:00:00.000Z"
+          is_active: 1
+          is_deleted: 0

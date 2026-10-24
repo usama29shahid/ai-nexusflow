@@ -169,7 +169,7 @@ Which models exist depends on the **requirement**. There is no mandatory full st
 
 **Live reference:** [`dlt/route/products.py`](../branches/dlt_dbt_clickhouse/dlt/route/products.py). Org extraction norms (mandatory for the next endpoint): [dlt-extraction.md](dlt-extraction.md). Full Route source contract: [route-ingestion.md](route-ingestion.md). Lakehouse copy of the same API (backlog **6**): [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md).
 
-Assumptions: source Route API, endpoint `GET /api/v1/products`, resource `products`. Public catalog — no JWT. Full-refresh paginated extract → MinIO JSONL + ClickHouse Bronze + lake/OTLP. Opaque job names such as `pipe_one` are not used. Catalog follow-ons (`categories`, `brands`) must mirror this script’s norms.
+Assumptions: source Route API, endpoint `GET /api/v1/products`, resource `products`. Public catalog — no JWT. Full-refresh paginated extract → MinIO JSONL + ClickHouse Bronze + lake/OTLP. Opaque job names such as `pipe_one` are not used. Catalog follow-ons `categories`, `brands`, and `subcategories` use the same full-refresh norms (not incremental).
 
 **Three names** ([environments.md](environments.md)):
 
@@ -242,8 +242,9 @@ Pass the **same** `NEXUS_RUN_ID` (printed by the script, or `--run-id`) as `var(
 | dlt Route `products` (archive + Bronze + telemetry) | **Implemented** — `bronze_{env}.raw_route__products` as `nexus_loader` |
 | ClickHouse RBAC (loader/transformer/reader/admin) | **Implemented** (dev) — [rbac.md](rbac.md), `./scripts/clickhouse-rbac-bootstrap.sh` |
 | Silver `stg_route__products*` peer tables | **Implemented** (dev) — [dbt-modeling.md](dbt-modeling.md), [bronze-silver-cutover.md](bronze-silver-cutover.md) |
-| Gold | `dim_product`, `brg_product_image`, `brg_product_subcategory` SCD2 — [gold-products-cutover.md](gold-products-cutover.md) |
-| Airflow endpoint DAG | **Implemented** — `route_clickhouse_products` (`nexus-elt` job image) |
+| Gold | `dim_product`, `brg_product_image`, `brg_product_subcategory`, plus catalog `dim_category` / `dim_brand` / `dim_subcategory` SCD2 — [gold-products-cutover.md](gold-products-cutover.md) |
+| Airflow endpoint DAG | **Implemented** — `route_clickhouse_products`, `route_clickhouse_categories`, `route_clickhouse_brands`, `route_clickhouse_subcategories` (`nexus-elt` job image) |
+| Catalog endpoints | **Implemented** — `categories.py`, `brands.py`, `subcategories.py` (full-refresh, flat payloads) |
 
 Physical Bronze: `bronze_{env}.raw_route__products` (`dataset_table_separator=__`). RBAC: dlt=`nexus_loader`, dbt=`nexus_transformer`.
 

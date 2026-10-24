@@ -8,6 +8,9 @@ One DAG per source + target + endpoint. Group folders by source+target. Filename
 | --- | --- | --- |
 | `nexus_airflow_smoke` | `nexus_airflow_smoke.py` | Compose profile smoke (in-container) |
 | `route_clickhouse_products` | `route_clickhouse/products.py` | Route products warehouse ELT |
+| `route_clickhouse_categories` | `route_clickhouse/categories.py` | Route categories warehouse ELT |
+| `route_clickhouse_brands` | `route_clickhouse/brands.py` | Route brands warehouse ELT |
+| `route_clickhouse_subcategories` | `route_clickhouse/subcategories.py` | Route subcategories warehouse ELT. Triggers `route_clickhouse_categories` and waits before Bronze so the silver `category_id` relationship test has a current parent table |
 | `observability_openmetadata_ingest` | `observability_openmetadata_ingest.py` | Daily OM reader ingest |
 | `ops_backup_archive` | `ops_backup_archive.py` | Daily MinIO archive → R2 mirror |
 

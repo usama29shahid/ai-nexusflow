@@ -24,6 +24,9 @@ Copy these from `products.py` / the docs (do not invent a parallel pattern):
 | Script | Mode | Notes |
 |---|---|---|
 | [`products.py`](products.py) | Full refresh | Paginated `GET /api/v1/products` → MinIO JSONL + ClickHouse Bronze + telemetry |
+| [`categories.py`](categories.py) | Full refresh | Paginated `GET /api/v1/categories` → same dual-write (flat rows) |
+| [`brands.py`](brands.py) | Full refresh | Paginated `GET /api/v1/brands` → same dual-write (flat rows) |
+| [`subcategories.py`](subcategories.py) | Full refresh | Paginated `GET /api/v1/subcategories` → same dual-write; scalar `category` parent id |
 
 ```bash
 set -a && source .env && set +a
@@ -76,6 +79,6 @@ Legacy `warehouse.raw_route_dev___products` is obsolete after the cutover.
 
 ## Not yet implemented
 
-`categories`, `brands` (catalog follow-ons — **same norms as products**). Authenticated cart / wishlist / orders / addresses come after catalog is solid.
+Authenticated cart / wishlist / orders / addresses. Catalog list endpoints (`categories`, `brands`, `subcategories`) are implemented with the same full-refresh norms as `products`.
 
 Secondary REST sources (for example DataForSEO) get their own `dlt/{source}/` folders. They must not modify pipelines here. Shared Gold may combine sources; see [docs/enhanced-modeling-strategy.md](../../../../docs/enhanced-modeling-strategy.md).

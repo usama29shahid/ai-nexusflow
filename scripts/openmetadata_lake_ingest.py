@@ -51,6 +51,15 @@ REQUIRED_TABLES = (
     "raw_route__products",
     "stg_route__products",
     "dim_product",
+    "raw_route__categories",
+    "stg_route__categories",
+    "dim_category",
+    "raw_route__brands",
+    "stg_route__brands",
+    "dim_brand",
+    "raw_route__subcategories",
+    "stg_route__subcategories",
+    "dim_subcategory",
 )
 WORK_DIR = REPO_ROOT / ".nexusflow" / "openmetadata"
 
@@ -406,6 +415,9 @@ def build_airflow_workflow(
                     "pipelineFilterPattern": {
                         "includes": [
                             "route_clickhouse_products",
+                            "route_clickhouse_categories",
+                            "route_clickhouse_brands",
+                            "route_clickhouse_subcategories",
                             "nexus_airflow_smoke",
                         ]
                     },
@@ -1194,16 +1206,16 @@ def list_cataloged_table_names(jwt_token: str) -> set[str]:
     return names
 
 
-def verify_products_tables(jwt_token: str) -> None:
+def verify_warehouse_tables(jwt_token: str) -> None:
     names = list_cataloged_table_names(jwt_token)
     missing = [t for t in REQUIRED_TABLES if t not in names]
     if missing:
         raise RuntimeError(
-            "OpenMetadata catalog missing required products tables: "
+            "OpenMetadata catalog missing required warehouse tables: "
             f"{missing}. Found {len(names)} table(s). "
-            "Ensure ClickHouse RBAC has nexus_catalog and products data exists."
+            "Ensure ClickHouse RBAC has nexus_catalog and Route catalog data exists."
         )
-    print(f"Verified products tables in catalog: {', '.join(REQUIRED_TABLES)}")
+    print(f"Verified warehouse tables in catalog: {', '.join(REQUIRED_TABLES)}")
 
 
 def write_marker(client, bucket: str, run_id: str) -> None:
@@ -1343,7 +1355,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"dry-run: wrote {profiler_path}")
             return 0
         run_profiler(network=compose_network(), workflow_host_path=profiler_path)
-        verify_products_tables(jwt)
+        verify_warehouse_tables(jwt)
         print("OpenMetadata profiler OK.")
         return 0
 
@@ -1480,7 +1492,7 @@ def main(argv: list[str] | None = None) -> int:
         ensure_central_observability_links(jwt, run_id=run_id or None)
     if not args.skip_dbt and (WORK_DIR / "dbt" / "manifest.json").is_file():
         ensure_bronze_silver_lineage(jwt, WORK_DIR / "dbt" / "manifest.json")
-    verify_products_tables(jwt)
+    verify_warehouse_tables(jwt)
     if not args.skip_dbt:
         verify_dbt_projection(jwt)
     print("OpenMetadata catalog ingest OK.")
