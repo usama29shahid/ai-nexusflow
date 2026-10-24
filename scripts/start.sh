@@ -524,12 +524,13 @@ start_profiles() {
 stop_all() {
   echo "Stopping all stacks (branch + platform + vault)..."
   # Every profile must be enabled on down — otherwise Compose leaves profiled services running.
-  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy \
+  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,cube,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy \
     docker compose \
       --profile vault \
       --profile clickhouse \
       --profile lakehouse \
       --profile cloudbeaver \
+      --profile cube \
       --profile airflow \
       --profile signoz \
       --profile openobserve \

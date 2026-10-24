@@ -60,7 +60,7 @@ Add Airflow separately if it is not in `COMPOSE_PROFILES`:
 
 ## Stop everything
 
-Plain `docker compose down` often leaves **profiled** services (Vault, Airflow, ClickHouse, lakehouse, CloudBeaver) running and prints `Network … still in use`.
+Plain `docker compose down` often leaves **profiled** services (Vault, Airflow, ClickHouse, lakehouse, CloudBeaver, Cube) running and prints `Network … still in use`.
 
 Use one command — it enables every Compose profile on the way down:
 
