@@ -29,6 +29,7 @@ That script is the canonical warehouse dlt pipeline. `categories.py`, `brands.py
 | **Runtime env** | Call `common.runtime_env.load_runtime_env(REPO_ROOT)` at the start of `main()` (not a private copy). Manual Cursor/`uv` loads `.env` and optional Vault Agent `secrets.env`. Orchestrated `nexus-elt` jobs set `NEXUS_ELT_JOB=1` and skip file loads (Compose DNS + secrets arrive via `docker run --env-file` / `-e`). |
 | **Observability every run** | Call `publish_dlt_load` on success **and** failure (`dlt.load.completed` / `dlt.load.failed`). OTLP via that helper is best-effort. If you wrap a parent span, setup must not abort ingest when OTel is down; nest `publish_dlt_load` under the parent when present; set parent `StatusCode.OK` / `ERROR` explicitly (do not rely on `SystemExit` for ERROR). |
 | **Unit tests** | Branch guards under `branches/dlt_dbt_clickhouse/tests/dlt/{source}/unit/` (not root `tests/`, not dbt `test-paths`). Cover run_id, LoadInfo, HTTP session, and OTel fallback as applicable. |
+| **OpenMetadata governance** | In the same change, add the endpoint's glossary term, relations, asset names, and metric stubs to `docker/openmetadata/route_governance.yml`, and a Cube cube whose measure names and descriptions match. |
 
 Checklist + runbook for Route: [`branches/dlt_dbt_clickhouse/dlt/route/README.md`](../branches/dlt_dbt_clickhouse/dlt/route/README.md).
 

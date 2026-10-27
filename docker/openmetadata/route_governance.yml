@@ -1,0 +1,280 @@
+# Route business glossary, ontology edges, and metric definitions.
+# OpenMetadata ingest upserts this file. Cube model descriptions must match
+# each metric description. Env suffix is applied at load time, not stored here.
+
+glossary:
+  name: Route
+  displayName: Route
+  description: Business language for the Route catalog dimensions and the product image and subcategory bridges.
+
+terms:
+  - name: Product
+    displayName: Product
+    description: Route product dimension. Brand and category are embedded on the product. Subcategories and gallery images are bridges. Current row is is_active = 1.
+    related_to: [Brand, Category, Subcategory]
+    assets:
+      - {kind: table, layer: bronze, name: raw_route__products}
+      - {kind: table, layer: silver, name: stg_route__products}
+      - {kind: table, layer: gold, name: dim_product}
+      - {kind: pipeline, name: route_clickhouse_products}
+
+  - name: Category
+    displayName: Category
+    description: Route category dimension. Current row is is_active = 1.
+    assets:
+      - {kind: table, layer: bronze, name: raw_route__categories}
+      - {kind: table, layer: silver, name: stg_route__categories}
+      - {kind: table, layer: gold, name: dim_category}
+      - {kind: pipeline, name: route_clickhouse_categories}
+
+  - name: Subcategory
+    displayName: Subcategory
+    description: Route subcategory dimension. Parent term is Category. Current row is is_active = 1.
+    parent: Category
+    related_to: [Product]
+    assets:
+      - {kind: table, layer: bronze, name: raw_route__subcategories}
+      - {kind: table, layer: silver, name: stg_route__subcategories}
+      - {kind: table, layer: gold, name: dim_subcategory}
+      - {kind: pipeline, name: route_clickhouse_subcategories}
+
+  - name: Brand
+    displayName: Brand
+    description: Route brand dimension. Current row is is_active = 1.
+    related_to: [Product]
+    assets:
+      - {kind: table, layer: bronze, name: raw_route__brands}
+      - {kind: table, layer: silver, name: stg_route__brands}
+      - {kind: table, layer: gold, name: dim_brand}
+      - {kind: pipeline, name: route_clickhouse_brands}
+
+  - name: ProductImage
+    displayName: Product image
+    description: Gallery image membership for a product. Grain is product_id, image_url, and list position.
+    related_to: [Product]
+    assets:
+      - {kind: table, layer: silver, name: stg_route__products__images}
+      - {kind: table, layer: gold, name: brg_product_image}
+      - {kind: pipeline, name: route_clickhouse_products}
+
+  - name: ProductSubcategoryMembership
+    displayName: Product subcategory membership
+    description: Subcategory membership for a product. Grain is product_id, subcategory_id, and list position.
+    related_to: [Product, Subcategory]
+    assets:
+      - {kind: table, layer: silver, name: stg_route__products__subcategory}
+      - {kind: table, layer: gold, name: brg_product_subcategory}
+      - {kind: pipeline, name: route_clickhouse_products}
+
+metrics:
+  - name: product_count
+    displayName: Product count
+    description: Number of current products.
+    term: Product
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_active = 1
+  - name: product_version_count
+    displayName: Product version count
+    description: Number of SCD2 version rows for products.
+    term: Product
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*)
+  - name: product_deleted_count
+    displayName: Product deleted count
+    description: Number of product keys expired by a Pattern A delete.
+    term: Product
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_deleted = 1
+  - name: avg_price
+    displayName: Average price
+    description: Average list price of current products.
+    term: Product
+    metricType: AVERAGE
+    unitOfMeasurement: OTHER
+    customUnitOfMeasurement: price
+    expression: avg(price) where is_active = 1
+  - name: avg_rating
+    displayName: Average rating
+    description: Average rating of current products.
+    term: Product
+    metricType: AVERAGE
+    unitOfMeasurement: OTHER
+    customUnitOfMeasurement: rating
+    expression: avg(ratings_average) where is_active = 1
+  - name: discounted_product_count
+    displayName: Discounted product count
+    description: Number of current products with a discount.
+    term: Product
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_active = 1 and has_discount = 1
+  - name: units_sold
+    displayName: Units sold
+    description: Sum of the Route sold counter on current products.
+    term: Product
+    metricType: SUM
+    unitOfMeasurement: COUNT
+    expression: sum(sold) where is_active = 1
+  - name: catalog_sales
+    displayName: Catalog sales
+    description: Sum of sold times list price on current products.
+    term: Product
+    metricType: SUM
+    unitOfMeasurement: OTHER
+    customUnitOfMeasurement: currency
+    expression: sum(sold * price) where is_active = 1
+  - name: distinct_brand_count
+    displayName: Distinct brand count
+    description: Number of distinct brands on current products.
+    term: Product
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: countDistinct(brand_id) where is_active = 1
+  - name: distinct_category_count
+    displayName: Distinct category count
+    description: Number of distinct categories on current products.
+    term: Product
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: countDistinct(category_id) where is_active = 1
+
+  - name: category_count
+    displayName: Category count
+    description: Number of current categories.
+    term: Category
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_active = 1
+  - name: category_version_count
+    displayName: Category version count
+    description: Number of SCD2 version rows for categories.
+    term: Category
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*)
+  - name: category_deleted_count
+    displayName: Category deleted count
+    description: Number of category keys expired by a Pattern A delete.
+    term: Category
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_deleted = 1
+
+  - name: brand_count
+    displayName: Brand count
+    description: Number of current brands.
+    term: Brand
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_active = 1
+  - name: brand_version_count
+    displayName: Brand version count
+    description: Number of SCD2 version rows for brands.
+    term: Brand
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*)
+  - name: brand_deleted_count
+    displayName: Brand deleted count
+    description: Number of brand keys expired by a Pattern A delete.
+    term: Brand
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_deleted = 1
+
+  - name: subcategory_count
+    displayName: Subcategory count
+    description: Number of current subcategories.
+    term: Subcategory
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_active = 1
+  - name: subcategory_version_count
+    displayName: Subcategory version count
+    description: Number of SCD2 version rows for subcategories.
+    term: Subcategory
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*)
+  - name: subcategory_deleted_count
+    displayName: Subcategory deleted count
+    description: Number of subcategory keys expired by a Pattern A delete.
+    term: Subcategory
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_deleted = 1
+  - name: distinct_parent_category_count
+    displayName: Distinct parent category count
+    description: Number of distinct parent categories on current subcategories.
+    term: Subcategory
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: countDistinct(category_id) where is_active = 1
+
+  - name: image_membership_count
+    displayName: Image membership count
+    description: Number of current product image memberships.
+    term: ProductImage
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_active = 1
+  - name: image_membership_version_count
+    displayName: Image membership version count
+    description: Number of SCD2 version rows for product image memberships.
+    term: ProductImage
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*)
+  - name: image_membership_deleted_count
+    displayName: Image membership deleted count
+    description: Number of product image memberships expired by a Pattern A delete.
+    term: ProductImage
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_deleted = 1
+  - name: products_with_image
+    displayName: Products with image
+    description: Number of current products that have a gallery image.
+    term: ProductImage
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: countDistinct(product_id) where is_active = 1
+
+  - name: subcategory_membership_count
+    displayName: Subcategory membership count
+    description: Number of current product subcategory memberships.
+    term: ProductSubcategoryMembership
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_active = 1
+  - name: subcategory_membership_version_count
+    displayName: Subcategory membership version count
+    description: Number of SCD2 version rows for product subcategory memberships.
+    term: ProductSubcategoryMembership
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*)
+  - name: subcategory_membership_deleted_count
+    displayName: Subcategory membership deleted count
+    description: Number of product subcategory memberships expired by a Pattern A delete.
+    term: ProductSubcategoryMembership
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: count(*) where is_deleted = 1
+  - name: products_with_subcategory
+    displayName: Products with subcategory
+    description: Number of current products that have a subcategory.
+    term: ProductSubcategoryMembership
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: countDistinct(product_id) where is_active = 1
+  - name: distinct_linked_subcategory_count
+    displayName: Distinct linked subcategory count
+    description: Number of distinct subcategories linked to current products.
+    term: ProductSubcategoryMembership
+    metricType: COUNT
+    unitOfMeasurement: COUNT
+    expression: countDistinct(subcategory_id) where is_active = 1

@@ -107,7 +107,7 @@ Streamlit → Planner → RAG (org standards) → ELT spec
 ```
 
 - **Item 11:** Supabase (auth/session) + Streamlit shell
-- **Item 12:** LangGraph agents + RAG (Qdrant) over org standards and the **semantic layer** (item **8** first)
+- **Item 12:** LangGraph agents + RAG (Qdrant) over org standards, the OpenMetadata glossary graph (item **3.2**), and Cube (item **8** extends the dimension cubes)
 - Validation rejects pipelines missing observability hooks or disabled branches
 
 Details: [architecture.md](architecture.md), [platform-showcase-vision.md](platform-showcase-vision.md). Do not start RAG before backlog items **8** and **11**.
@@ -155,6 +155,7 @@ dbt-clickhouse  1.10.2
 - [x] OpenObserve ready — OTLP + dashboards + lake replay — backlog **2.1**
 - [x] OpenMetadata ready — catalog warehouse products (`observability-ingest.sh openmetadata`) — backlog **3**
 - [x] OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links — backlog **3.1**
+- [x] OpenMetadata endpoint governance — glossary, ontology, dimension and bridge metrics, Cube cubes — backlog **3.2**
 - [x] MinIO IAM — backlog **4**
 - [ ] Local Terraform — backlog **5**
 - [ ] Iceberg / Polaris / dbt-spark / Trino products path — backlog **6**
@@ -169,7 +170,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**See [backlog.md](backlog.md).** Warehouse `products` + catalog endpoints (`categories`, `brands`, `subcategories`) + Airflow + lake are done (items 0 and 7). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1), and MinIO IAM (4) are done. Next up: **8. Facts, marts, semantic layer** → **11** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
+**See [backlog.md](backlog.md).** Warehouse `products` + catalog endpoints (`categories`, `brands`, `subcategories`) + Airflow + lake are done (items 0 and 7). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1 + 3.2), and MinIO IAM (4) are done. Next up: **8. Facts, marts, semantic layer** → **11** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt silver/gold ✓ → lake telemetry ✓

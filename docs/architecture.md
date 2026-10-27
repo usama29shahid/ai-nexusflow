@@ -94,6 +94,8 @@ Warehouse capability rules (DAG vs ladder, archive, dlt vs dbt, run ids): [dlt-d
 
 > **The agent does not generate code from the prompt alone. It generates from the prompt plus retrieved organizational rules.**
 
+Item **12** reads three stores. `docs/` via Qdrant answers how to build a pipeline. The OpenMetadata glossary and ontology (item **3.2**) answer what a dimension or bridge means and which tables embody it. Cube answers the current measure value. OpenMetadata metric rows store the definition. Cube executes it.
+
 ---
 
 ## RAG as the organization standards layer
@@ -230,9 +232,9 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 
 **Observability producers** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`. Warehouse `products` path already does this (backlog item **0**).
 
-**Readers, IAM, Terraform, VPS, Iceberg** — follow [backlog.md](backlog.md) execution order. Readers (**2–3**) and MinIO IAM (**4**) are done. Next is warehouse endpoints → semantic layer → Streamlit/RAG (**7 → 8 → 11 → 12**), then docs auth (**9**), local Terraform (**5**), VPS + GitHub Actions (**10**), Iceberg parity (**6**, last). Local Terraform configures API resources against Compose; Actions + VPS Terraform own edge/DNS/`prd` and deploy (`git pull` + `./scripts/start.sh`) — Actions is **not** a second ELT runner ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
+**Readers, IAM, Terraform, VPS, Iceberg** — follow [backlog.md](backlog.md) execution order. Readers (**2–3**), MinIO IAM (**4**), warehouse endpoints (**7**), and OpenMetadata glossary and dimension metrics (**3.2**) are done. Next is facts and marts (**8**) → Streamlit/RAG (**11 → 12**), then docs auth (**9**), local Terraform (**5**), VPS + GitHub Actions (**10**), Iceberg parity (**6**, last). Local Terraform configures API resources against Compose; Actions + VPS Terraform own edge/DNS/`prd` and deploy (`git pull` + `./scripts/start.sh`) — Actions is **not** a second ELT runner ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
 
-**LLM / RAG / Streamlit** — backlog items **11–12** (after semantic layer **8**); agents select and generate against enabled capabilities.
+**LLM / RAG / Streamlit** — backlog items **11–12** (after semantic layer **8**). Item **12** reads `docs/` via Qdrant, the OpenMetadata glossary graph (item **3.2**), and Cube. Agents select and generate against enabled capabilities.
 
 ---
 

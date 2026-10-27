@@ -12,7 +12,8 @@ from nexus_elt_exec import elt_openmetadata_ingest_command
 with DAG(
     dag_id="observability_openmetadata_ingest",
     description=(
-        "Project ClickHouse + lake dbt/Airflow signals into OpenMetadata "
+        "Project ClickHouse + lake dbt/Airflow signals into OpenMetadata, "
+        "and upsert Route glossary, metric definitions, and asset links "
         "(reader; does not run dlt/dbt)"
     ),
     start_date=datetime(2024, 1, 1),
@@ -20,7 +21,7 @@ with DAG(
     schedule=timedelta(days=1),
     catchup=False,
     max_active_runs=1,
-    tags=["observability", "openmetadata", "reader"],
+    tags=["observability", "openmetadata", "reader", "governance"],
     params={
         "force": Param(
             False,

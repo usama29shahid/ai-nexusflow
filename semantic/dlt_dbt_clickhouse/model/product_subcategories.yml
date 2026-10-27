@@ -1,0 +1,60 @@
+cubes:
+  - name: product_subcategories
+    description: Product subcategory memberships (gold brg_product_subcategory), all SCD2 versions.
+    sql: >
+      SELECT
+        product_id,
+        subcategory_id,
+        subcategory_name,
+        parent_category_id,
+        is_active,
+        is_deleted
+      FROM brg_product_subcategory
+
+    measures:
+      - name: subcategory_membership_count
+        type: count
+        description: Number of current product subcategory memberships.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: subcategory_membership_version_count
+        type: count
+        description: Number of SCD2 version rows for product subcategory memberships.
+
+      - name: subcategory_membership_deleted_count
+        type: count
+        description: Number of product subcategory memberships expired by a Pattern A delete.
+        filters:
+          - sql: "{CUBE}.is_deleted = 1"
+
+      - name: products_with_subcategory
+        sql: product_id
+        type: count_distinct
+        description: Number of current products that have a subcategory.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: distinct_linked_subcategory_count
+        sql: subcategory_id
+        type: count_distinct
+        description: Number of distinct subcategories linked to current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+    dimensions:
+      - name: product_id
+        sql: product_id
+        type: string
+
+      - name: subcategory_id
+        sql: subcategory_id
+        type: string
+
+      - name: subcategory_name
+        sql: subcategory_name
+        type: string
+
+      - name: parent_category_id
+        sql: parent_category_id
+        type: string
