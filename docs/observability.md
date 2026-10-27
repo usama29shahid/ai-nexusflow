@@ -130,6 +130,8 @@ Layer tasks (never `dbt build`):
 6. `observability` — on success: `dbt docs generate`, Elementary `edr report`, lake artifact copy, `airflow.dag.completed`
 7. `observability_failed` — `trigger_rule=one_failed`: lake summary `airflow.dag.failed` (no docs/edr). Runs if any layer or the success closer fails.
 
+`scripts/airflow-dbt-layer.sh` runs `dbt deps` only when `package-lock.yml` or a locked package’s `dbt_project.yml` is missing, and only one layer task installs at a time. A complete `dbt_packages/` tree does not hit the package hub.
+
 Compose profile: `airflow`. Smoke DAG: `nexus_airflow_smoke`. Orchestrated dlt/dbt via ephemeral `nexus-elt` containers — no `.venv` bind-mount in Airflow. See [architecture.md](architecture.md), [orchestration/airflow/README.md](../orchestration/airflow/README.md).
 
 The future LLM workflow agent should emit this DAG shape.
