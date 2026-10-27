@@ -1,46 +1,95 @@
 cubes:
   - name: products
     description: >
-      Current Route products (gold dim_product where is_active = 1).
-      Catalog snapshot, not an order fact. sold * price is units already
-      reported by the source times list price.
+      Route product dimension (gold dim_product), all SCD2 versions.
+      Current measures filter is_active = 1. sold and price are source
+      attributes on the dimension, not a sales fact.
     sql: >
       SELECT
         product_id,
         title,
+        brand_id,
         brand_name,
+        category_id,
         category_name,
-        quantity,
         sold,
-        price
+        price,
+        ratings_average,
+        has_discount,
+        is_active,
+        is_deleted
       FROM dim_product
-      WHERE is_active = 1
 
     measures:
       - name: product_count
         type: count
         description: Number of current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
 
-      - name: units_sold
-        sql: sold
-        type: sum
-        description: Sum of the Route sold counter on current products.
+      - name: product_version_count
+        type: count
+        description: Number of SCD2 version rows for products.
+
+      - name: product_deleted_count
+        type: count
+        description: Number of product keys expired by a Pattern A delete.
+        filters:
+          - sql: "{CUBE}.is_deleted = 1"
 
       - name: avg_price
         sql: price
         type: avg
         description: Average list price of current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: avg_rating
+        sql: ratings_average
+        type: avg
+        description: Average rating of current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: discounted_product_count
+        type: count
+        description: Number of current products with a discount.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+          - sql: "{CUBE}.has_discount = 1"
+
+      - name: units_sold
+        sql: sold
+        type: sum
+        description: Sum of the Route sold counter on current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
 
       - name: catalog_sales
         sql: sold * price
         type: sum
         description: Sum of sold times list price on current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: distinct_brand_count
+        sql: brand_id
+        type: count_distinct
+        description: Number of distinct brands on current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: distinct_category_count
+        sql: category_id
+        type: count_distinct
+        description: Number of distinct categories on current products.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
 
     dimensions:
       - name: product_id
         sql: product_id
         type: string
-        primary_key: true
 
       - name: title
         sql: title

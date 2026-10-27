@@ -1,0 +1,43 @@
+cubes:
+  - name: product_images
+    description: Product gallery memberships (gold brg_product_image), all SCD2 versions.
+    sql: >
+      SELECT product_id, image_url, list_idx, is_active, is_deleted
+      FROM brg_product_image
+
+    measures:
+      - name: image_membership_count
+        type: count
+        description: Number of current product image memberships.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: image_membership_version_count
+        type: count
+        description: Number of SCD2 version rows for product image memberships.
+
+      - name: image_membership_deleted_count
+        type: count
+        description: Number of product image memberships expired by a Pattern A delete.
+        filters:
+          - sql: "{CUBE}.is_deleted = 1"
+
+      - name: products_with_image
+        sql: product_id
+        type: count_distinct
+        description: Number of current products that have a gallery image.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+    dimensions:
+      - name: product_id
+        sql: product_id
+        type: string
+
+      - name: image_url
+        sql: image_url
+        type: string
+
+      - name: list_idx
+        sql: list_idx
+        type: number

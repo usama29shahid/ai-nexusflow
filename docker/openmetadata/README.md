@@ -1,8 +1,10 @@
 # OpenMetadata (profile: openmetadata)
 
-Central **data catalog / lineage / DQ / governance** hub (backlog items **3** + **3.1**). **Reader only** — pipeline code writes to the observability lake and ClickHouse; catalog ingest is operator-driven via `./scripts/observability-ingest.sh openmetadata`.
+Central **data catalog / lineage / DQ / governance** hub (backlog items **3**, **3.1**, and **3.2**). **Reader only** — pipeline code writes to the observability lake and ClickHouse; catalog ingest is operator-driven via `./scripts/observability-ingest.sh openmetadata`.
 
 Elementary HTML, dbt docs, and OpenObserve remain deep-dive UIs; OM is where warehouse assets, dbt tests, and Airflow (dlt/dbt) pipelines are projected for a single catalog.
+
+Glossary, ontology, and metrics for the Route dims and bridges are git data in `route_governance.yml`. The same ingest upserts them after the catalog check, including when a lake marker skips dbt re-ingest. Ontology Explorer draws that glossary. Metric rows are definitions. Cube executes the measures. Warehouse table tags are required; Airflow pipeline tags are skipped with a warning when those DAGs are not in the catalog yet (for example `--skip-airflow`). Depth-1 table lineage for `dim_product`, `brg_product_image`, and `brg_product_subcategory` already matches Elementary, so this slice does not rewrite lineage projection.
 
 | | |
 | --- | --- |

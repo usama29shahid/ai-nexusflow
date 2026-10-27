@@ -1,0 +1,43 @@
+cubes:
+  - name: subcategories
+    description: Route subcategory dimension (gold dim_subcategory), all SCD2 versions.
+    sql: >
+      SELECT subcategory_id, name, category_id, is_active, is_deleted
+      FROM dim_subcategory
+
+    measures:
+      - name: subcategory_count
+        type: count
+        description: Number of current subcategories.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: subcategory_version_count
+        type: count
+        description: Number of SCD2 version rows for subcategories.
+
+      - name: subcategory_deleted_count
+        type: count
+        description: Number of subcategory keys expired by a Pattern A delete.
+        filters:
+          - sql: "{CUBE}.is_deleted = 1"
+
+      - name: distinct_parent_category_count
+        sql: category_id
+        type: count_distinct
+        description: Number of distinct parent categories on current subcategories.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+    dimensions:
+      - name: subcategory_id
+        sql: subcategory_id
+        type: string
+
+      - name: name
+        sql: name
+        type: string
+
+      - name: category_id
+        sql: category_id
+        type: string

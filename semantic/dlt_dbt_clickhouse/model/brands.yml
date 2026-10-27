@@ -1,0 +1,32 @@
+cubes:
+  - name: brands
+    description: Route brand dimension (gold dim_brand), all SCD2 versions.
+    sql: >
+      SELECT brand_id, name, is_active, is_deleted
+      FROM dim_brand
+
+    measures:
+      - name: brand_count
+        type: count
+        description: Number of current brands.
+        filters:
+          - sql: "{CUBE}.is_active = 1"
+
+      - name: brand_version_count
+        type: count
+        description: Number of SCD2 version rows for brands.
+
+      - name: brand_deleted_count
+        type: count
+        description: Number of brand keys expired by a Pattern A delete.
+        filters:
+          - sql: "{CUBE}.is_deleted = 1"
+
+    dimensions:
+      - name: brand_id
+        sql: brand_id
+        type: string
+
+      - name: name
+        sql: name
+        type: string

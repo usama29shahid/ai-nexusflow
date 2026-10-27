@@ -10,6 +10,7 @@ Projects (reader-side, lake/warehouse → OM):
   - dbt artifacts (lineage, descriptions, tags, TestCaseResults)
   - Airflow DAGs (dlt/dbt orchestration as pipeline entities)
   - Links to Elementary HTML / docs for deep-dive UIs
+  - Route glossary, term relations, asset tags, and metric definitions
 
 Invoked by ``./scripts/observability-ingest.sh openmetadata``.
 Pipeline code must not call OpenMetadata APIs.
@@ -60,8 +61,14 @@ REQUIRED_TABLES = (
     "raw_route__subcategories",
     "stg_route__subcategories",
     "dim_subcategory",
+    "stg_route__products__images",
+    "brg_product_image",
+    "stg_route__products__subcategory",
+    "brg_product_subcategory",
 )
 WORK_DIR = REPO_ROOT / ".nexusflow" / "openmetadata"
+GOVERNANCE_FILE = REPO_ROOT / "docker" / "openmetadata" / "route_governance.yml"
+CUBE_MODEL_DIR = REPO_ROOT / "semantic" / "dlt_dbt_clickhouse" / "model"
 
 
 def docker_host_path(path: Path | str) -> str:
@@ -1281,6 +1288,359 @@ def marker_exists(client, bucket: str, run_id: str) -> bool:
         return False
 
 
+def load_route_governance(path: Path | None = None) -> dict[str, Any]:
+    src = path or GOVERNANCE_FILE
+    data = yaml.safe_load(src.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Route governance file is not a mapping: {src}")
+    return data
+
+
+def governance_term_fqn(doc: dict[str, Any], term_name: str) -> str:
+    """OpenMetadata FQN. A child term is ``Glossary.Parent.Child``, not ``Glossary.Child``."""
+    by_name = {term["name"]: term for term in doc.get("terms") or []}
+    if term_name not in by_name:
+        raise RuntimeError(f"Unknown glossary term: {term_name}")
+    parts = [term_name]
+    current = by_name[term_name]
+    seen: set[str] = set()
+    while current.get("parent"):
+        parent = current["parent"]
+        if parent in seen:
+            raise RuntimeError(f"Glossary parent cycle at {parent}")
+        seen.add(parent)
+        if parent not in by_name:
+            raise RuntimeError(f"Glossary parent {parent!r} is not a term in this file")
+        parts.append(parent)
+        current = by_name[parent]
+    parts.append(doc["glossary"]["name"])
+    return ".".join(reversed(parts))
+
+
+def governance_table_fqn(layer: str, table: str, env: str) -> str:
+    return f"{SERVICE_NAME}.{OM_CLICKHOUSE_DATABASE}.{layer}_{env}.{table}"
+
+
+def governance_pipeline_fqn(name: str) -> str:
+    return f"{PIPELINE_SERVICE_NAME}.{name}"
+
+
+def ordered_governance_terms(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Parents before children at any depth; stable YAML order among the same depth."""
+    terms = list(doc.get("terms") or [])
+    by_name = {term["name"]: term for term in terms}
+    depth_cache: dict[str, int] = {}
+
+    def depth(name: str, walking: set[str] | None = None) -> int:
+        if name in depth_cache:
+            return depth_cache[name]
+        seen = walking if walking is not None else set()
+        if name in seen:
+            raise RuntimeError(f"Glossary parent cycle at {name}")
+        term = by_name.get(name)
+        if term is None:
+            raise RuntimeError(f"Glossary parent {name!r} is not a term in this file")
+        parent = term.get("parent")
+        if not parent:
+            depth_cache[name] = 0
+            return 0
+        seen = set(seen)
+        seen.add(name)
+        value = depth(parent, seen) + 1
+        depth_cache[name] = value
+        return value
+
+    indexed = list(enumerate(terms))
+    indexed.sort(key=lambda item: (depth(item[1]["name"]), item[0]))
+    return [term for _, term in indexed]
+
+
+def build_glossary_body(doc: dict[str, Any]) -> dict[str, Any]:
+    glossary = doc["glossary"]
+    return {
+        "name": glossary["name"],
+        "displayName": glossary.get("displayName") or glossary["name"],
+        "description": glossary["description"],
+    }
+
+
+def build_term_bodies(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    glossary = doc["glossary"]["name"]
+    bodies: list[dict[str, Any]] = []
+    for term in ordered_governance_terms(doc):
+        body: dict[str, Any] = {
+            "name": term["name"],
+            "displayName": term.get("displayName") or term["name"],
+            "description": term["description"],
+            "glossary": glossary,
+        }
+        if term.get("parent"):
+            body["parent"] = governance_term_fqn(doc, term["parent"])
+        bodies.append(body)
+    return bodies
+
+
+def governance_relation_pairs(doc: dict[str, Any]) -> list[tuple[str, str]]:
+    pairs: set[tuple[str, str]] = set()
+    for term in doc.get("terms") or []:
+        for other in term.get("related_to") or []:
+            pairs.add(tuple(sorted((term["name"], other))))
+    return sorted(pairs)
+
+
+def governance_asset_refs(doc: dict[str, Any], env: str) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    for term in doc.get("terms") or []:
+        for asset in term.get("assets") or []:
+            kind = asset["kind"]
+            if kind == "table":
+                fqn = governance_table_fqn(asset["layer"], asset["name"], env)
+                entity = "table"
+            elif kind == "pipeline":
+                fqn = governance_pipeline_fqn(asset["name"])
+                entity = "pipeline"
+            else:
+                raise RuntimeError(f"Unknown governance asset kind: {kind}")
+            refs.append(
+                {
+                    "term": term["name"],
+                    "term_fqn": governance_term_fqn(doc, term["name"]),
+                    "entity": entity,
+                    "fqn": fqn,
+                    "name": asset["name"],
+                }
+            )
+    return refs
+
+
+def build_metric_bodies(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    bodies: list[dict[str, Any]] = []
+    for metric in doc.get("metrics") or []:
+        body: dict[str, Any] = {
+            "name": metric["name"],
+            "displayName": metric.get("displayName") or metric["name"],
+            "description": metric["description"],
+            "metricType": metric["metricType"],
+            "unitOfMeasurement": metric["unitOfMeasurement"],
+            "granularity": "DAY",
+            "metricExpression": {"language": "SQL", "code": metric["expression"]},
+            "tags": [
+                {
+                    "tagFQN": governance_term_fqn(doc, metric["term"]),
+                    "source": "Glossary",
+                    "labelType": "Manual",
+                    "state": "Confirmed",
+                }
+            ],
+        }
+        if metric["unitOfMeasurement"] == "OTHER":
+            body["customUnitOfMeasurement"] = metric["customUnitOfMeasurement"]
+        bodies.append(body)
+    return bodies
+
+
+def with_owner(body: dict[str, Any], owner_id: str) -> dict[str, Any]:
+    owned = dict(body)
+    owned["owners"] = [{"id": owner_id, "type": "user"}]
+    return owned
+
+
+def governance_owner_id(jwt_token: str) -> str:
+    """Owner for glossary/metrics = the principal from ``login_jwt()`` (admin email)."""
+    me = _om_get(jwt_token, "/api/v1/users/loggedInUser")
+    if not isinstance(me, dict) or not me.get("id"):
+        raise RuntimeError("OpenMetadata logged-in admin user is missing")
+    return me["id"]
+
+
+def governance_assets_add_body(entity_id: str, entity_type: str) -> dict[str, Any]:
+    """OM defaults dryRun to true; linking requires an explicit false."""
+    return {
+        "dryRun": False,
+        "assets": [{"id": entity_id, "type": entity_type}],
+    }
+
+
+def _om_headers(jwt_token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {jwt_token}",
+        "Content-Type": "application/json",
+    }
+
+
+def _om_get(jwt_token: str, path: str) -> Any:
+    return _http_json(
+        "GET",
+        f"{om_base_url()}{path}",
+        headers=_om_headers(jwt_token),
+        timeout=60,
+    )
+
+
+def _om_send(jwt_token: str, method: str, path: str, body: dict[str, Any]) -> Any:
+    return _http_json(
+        method,
+        f"{om_base_url()}{path}",
+        headers=_om_headers(jwt_token),
+        body=json.dumps(body).encode(),
+        timeout=60,
+    )
+
+
+def _related_term_ids(term: dict[str, Any]) -> set[str]:
+    found: set[str] = set()
+    for rel in term.get("relatedTerms") or []:
+        target = rel.get("term") if isinstance(rel, dict) else None
+        if isinstance(target, dict) and target.get("id"):
+            found.add(target["id"])
+        elif isinstance(rel, dict) and rel.get("id") and rel.get("type") == "glossaryTerm":
+            found.add(rel["id"])
+    return found
+
+
+def _load_term(jwt_token: str, doc: dict[str, Any], name: str) -> dict[str, Any]:
+    fqn = governance_term_fqn(doc, name)
+    data = _om_get(jwt_token, f"/api/v1/glossaryTerms/name/{fqn}?fields=relatedTerms,parent")
+    if not isinstance(data, dict) or not data.get("id"):
+        raise RuntimeError(f"Glossary term missing after upsert: {fqn}")
+    return data
+
+
+def _governance_asset_target(
+    jwt_token: str, asset: dict[str, str]
+) -> dict[str, Any] | None:
+    """Resolve a glossary asset. Pipelines may be absent when Airflow ingest was skipped."""
+    collection = "tables" if asset["entity"] == "table" else "pipelines"
+    try:
+        target = _om_get(jwt_token, f"/api/v1/{collection}/name/{asset['fqn']}?fields=tags")
+    except RuntimeError as exc:
+        if asset["entity"] == "pipeline" and "404" in str(exc):
+            return None
+        raise RuntimeError(f"Governance asset missing in OpenMetadata: {asset['fqn']}") from exc
+    if not isinstance(target, dict) or not target.get("id"):
+        if asset["entity"] == "pipeline":
+            return None
+        raise RuntimeError(f"Governance asset missing in OpenMetadata: {asset['fqn']}")
+    return target
+
+
+def project_route_governance(
+    jwt_token: str, *, dry_run: bool = False, env: str | None = None
+) -> None:
+    """Upsert the Route glossary, relations, asset tags, and metric definitions."""
+    doc = load_route_governance()
+    env_name = env or nexus_env()
+    term_bodies = build_term_bodies(doc)
+    pairs = governance_relation_pairs(doc)
+    assets = governance_asset_refs(doc, env_name)
+    metrics = build_metric_bodies(doc)
+    if dry_run:
+        print(
+            "dry-run governance: "
+            f"glossary={doc['glossary']['name']} terms={len(term_bodies)} "
+            f"relations={len(pairs)} assets={len(assets)} metrics={len(metrics)}"
+        )
+        return
+
+    owner_id = governance_owner_id(jwt_token)
+    _om_send(jwt_token, "PUT", "/api/v1/glossaries", with_owner(build_glossary_body(doc), owner_id))
+    for body in term_bodies:
+        _om_send(jwt_token, "PUT", "/api/v1/glossaryTerms", with_owner(body, owner_id))
+
+    by_name = {term["name"]: _load_term(jwt_token, doc, term["name"]) for term in doc["terms"]}
+    for left, right in pairs:
+        left_ent = by_name[left]
+        right_ent = by_name[right]
+        if right_ent["id"] in _related_term_ids(left_ent) or left_ent["id"] in _related_term_ids(right_ent):
+            continue
+        _om_send(
+            jwt_token,
+            "POST",
+            f"/api/v1/glossaryTerms/{left_ent['id']}/relations",
+            {
+                "relationType": "relatedTo",
+                "term": {"id": right_ent["id"], "type": "glossaryTerm"},
+            },
+        )
+
+    skipped_pipeline_fqns: set[str] = set()
+    for asset in assets:
+        target = _governance_asset_target(jwt_token, asset)
+        if target is None:
+            skipped_pipeline_fqns.add(asset["fqn"])
+            print(
+                f"WARN: governance pipeline missing (skipping tag): {asset['fqn']}",
+                file=sys.stderr,
+            )
+            continue
+        tag_fqns = {tag.get("tagFQN") for tag in (target.get("tags") or [])}
+        if asset["term_fqn"] in tag_fqns:
+            continue
+        _om_send(
+            jwt_token,
+            "PUT",
+            f"/api/v1/glossaryTerms/{by_name[asset['term']]['id']}/assets/add",
+            governance_assets_add_body(target["id"], asset["entity"]),
+        )
+
+    for body in metrics:
+        _om_send(jwt_token, "PUT", "/api/v1/metrics", with_owner(body, owner_id))
+
+    verify_route_governance(jwt_token, doc, env_name)
+    ok = (
+        "OpenMetadata governance OK: "
+        f"terms={len(term_bodies)} relations={len(pairs)} metrics={len(metrics)}"
+    )
+    if skipped_pipeline_fqns:
+        ok += f" skipped_pipelines={len(skipped_pipeline_fqns)}"
+    print(ok)
+
+
+def verify_route_governance(jwt_token: str, doc: dict[str, Any], env: str) -> None:
+    terms = list(doc.get("terms") or [])
+    loaded = {term["name"]: _load_term(jwt_token, doc, term["name"]) for term in terms}
+    for term in terms:
+        expected_parent = term.get("parent")
+        if not expected_parent:
+            continue
+        parent = loaded[term["name"]].get("parent") or {}
+        parent_name = parent.get("name") or ""
+        parent_fqn = parent.get("fullyQualifiedName") or ""
+        if parent_name != expected_parent and not str(parent_fqn).endswith(
+            f".{expected_parent}"
+        ):
+            raise RuntimeError(
+                f"{term['name']} parent is {parent!r}; expected {expected_parent}"
+            )
+
+    for left, right in governance_relation_pairs(doc):
+        linked = _related_term_ids(loaded[left]) | _related_term_ids(loaded[right])
+        if loaded[right]["id"] not in linked and loaded[left]["id"] not in linked:
+            raise RuntimeError(f"Missing relatedTo between {left} and {right}")
+
+    table_names = {asset["name"] for asset in governance_asset_refs(doc, env) if asset["entity"] == "table"}
+    missing_tables = [name for name in REQUIRED_TABLES if name not in table_names]
+    if missing_tables:
+        raise RuntimeError(f"REQUIRED_TABLES missing from governance assets: {missing_tables}")
+
+    for asset in governance_asset_refs(doc, env):
+        target = _governance_asset_target(jwt_token, asset)
+        if target is None:
+            print(
+                f"WARN: governance pipeline missing (skipping verify): {asset['fqn']}",
+                file=sys.stderr,
+            )
+            continue
+        tag_fqns = {tag.get("tagFQN") for tag in (target.get("tags") or [])}
+        if asset["term_fqn"] not in tag_fqns:
+            raise RuntimeError(f"{asset['fqn']} is not tagged {asset['term_fqn']}")
+
+    for metric in doc.get("metrics") or []:
+        found = _om_get(jwt_token, f"/api/v1/metrics/name/{metric['name']}")
+        if not isinstance(found, dict) or found.get("name") != metric["name"]:
+            raise RuntimeError(f"Metric missing after upsert: {metric['name']}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1312,6 +1672,11 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-links",
         action="store_true",
         help="Skip creating Elementary/dbt CustomDashboard deep-dive links",
+    )
+    parser.add_argument(
+        "--skip-governance",
+        action="store_true",
+        help="Skip Route glossary, ontology relations, and metric definition upsert",
     )
     parser.add_argument(
         "--profiler-only",
@@ -1424,6 +1789,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"dry-run: wrote {airflow_path}")
         if not args.skip_profiler:
             print(f"dry-run: wrote {profiler_path}")
+        if not args.skip_governance:
+            project_route_governance(jwt, dry_run=True)
         return 0
 
     network = compose_network()
@@ -1495,6 +1862,9 @@ def main(argv: list[str] | None = None) -> int:
     verify_warehouse_tables(jwt)
     if not args.skip_dbt:
         verify_dbt_projection(jwt)
+    if not args.skip_governance:
+        jwt = login_jwt()
+        project_route_governance(jwt)
     print("OpenMetadata catalog ingest OK.")
     return 0
 
