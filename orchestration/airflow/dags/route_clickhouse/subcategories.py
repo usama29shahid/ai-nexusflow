@@ -22,6 +22,9 @@ with DAG(
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
+    # trigger_categories waits in-process (no triggerer) and holds a worker
+    # until categories finishes. One active run leaves the other workers free.
+    max_active_runs=1,
     tags=["route", "clickhouse", "subcategories"],
 ) as dag:
     assert_branch_enabled = BashOperator(

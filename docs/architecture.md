@@ -272,6 +272,10 @@ Setup: [orchestration/airflow/README.md](../orchestration/airflow/README.md), [d
 
 **One Airflow UI for all capabilities.** New branches add DAG files under `orchestration/airflow/dags/`; they appear in the same api-server (`http://127.0.0.1:8081` today; later `airflow.` via [edge-proxy.md](edge-proxy.md)). Never one Airflow per branch.
 
+**LocalExecutor parallelism is 4** (`AIRFLOW__CORE__PARALLELISM` in Compose). The scheduler pre-forks that many workers so Airflow’s default of 32 idle workers does not sit in the scheduler container. The cap is host memory: at most four tasks at once, and a waiting task uses a slot too. Endpoint DAGs added later queue behind those four. Do not raise the cap to match the number of endpoints.
+
+**One active run per DAG** (`AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=1`). A second run of the same DAG queues. Different DAGs still share the 4 workers. A DAG overrides this with its own `max_active_runs`.
+
 **Lab VPS (≈16 GB / 4 cores):** keep Compose profiles strict — ClickHouse + Airflow (+ Vault) day-to-day; start `lakehouse` / SigNoz / OpenMetadata only when needed. Do not `./scripts/start.sh all`. One DAG at a time. Optional ops agents (OpenClaw or Hermes) are **ops assistants**, not a second orchestrator; prefer one, API-backed, loopback access. When Airflow is public later, keep `docker.sock` on the **scheduler only** (not the api-server).
 
 **Backlog fit:** Local Terraform (item **5**) and VPS Terraform (item **10**) create locked names only. Actions lint/test/deploy (and build the ELT image) — not a second ingest runner. LLM/Streamlit/FastAPI (items **11–12**) consume enabled branches and Airflow status; they do not change this worker contract.

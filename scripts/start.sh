@@ -192,6 +192,33 @@ openobserve_is_running() {
   docker compose --profile openobserve ps openobserve --status running -q 2>/dev/null | grep -q .
 }
 
+# Compose group_add uses ${DOCKER_GID:-0}. Group 0 cannot open a socket owned by
+# the docker group. A gid copied from another host is wrong here too: replace it
+# with this machine's socket group and record that in .env for later compose.
+persist_docker_gid() {
+  local sock="${DOCKER_SOCK:-/var/run/docker.sock}"
+  local live=""
+  if [[ -S "${sock}" ]]; then
+    live="$(stat -c '%g' "${sock}" 2>/dev/null || true)"
+  fi
+  if [[ -n "${live}" && "${live}" != "0" && "${DOCKER_GID:-}" != "${live}" ]]; then
+    echo "DOCKER_GID ${DOCKER_GID:-unset} does not match this host's socket group ${live}. Using ${live}." >&2
+    DOCKER_GID="${live}"
+    export DOCKER_GID
+  fi
+  local gid="${DOCKER_GID:-}"
+  [[ -n "${gid}" && "${gid}" != "0" && -f .env ]] || return 0
+  if grep -q "^DOCKER_GID=${gid}$" .env; then
+    return 0
+  fi
+  if grep -q '^DOCKER_GID=' .env; then
+    sed -i "s|^DOCKER_GID=.*|DOCKER_GID=${gid}|" .env
+  else
+    printf '\n# Host docker.sock group for airflow-scheduler and otel-collector.\nDOCKER_GID=%s\n' "${gid}" >> .env
+  fi
+  echo "Recorded DOCKER_GID=${gid} in .env (Compose group_add)."
+}
+
 sync_otel_collector_config() {
   # docker_stats needs docker.sock group access. Prefer Desktop's /var/run/docker.sock
   # as the Compose bind source (Desktop remaps it). Do not point DOCKER_SOCK at
@@ -206,6 +233,7 @@ sync_otel_collector_config() {
     fi
     export DOCKER_GID
   fi
+  persist_docker_gid
   export DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
   # shellcheck source=scripts/openobserve-credentials.sh
   source "${ROOT}/scripts/openobserve-credentials.sh"
@@ -304,6 +332,7 @@ require_airflow_elt_ready() {
     export DOCKER_GID
     DOCKER_GID="$(stat -c '%g' "${sock}" 2>/dev/null || echo 0)"
   fi
+  persist_docker_gid
   # Match the Compose project network (directory name by default: ai-nexusflow_default).
   if [[ -z "${NEXUS_COMPOSE_NETWORK:-}" ]]; then
     local project
