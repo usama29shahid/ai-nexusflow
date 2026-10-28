@@ -173,12 +173,22 @@ class EltExecTest(unittest.TestCase):
         self.assertIn("TriggerRule.ONE_FAILED", text)
         self.assertIn("observability-publish-run.sh failed", text)
 
+    def test_subcategories_allows_one_active_run(self) -> None:
+        text = (DAGS / "route_clickhouse" / "subcategories.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("max_active_runs=1", text)
+        self.assertIn("wait_for_completion=True", text)
+        self.assertIn("deferrable=False", text)
+
     def test_compose_uses_airflow_3_api_server(self) -> None:
         compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
         self.assertIn("nexus-airflow:3.3.2-python3.12", compose)
         self.assertIn("airflow-api-server", compose)
         self.assertIn("airflow-dag-processor", compose)
         self.assertIn("command: api-server", compose)
+        self.assertIn('AIRFLOW__CORE__PARALLELISM: "4"', compose)
+        self.assertIn('AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"', compose)
         self.assertNotIn("airflow-webserver", compose)
         self.assertNotIn("command: webserver", compose)
         dockerfile = (REPO_ROOT / "docker" / "airflow" / "Dockerfile").read_text(
@@ -197,6 +207,9 @@ class EltExecTest(unittest.TestCase):
         start = (REPO_ROOT / "scripts" / "start.sh").read_text(encoding="utf-8")
         self.assertIn("docker inspect airflow-webserver", start)
         self.assertIn("docker rm -f airflow-webserver", start)
+        self.assertIn("persist_docker_gid", start)
+        self.assertIn("DOCKER_GID=${gid}", start)
+        self.assertIn("does not match this host's socket group", start)
         self.assertNotIn("--remove-orphans", start)
         ops = (REPO_ROOT / "docs" / "operations.md").read_text(encoding="utf-8")
         self.assertNotIn("sshd", ops)
@@ -205,6 +218,58 @@ class EltExecTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("from airflow.sdk import DAG", smoke)
         self.assertIn("airflow.providers.standard.operators.bash", smoke)
+
+    def test_persist_docker_gid_replaces_copied_value(self) -> None:
+        import socket
+        import subprocess
+        import tempfile
+
+        script = (REPO_ROOT / "scripts" / "start.sh").read_text(encoding="utf-8")
+        start = script.index("persist_docker_gid()")
+        end = script.index("\nsync_otel_collector_config()", start)
+        function = script[start:end]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env").write_text("DOCKER_GID=988\n", encoding="utf-8")
+            sock = root / "docker.sock"
+            server = socket.socket(socket.AF_UNIX)
+            server.bind(str(sock))
+            bindir = root / "bin"
+            bindir.mkdir()
+            stat_bin = bindir / "stat"
+            stat_bin.write_text(
+                "#!/bin/sh\n"
+                "if [ \"$1\" = \"-c\" ]; then echo 999; exit 0; fi\n"
+                "echo unexpected >&2\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            stat_bin.chmod(0o755)
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    function
+                    + "\npersist_docker_gid\nprintf '%s\\n' \"${DOCKER_GID}\"\n",
+                ],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+                check=False,
+                env={
+                    "PATH": f"{bindir}:/usr/bin:/bin",
+                    "HOME": str(root),
+                    "DOCKER_SOCK": str(sock),
+                    "DOCKER_GID": "988",
+                },
+            )
+            server.close()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Using 999", result.stderr)
+            self.assertIn(
+                "DOCKER_GID=999", (root / ".env").read_text(encoding="utf-8")
+            )
+            self.assertEqual(result.stdout.strip().splitlines()[-1], "999")
 
     def test_vault_jwt_must_land_in_secrets_env(self) -> None:
         """Empty JWT in secrets.env is not ready; wait loop must fail closed."""

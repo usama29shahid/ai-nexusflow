@@ -32,6 +32,13 @@ x-airflow-common: &airflow-common
     # Must match Compose `user:` so init chown and runtime UID stay aligned.
     AIRFLOW_UID: ${AIRFLOW_UID:-1000}
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    # LocalExecutor pre-forks this many workers (Airflow's own default is 32).
+    # Cap is for host memory: at most 4 tasks at once, including a task that is
+    # only waiting. More endpoint DAGs queue; do not raise this as endpoints grow.
+    AIRFLOW__CORE__PARALLELISM: "4"
+    # One run of each DAG at a time (Airflow's own default is 16). A DAG file
+    # overrides this with max_active_runs when that DAG needs overlap.
+    AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg://airflow:airflow@airflow-postgres/airflow
     # Required in .env (never empty). ./scripts/setup.sh generates if missing.

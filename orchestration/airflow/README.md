@@ -12,6 +12,10 @@ Airflow runs in Docker (same Compose profile on WSL and VPS). Endpoint DAGs star
 
 Helper: [`dags/nexus_elt_exec.py`](dags/nexus_elt_exec.py). Copy `route_clickhouse_products` for the next endpoint. One UI lists every branch’s DAGs. Contract: [docs/architecture.md](../../docs/architecture.md).
 
+`AIRFLOW__CORE__PARALLELISM` is **4** (`docker-compose.yml`). LocalExecutor keeps that many worker processes so the scheduler does not sit on Airflow’s default of 32 idle workers. The cap is host memory: at most four tasks run at once, and a waiting task counts too (`trigger_categories` holds a worker until categories finishes). Further endpoint DAGs queue. Leave the cap at 4 as endpoints are added.
+
+`AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG` is **1**. A second run of the same DAG stays queued. Different DAGs can still run together, up to the 4 workers. Set `max_active_runs` on a DAG when that DAG needs more than one run at a time; that value overrides the Compose default.
+
 Ops: [`ops_backup_archive`](dags/ops_backup_archive.py) runs daily MinIO REST archive → R2 (`./scripts/backup-archive.sh`). Requires Vault `backup` KV and a refreshed `airflow_elt.env` (`./scripts/start.sh airflow`).
 
 ## First time on this machine (WSL or VPS)
@@ -26,7 +30,7 @@ Do these once per machine (clone path / Linux user). Same list on the first VPS 
 
    Optional: `DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)`, `NEXUS_ELT_IMAGE=nexus-elt:latest`, `NEXUS_COMPOSE_NETWORK=ai-nexusflow_default`.
 
-2. **Docker socket** — only **`airflow-scheduler`** mounts `/var/run/docker.sock` (LocalExecutor runs ELT tasks there). The api-server does **not** get the socket, so a public `airflow.` UI later has a smaller blast radius. Your host user must still be able to run `docker` (Docker Desktop WSL or `docker` group on a VPS). Set `DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)` if tasks cannot talk to the daemon.
+2. **Docker socket** — only **`airflow-scheduler`** mounts `/var/run/docker.sock` (LocalExecutor runs ELT tasks there). The api-server does **not** get the socket, so a public `airflow.` UI later has a smaller blast radius. Your host user must still be able to run `docker` (Docker Desktop WSL or `docker` group on a VPS). `./scripts/start.sh` records this host's socket group as `DOCKER_GID` in `.env`, and replaces a value copied from another machine. Compose `group_add` defaults to `0` when that value is missing, and the scheduler user then cannot open the socket (`permission denied` on every `docker run`). Stopping and starting the same EC2 keeps the group. A new host gets its own group the next time `start.sh` runs.
 
 3. **Elementary CLI in the job image** — included via `uv sync --extra elementary` inside `docker/elt/Dockerfile`. No host `uv sync --extra elementary` required for Airflow tasks (still useful for local `edr report`).
 
@@ -76,7 +80,7 @@ docker compose --profile airflow stop
 | `route_clickhouse_subcategories` | Route `/subcategories` → Bronze → silver → gold → observability |
 | `observability_openmetadata_ingest` | **Reader:** lake + ClickHouse → OpenMetadata, plus Route glossary and metric upsert (daily; optional `force` param; tag `governance`) |
 
-Grain for product ELT: **one DAG per source + target + endpoint**. Tasks: `assert_branch_enabled` → `bronze` → `silver` (`dbt run` then `dbt test`) → `gold` (same) → `observability`. `route_clickhouse_subcategories` inserts `trigger_categories` after the branch assert: it runs `route_clickhouse_categories` to success before its own Bronze load, because `stg_route__subcategories.category_id` is tested against `stg_route__categories`. Unpause `route_clickhouse_categories` or that trigger fails. `observability_failed` runs on `one_failed` and writes the lake closer with `airflow.dag.failed`. Never `dbt build`. `NEXUS_RUN_ID` is the Airflow `run_id` (keep it free of `'` — `nexus_elt_exec` passes it via shell-single-quoted `-e`).
+Grain for product ELT: **one DAG per source + target + endpoint**. Tasks: `assert_branch_enabled` → `bronze` → `silver` (`dbt run` then `dbt test`) → `gold` (same) → `observability`. `route_clickhouse_subcategories` inserts `trigger_categories` after the branch assert: it runs `route_clickhouse_categories` to success before its own Bronze load, because `stg_route__subcategories.category_id` is tested against `stg_route__categories`. That wait holds a worker until categories finishes, so the DAG sets `max_active_runs=1`. A second subcategories run stays queued. Other route DAGs can still run beside that one run. Unpause `route_clickhouse_categories` or that trigger fails. `observability_failed` runs on `one_failed` and writes the lake closer with `airflow.dag.failed`. Never `dbt build`. `NEXUS_RUN_ID` is the Airflow `run_id` (keep it free of `'` — `nexus_elt_exec` passes it via shell-single-quoted `-e`).
 
 `observability_openmetadata_ingest` is **not** chained to products. It projects the lake into OM **once a day** (or on manual trigger) and upserts the Route glossary, relations, and metric definitions even when the lake marker skips catalog re-ingest. Without this DAG (or a manual `observability-ingest.sh openmetadata`), the OM catalog, DQ, profile, and glossary stay stale. Cube is not refreshed here: dev mode queries ClickHouse on each request. Requires OpenMetadata up (`./scripts/start.sh openmetadata`), `nexus-elt` rebuilt with Docker CLI (`./scripts/start.sh airflow`), and catalog credentials in `airflow_elt.env`. Re-ingest the same dbt `run_id` with param `force=true` (UI) or
 `--conf '{"force": true}'` (CLI). A soft-failed dbt OM ingest does **not** write the
