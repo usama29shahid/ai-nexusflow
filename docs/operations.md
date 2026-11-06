@@ -193,6 +193,8 @@ curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 | SigNoz | http://127.0.0.1:3301 |
 | OpenMetadata | http://127.0.0.1:8585 |
 | Cube playground | http://127.0.0.1:4000 (loopback; Caddy basic auth with the docs pages, backlog **9**) |
+| Supabase Studio | http://127.0.0.1:3001 (after `./scripts/start.sh supabase`) |
+| Supabase API | http://127.0.0.1:8000 (Kong; Auth + PostgREST) |
 | Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
 
 ### EC2 laptop SSH tunnels for UIs
@@ -207,10 +209,13 @@ Open tunnels from **either WSL Ubuntu or Windows PowerShell** (same `ssh -L` one
 # Vault 8200 | ClickHouse HTTP 8123 | CloudBeaver 8978
 # MinIO console 9001 | MinIO API 9002 | Airflow 8081
 # OpenObserve 5080 | OpenMetadata 8585 | Cube playground 4000
-ssh -L 8200:127.0.0.1:8200 -L 8123:127.0.0.1:8123 -L 8978:127.0.0.1:8978 -L 9001:127.0.0.1:9001 -L 9002:127.0.0.1:9002 -L 8081:127.0.0.1:8081 -L 5080:127.0.0.1:5080 -L 8585:127.0.0.1:8585 -L 4000:127.0.0.1:4000 nexus-ec2
+# Supabase Studio 3001 | Supabase API (Kong) 8000
+ssh -L 8200:127.0.0.1:8200 -L 8123:127.0.0.1:8123 -L 8978:127.0.0.1:8978 -L 9001:127.0.0.1:9001 -L 9002:127.0.0.1:9002 -L 8081:127.0.0.1:8081 -L 5080:127.0.0.1:5080 -L 8585:127.0.0.1:8585 -L 4000:127.0.0.1:4000 -L 3001:127.0.0.1:3001 -L 8000:127.0.0.1:8000 nexus-ec2
 ```
 
-Then in the browser open e.g. `http://127.0.0.1:8200` (Vault), `:8123` (ClickHouse), `:8978` (CloudBeaver), `:9001` / `:9002` (MinIO), `:8081` (Airflow), `:5080` (OpenObserve), `:8585` (OpenMetadata), `:4000` (Cube playground).
+Then in the browser open e.g. `http://127.0.0.1:8200` (Vault), `:8123` (ClickHouse), `:8978` (CloudBeaver), `:9001` / `:9002` (MinIO), `:8081` (Airflow), `:5080` (OpenObserve), `:8585` (OpenMetadata), `:4000` (Cube playground), `:3001` (Supabase Studio), `:8000` (Supabase API).
+
+Studio login uses `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` from `.nexusflow/supabase.env`. Vault does not render those two values.
 
 Add more `-L` lines when those profiles are up: SigNoz `3301`, OpenMetadata admin `8586`, ClickHouse native `9000`.
 
@@ -226,6 +231,8 @@ Optional: under your **existing** `Host nexus-ec2` in `~/.ssh/config` (WSL) or `
   LocalForward 5080 127.0.0.1:5080
   LocalForward 8585 127.0.0.1:8585
   LocalForward 4000 127.0.0.1:4000
+  LocalForward 3001 127.0.0.1:3001
+  LocalForward 8000 127.0.0.1:8000
   # When needed:
   # LocalForward 3301 127.0.0.1:3301
   # LocalForward 8586 127.0.0.1:8586
@@ -234,12 +241,12 @@ Optional: under your **existing** `Host nexus-ec2` in `~/.ssh/config` (WSL) or `
 
 #### Busy ports / `Address already in use`
 
-SSH can still log you into EC2 while **some** `-L` forwards fail. If you see `bind [127.0.0.1]:8081: Address already in use` (or `9001` / `5080` / `8585` / …), that UI tunnel is **not** active — usually an old `ssh nexus-ec2` in the **same** shell environment still holds the port.
+SSH can still log you into EC2 while **some** `-L` forwards fail. If you see `bind [127.0.0.1]:8081: Address already in use` (or `9001` / `5080` / `8585` / `3001` / `8000` / …), that UI tunnel is **not** active — usually an old `ssh nexus-ec2` in the **same** shell environment still holds the port.
 
 **WSL Ubuntu** (when you tunnel from WSL):
 
 ```bash
-ss -ltnp | grep -E ':(8200|8123|8978|9001|9002|8081|5080|8585|4000)\s'
+ss -ltnp | grep -E ':(8200|8123|8978|9001|9002|8081|5080|8585|4000|3001|8000)\s'
 pkill -f 'ssh .*nexus-ec2' || true
 # then re-run the ssh -L one-liner above
 ```
@@ -247,7 +254,7 @@ pkill -f 'ssh .*nexus-ec2' || true
 **Windows PowerShell** (when you tunnel from PowerShell):
 
 ```powershell
-netstat -ano | findstr ":8200 :8123 :8978 :9001 :9002 :8081 :5080 :8585 :4000"
+netstat -ano | findstr ":8200 :8123 :8978 :9001 :9002 :8081 :5080 :8585 :4000 :3001 :8000"
 
 # Close only nexus-ec2 tunnels (keeps other ssh sessions)
 Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" |
@@ -314,6 +321,24 @@ Plain `./scripts/setup.sh` / `uv sync` does **not** install `edr`. After enablin
 ```
 
 `--full-refresh` alone often does **not** fix a mismatched ClickHouse table; drop first, then re-run.
+
+---
+
+## Supabase backup (optional — Postgres → R2)
+
+Logical dump of the self-hosted Supabase database (Auth users, profiles, embeddings). Uses the same Vault `backup` keys as the archive mirror. Bucket: **`nexus-supabase-{env}`** (create once in Cloudflare R2 — e.g. `nexus-supabase-dev`).
+
+```bash
+./scripts/backup-supabase.sh
+# → .nexusflow/backups/supabase/supabase-*.dump (keep 7 local)
+# → R2 object dumps/YYYY/MM/DD/supabase-{timestamp}.dump
+```
+
+Create the R2 bucket **`nexus-supabase-{env}`** in the **same** Cloudflare account as the archive buckets, and grant the existing `NEXUS_BACKUP_*` API token **Object Read & Write** on that bucket (tokens scoped only to archive buckets will get Access Denied).
+
+Restore outline: start the same pinned Supabase images → `mc cp` dump back → `pg_restore` into `supabase-db` → `./scripts/supabase-rbac-bootstrap.sh`. Embeddings can be rebuilt from `docs/`; Auth users cannot.
+
+Start/stop: `./scripts/start.sh supabase` / `./scripts/start.sh stop-supabase`. Details: [docker/supabase/README.md](../docker/supabase/README.md).
 
 ---
 

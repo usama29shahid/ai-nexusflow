@@ -205,9 +205,9 @@ Local Terraform is backlog **5**; GitHub Actions / VPS / `prd` are backlog **10*
 
 ## App UI and agents (backlog 11–12)
 
-- **Supabase** — user auth and session memory (not pipeline telemetry) — backlog **11**.
-- **Qdrant** — RAG over org standards in `docs/` (not pipeline telemetry) — backlog **12**.
-- **Streamlit** — summarizes lake `summaries/` and links to Airflow, OpenObserve, SigNoz, OpenMetadata, Elementary; does not replace them — backlog **11**.
+- **Supabase** — user auth, session, and pgvector for RAG (not pipeline telemetry) — backlog **11**. Container logs ship via Vector → OTel Collector → lake / OpenObserve (`service.name=supabase`).
+- **Streamlit** — login + planner UI; summarizes lake `summaries/` and links to Airflow, OpenObserve, SigNoz, OpenMetadata, Elementary — backlog **14** (after **11**).
+- **Superset** — BI dashboards on ClickHouse — backlog **13**.
 
 Validation agents must reject generated pipelines that omit `common/observability` hooks or lake artifact upload.
 
@@ -216,7 +216,7 @@ Validation agents must reject generated pipelines that omit `common/observabilit
 ## Do not
 
 - Build a custom logging microservice or ops dashboard as the system of record.
-- Store pipeline telemetry only in Supabase, Qdrant, or ClickHouse ops tables.
+- Store pipeline telemetry only in Supabase pgvector, optional Qdrant, or ClickHouse ops tables.
 - Call SigNoz / OpenObserve / OpenMetadata / Elementary from dlt or dbt code.
 - Replace reader native DBs with MinIO-as-primary for those products.
 - Skip lake writes when an observability UI is up.

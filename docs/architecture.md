@@ -2,7 +2,7 @@
 
 AI-NexusFlow is a **multi-branch data engineering execution platform**. The same ingestion requirement can be routed to the most appropriate implementation. It is one platform with two selectable backends, not a pile of unrelated pipelines.
 
-The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. Build order is [backlog.md](backlog.md) (warehouse endpoints → semantic layer → Streamlit/RAG, then docs auth / Terraform / VPS, Iceberg last). Portfolio phase labels in [roadmap.md](roadmap.md) are not hard gates.
+The project is a hands-on DE learning and portfolio platform. It later becomes an **organization-aware, LLM-powered ELT generator**. The LLM is a **consumer of branch capabilities**. Build order is [backlog.md](backlog.md) (warehouse endpoints → semantic layer → Supabase pgvector → Superset → Streamlit login → RAG, then docs auth / Terraform / VPS, Iceberg last). Qdrant is optional. Portfolio phase labels in [roadmap.md](roadmap.md) are not hard gates.
 
 End state:
 
@@ -94,7 +94,7 @@ Warehouse capability rules (DAG vs ladder, archive, dlt vs dbt, run ids): [dlt-d
 
 > **The agent does not generate code from the prompt alone. It generates from the prompt plus retrieved organizational rules.**
 
-Item **12** reads three stores. `docs/` via Qdrant answers how to build a pipeline. The OpenMetadata glossary and ontology (item **3.2**) answer what a dimension or bridge means and which tables embody it. Cube answers the current measure value. OpenMetadata metric rows store the definition. Cube executes it.
+Item **12** reads three stores. `docs/` embedded in Supabase pgvector (item **11**) answers how to build a pipeline. Qdrant is optional and is not required for that path. The OpenMetadata glossary and ontology (item **3.2**) answer what a dimension or bridge means and which tables embody it. Cube answers the current measure value. OpenMetadata metric rows store the definition. Cube executes it.
 
 ---
 
@@ -232,9 +232,11 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 
 **Observability producers** — every run writes via `common/observability` to MinIO `nexus-telemetry-{env}` (summaries, artifacts, OTLP when the collector is up). Airflow remote logs stay in `nexus-airflow-logs-{env}`. Warehouse `products` path already does this (backlog item **0**).
 
-**Readers, IAM, Terraform, VPS, Iceberg** — follow [backlog.md](backlog.md) execution order. Readers (**2–3**), MinIO IAM (**4**), warehouse endpoints (**7**), and OpenMetadata glossary and dimension metrics (**3.2**) are done. Next is facts and marts (**8**) → Streamlit/RAG (**11 → 12**), then docs auth (**9**), local Terraform (**5**), VPS + GitHub Actions (**10**), Iceberg parity (**6**, last). Local Terraform configures API resources against Compose; Actions + VPS Terraform own edge/DNS/`prd` and deploy (`git pull` + `./scripts/start.sh`) — Actions is **not** a second ELT runner ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
+**Supabase** — website database: Auth, app rows, and pgvector for RAG embeddings (backlog **11**). Not the warehouse and not pipeline telemetry. ClickHouse stays the analytical store. Qdrant is optional. Slim stack starts from `COMPOSE_PROFILES` via `./scripts/start.sh` (`docker/supabase/`), separate from the root Compose file. Loopback only: Studio `:3001`, API `:8000`.
 
-**LLM / RAG / Streamlit** — backlog items **11–12** (after semantic layer **8**). Item **12** reads `docs/` via Qdrant, the OpenMetadata glossary graph (item **3.2**), and Cube. Agents select and generate against enabled capabilities.
+**Readers, IAM, Terraform, VPS, Iceberg** — follow [backlog.md](backlog.md) execution order. Readers (**2–3**), MinIO IAM (**4**), warehouse endpoints (**7**), OpenMetadata glossary and dimension metrics (**3.2**), and Supabase (**11**) are done. Next is facts and marts (**8**) → Superset (**13**) → Streamlit login (**14**) → RAG (**12**), then docs auth (**9**), local Terraform (**5**), VPS + GitHub Actions (**10**), Iceberg parity (**6**, last). Local Terraform configures API resources against Compose; Actions + VPS Terraform own edge/DNS/`prd` and deploy (`git pull` + `./scripts/start.sh`) — Actions is **not** a second ELT runner ([ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md)). Readers do not replace the lake write contract.
+
+**LLM / RAG / Streamlit** — backlog items **12** and **14** (after semantic layer **8** and Supabase **11**). Item **12** reads `docs/` from Supabase pgvector, the OpenMetadata glossary graph (item **3.2**), and Cube. Qdrant is optional. Agents select and generate against enabled capabilities.
 
 ---
 
@@ -256,7 +258,7 @@ Airflow → dlt_dbt_clickhouse | dlt_dbt_spark_iceberg
 | `vault` | HashiCorp Vault + Agent | Secrets — [vault.md](vault.md) |
 | `proxy` | Caddy edge | Public/local hostnames — [edge-proxy.md](edge-proxy.md) |
 
-Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, `proxy`, or comma-separated). Airflow and proxy are optional; start with `./scripts/start.sh airflow` / `./scripts/start.sh proxy` when needed. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
+Set `COMPOSE_PROFILES` in `.env` (`clickhouse`, `lakehouse`, `cloudbeaver`, `airflow`, `proxy`, `supabase`, or comma-separated). Airflow and proxy are optional; start with `./scripts/start.sh airflow` / `./scripts/start.sh proxy` when needed. `supabase` is not a service in the root Compose file; `./scripts/start.sh` starts that stack on its own. That is which **containers** run. [config/branches.yaml](../config/branches.yaml) is which **pipelines** may execute. Keep them aligned by hand. Commands: [setup.md](setup.md).
 
 **Production cutover (backlog item 10):** GitHub Actions + Terraform per [ci-cd.md](ci-cd.md). Same Compose + host `uv` model; `NEXUS_EDGE_MODE=vps`. Local stays deploy-shaped before that item.
 

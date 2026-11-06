@@ -1,0 +1,177 @@
+"""Contracts for the self-hosted Supabase slice (no Docker).
+
+    uv run python tests/unit/scripts/test_supabase_self_host.py
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import textwrap
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+START_SH = REPO_ROOT / "scripts" / "start.sh"
+VAULT_SH = REPO_ROOT / "scripts" / "vault-bootstrap.sh"
+SEED_SH = REPO_ROOT / "scripts" / "supabase-vault-seed.sh"
+RBAC_SH = REPO_ROOT / "scripts" / "supabase-rbac-bootstrap.sh"
+MIGRATION_002 = (
+    REPO_ROOT
+    / "docker"
+    / "supabase"
+    / "migrations"
+    / "002_reader_catalog_select_admin_bypassrls.sql"
+)
+VECTOR_OTEL = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector-otel.yml"
+VECTOR_UPSTREAM = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector.yml"
+
+
+class SupabaseSelfHostTest(unittest.TestCase):
+    def test_vector_otel_config_is_tracked_and_upstream_vector_yml_is_ignored(self) -> None:
+        self.assertTrue(VECTOR_OTEL.is_file())
+        tracked = subprocess.run(
+            ["git", "check-ignore", "-q", "--", str(VECTOR_OTEL)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            tracked.returncode,
+            1,
+            "vector-otel.yml must not match .gitignore (exit 1 from check-ignore -q)",
+        )
+        ignored = subprocess.run(
+            ["git", "check-ignore", "-q", "--", str(VECTOR_UPSTREAM)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(ignored.returncode, 0, ignored.stderr)
+
+    def test_auth_health_failure_exits_before_migrate(self) -> None:
+        text = START_SH.read_text(encoding="utf-8")
+        fn = text[text.index("ensure_supabase()") : text.index("stop_supabase()")]
+        fail_at = fn.index("Supabase API gateway did not become healthy")
+        migrate_at = fn.index('"${ROOT}/scripts/supabase-migrate.sh"', fail_at)
+        self.assertLess(fail_at, migrate_at)
+        self.assertIn("exit 1", fn[fail_at:migrate_at])
+        self.assertIn("api_ready=1", fn[:fail_at])
+
+    def test_ready_line_puts_supabase_back_after_start(self) -> None:
+        text = START_SH.read_text(encoding="utf-8")
+        fn = text[text.index("start_profiles()") : text.index("stop_all()")]
+        start_at = fn.index("ensure_supabase")
+        restore_at = fn.index('export COMPOSE_PROFILES="${COMPOSE_PROFILES},supabase"')
+        self.assertLess(start_at, restore_at)
+        self.assertIn('export COMPOSE_PROFILES="supabase"', fn[restore_at:])
+
+    def test_reader_and_catalog_select_and_admin_bypassrls(self) -> None:
+        sql = MIGRATION_002.read_text(encoding="utf-8")
+        self.assertIn("document_chunks_select_reader", sql)
+        self.assertIn("profiles_select_reader", sql)
+        self.assertIn("to nexus_reader, nexus_catalog", sql)
+        self.assertIn("alter role nexus_admin bypassrls", sql)
+        rbac = RBAC_SH.read_text(encoding="utf-8")
+        self.assertIn("alter role {admin_u} bypassrls;", rbac)
+
+    def test_vault_bootstrap_seeds_five_supabase_paths(self) -> None:
+        text = VAULT_SH.read_text(encoding="utf-8")
+        agent_at = text.index("Starting Vault Agent")
+        seed = text[:agent_at]
+        self.assertIn("seed_supabase_api", seed)
+        api_fn = text[text.index("seed_supabase_api()") : text.index("seed_supabase_role()")]
+        self.assertIn("Filling empty fields at ${path}", api_fn)
+        self.assertIn('secret_json="$(supabase_read_secret_json "${path}")"', api_fn)
+        fill_at = api_fn.index("Filling empty fields at ${path}")
+        patch_at = api_fn.index("vault_exec kv patch", fill_at)
+        create_at = api_fn.index('echo "  Seeding: ${path}"', patch_at)
+        put_at = api_fn.index("vault_exec kv put", create_at)
+        self.assertLess(api_fn.index("supabase_read_secret_json"), patch_at)
+        self.assertLess(patch_at, put_at)
+        role_fn = text[text.index("seed_supabase_role()") : text.index("seed_supabase_api\n")]
+        role_fill = role_fn.index("Filling empty password at ${path}")
+        self.assertLess(role_fill, role_fn.index("vault_exec kv patch", role_fill))
+        self.assertLess(
+            role_fn.index("vault_exec kv patch", role_fill),
+            role_fn.index("vault_exec kv put", role_fill),
+        )
+        self.assertNotIn('[[ -n "${current}" || -z "${anon}" ]]', api_fn)
+        for path in (
+            "supabase_loader",
+            "supabase_reader",
+            "supabase_catalog",
+            "supabase_admin",
+        ):
+            self.assertIn(f"${{kv_base}}/{path}", seed)
+        self.assertLess(seed.index("seed_supabase_api"), agent_at)
+
+    def _bash(self, body: str) -> subprocess.CompletedProcess[str]:
+        script = "#!/usr/bin/env bash\nset -euo pipefail\n" + textwrap.dedent(body)
+        return subprocess.run(
+            ["bash", "-c", script],
+            cwd=REPO_ROOT,
+            env={**os.environ},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_merge_keeps_vault_value_and_fills_empty_under_set_e(self) -> None:
+        proc = self._bash(
+            f"""
+            source {SEED_SH.as_posix()!r}
+            fill=0
+            if supabase_needs_fill "vault-anon" "file-anon"; then fill=1; fi
+            if supabase_needs_fill "" "pub-from-file"; then fill=1; fi
+            pub="$(supabase_merge_value "" "pub-from-file")"
+            anon="$(supabase_merge_value "vault-anon" "file-anon")"
+            printf 'fill=%s\\npub=%s\\nanon=%s\\n' "$fill" "$pub" "$anon"
+            """
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertIn("fill=1", proc.stdout)
+        self.assertIn("pub=pub-from-file", proc.stdout)
+        self.assertIn("anon=vault-anon", proc.stdout)
+
+    def test_failed_secret_read_refuses_rewrite(self) -> None:
+        proc = self._bash(
+            f"""
+            source {SEED_SH.as_posix()!r}
+            vault_exec() {{ echo "vault down" >&2; return 1; }}
+            if supabase_read_secret_json "secret/nexusflow/dev/supabase"; then
+              echo rewrote
+              exit 1
+            fi
+            echo refused
+            """
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertIn("refused", proc.stdout)
+        self.assertNotIn("rewrote", proc.stdout)
+        self.assertIn("Refusing to rewrite", proc.stderr)
+
+    def test_json_read_treats_missing_field_as_empty(self) -> None:
+        proc = self._bash(
+            f"""
+            source {SEED_SH.as_posix()!r}
+            vault_exec() {{
+              printf '%s' '{{"data":{{"data":{{"anon_key":"vault-anon"}}}}}}'
+            }}
+            json="$(supabase_read_secret_json "secret/nexusflow/dev/supabase")"
+            pub="$(supabase_secret_field "$json" publishable_key)"
+            anon="$(supabase_secret_field "$json" anon_key)"
+            merged_pub="$(supabase_merge_value "$pub" "from-file")"
+            merged_anon="$(supabase_merge_value "$anon" "file-anon")"
+            printf 'pub=%s\\nanon=%s\\n' "$merged_pub" "$merged_anon"
+            """
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertIn("pub=from-file", proc.stdout)
+        self.assertIn("anon=vault-anon", proc.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

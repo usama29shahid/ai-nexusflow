@@ -72,8 +72,11 @@ fi
 | CloudBeaver | Web database IDE (`profile: cloudbeaver`) | Docker |
 | Airflow | Orchestration (`profile: airflow`) | Docker |
 | HashiCorp Vault | Secrets (`profile: vault` when `NEXUS_SECRETS_BACKEND=vault`) | Docker |
+| Supabase | Website Auth + Postgres + pgvector (separate Compose project; `supabase` in `COMPOSE_PROFILES`) | Docker |
 
 A later CI image for production Python is optional and does not change this Cursor/host workflow. See [architecture.md](architecture.md).
+
+**Supabase (backlog 11, done):** website database only. Add `supabase` to `COMPOSE_PROFILES`, then `./scripts/start.sh` brings up the slim stack with the rest of the lab. `./scripts/start.sh supabase` does the same thing by itself. First start writes `.nexusflow/supabase.env` (API keys and the Studio password). Postgres stays on the Docker network (no published port). Auth health must succeed or the start exits. Details, roles, pgvector, logs, and backup: [docker/supabase/README.md](../docker/supabase/README.md).
 
 ---
 

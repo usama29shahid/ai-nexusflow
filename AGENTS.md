@@ -25,7 +25,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 
 **Follow [docs/backlog.md](docs/backlog.md)** — one item at a time. Do not use old “Phase 2 blocks readers/Terraform” language to skip backlog items.
 
-Route **`products`** (archive + Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers) is the **reference endpoint pipeline** and backlog item 0 (done). Stack verify is backlog item 1 (done): `./scripts/start.sh verify`. SigNoz is backlog item 2 (done). OpenObserve is backlog item 2.1 (done). OpenMetadata is backlog item 3 (done). OpenMetadata glossary, ontology, and dimension metrics are backlog item 3.2 (done). MinIO IAM is backlog item 4 (done). **Next (see [docs/backlog.md](docs/backlog.md) execution order):** facts/marts/semantic layer (**8**) → Supabase/Streamlit (**11**) → RAG (**12**) → docs basic auth (**9**) → local Terraform (**5**) → VPS/Actions (**10**) → Iceberg parity (**6**, last; review Spark design first). Route catalog endpoints (item **7**) are done on the warehouse path.
+Route **`products`** (archive + Bronze/silver/Gold + Airflow `route_clickhouse_products` + lake producers) is the **reference endpoint pipeline** and backlog item 0 (done). Stack verify is backlog item 1 (done): `./scripts/start.sh verify`. SigNoz is backlog item 2 (done). OpenObserve is backlog item 2.1 (done). OpenMetadata is backlog item 3 (done). OpenMetadata glossary, ontology, and dimension metrics are backlog item 3.2 (done). MinIO IAM is backlog item 4 (done). Supabase (auth, pgvector, loopback API) is backlog item 11 (done). **Next (see [docs/backlog.md](docs/backlog.md) execution order):** facts/marts/semantic layer (**8**) → Superset (**13**) → Streamlit login (**14**) → RAG (**12**, Supabase pgvector; Qdrant optional) → docs basic auth (**9**) → local Terraform (**5**) → VPS/Actions (**10**) → Iceberg parity (**6**, last; review Spark design first). Route catalog endpoints (item **7**) are done on the warehouse path.
 
 ```text
 REST source → dlt → MinIO JSONL archive + ClickHouse Bronze → dbt staging / Gold + tests
@@ -97,7 +97,7 @@ This applies to agents executing [docs/backlog.md](docs/backlog.md) or any Curso
 
 ## Future LLM/RAG behavior
 
-- Build LLM/RAG only after the backlog reaches that item ([docs/backlog.md](docs/backlog.md) item 12): semantic layer and Streamlit/Supabase shell should exist first.
+- Build LLM/RAG only after the backlog reaches that item ([docs/backlog.md](docs/backlog.md) item 12): semantic layer (8) and Streamlit login (14) should exist first. Supabase pgvector (11) is already the embedding store. Qdrant is optional.
 - The LLM reasons over user requirements; RAG supplies organization-specific standards. Do not invent organization conventions or unsupported platform capabilities.
 - Keep planner, ingestion, transformation, platform/branch, workflow, and validation responsibilities separate. Validation must reject disabled branches, unavailable runtimes, invalid schedules, and standards violations.
 

@@ -65,3 +65,27 @@ NEXUS_BACKUP_ENDPOINT={{ .Data.data.endpoint }}
 NEXUS_BACKUP_ACCESS_KEY={{ .Data.data.access_key }}
 NEXUS_BACKUP_SECRET_KEY={{ .Data.data.secret_key }}
 {{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/supabase" $env) }}
+SUPABASE_PUBLISHABLE_KEY={{ .Data.data.publishable_key }}
+SUPABASE_SECRET_KEY={{ .Data.data.secret_key }}
+SUPABASE_ANON_KEY={{ .Data.data.anon_key }}
+SUPABASE_SERVICE_ROLE_KEY={{ .Data.data.service_role_key }}
+SUPABASE_JWT_SECRET={{ .Data.data.jwt_secret }}
+SUPABASE_POSTGRES_PASSWORD={{ .Data.data.postgres_password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/supabase_loader" $env) }}
+SUPABASE_LOADER_USER={{ .Data.data.username }}
+SUPABASE_LOADER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/supabase_reader" $env) }}
+SUPABASE_READER_USER={{ .Data.data.username }}
+SUPABASE_READER_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/supabase_catalog" $env) }}
+SUPABASE_CATALOG_USER={{ .Data.data.username }}
+SUPABASE_CATALOG_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/supabase_admin" $env) }}
+SUPABASE_ADMIN_USER={{ .Data.data.username }}
+SUPABASE_ADMIN_PASSWORD={{ .Data.data.password }}
+{{- end }}

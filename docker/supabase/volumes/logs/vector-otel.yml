@@ -1,0 +1,52 @@
+# Ship Supabase container logs to the Nexus OTel Collector (OpenObserve reader).
+# Replaces Logflare sinks from the upstream vector.yml.
+
+api:
+  enabled: true
+  address: 0.0.0.0:9001
+
+sources:
+  docker_host:
+    type: docker_logs
+    include_containers:
+      - supabase-kong
+      - supabase-envoy
+      - supabase-auth
+      - supabase-rest
+      - supabase-db
+      - supabase-studio
+      - supabase-meta
+
+transforms:
+  supabase_logs:
+    type: remap
+    inputs:
+      - docker_host
+    source: |-
+      .service.name = "supabase"
+      .service.namespace = "nexusflow"
+      .container_name = .container_name
+      .body = del(.message)
+      .severity = "info"
+      if includes(["stderr"], .stream) {
+        .severity = "warn"
+      }
+      del(.container_created_at)
+      del(.container_id)
+      del(.source_type)
+      del(.label)
+      del(.image)
+      del(.host)
+
+sinks:
+  otlp_collector:
+    type: opentelemetry
+    inputs:
+      - supabase_logs
+    protocol:
+      type: http
+      uri: http://otel-collector:4318/v1/logs
+      encoding:
+        codec: json
+      framing:
+        method: newline_delimited

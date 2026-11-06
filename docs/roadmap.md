@@ -98,19 +98,21 @@ Readers stay indexes with their own DBs; pipeline code still must not call SigNo
 
 ---
 
-## App / AI — Supabase, Streamlit, RAG (backlog 11–12)
+## App / AI — Supabase, Superset, Streamlit, RAG (backlog 11–14)
 
 ```text
-Streamlit → Planner → RAG (org standards) → ELT spec
+Streamlit → Planner → RAG (org standards in Supabase pgvector) → ELT spec
   → Ingestion / Transform / Branch / Workflow agents
   → Validation → Airflow → result
 ```
 
-- **Item 11:** Supabase (auth/session) + Streamlit shell
-- **Item 12:** LangGraph agents + RAG (Qdrant) over org standards, the OpenMetadata glossary graph (item **3.2**), and Cube (item **8** extends the dimension cubes)
+- **Item 11:** Supabase — website database, Auth, and pgvector (installed on this branch)
+- **Item 13:** Superset — BI dashboards on ClickHouse
+- **Item 14:** Streamlit login — Supabase auth page
+- **Item 12:** LangGraph agents + RAG over `docs/` in Supabase pgvector, the OpenMetadata glossary graph (item **3.2**), and Cube (item **8**). Qdrant is optional and is not required for this path.
 - Validation rejects pipelines missing observability hooks or disabled branches
 
-Details: [architecture.md](architecture.md), [platform-showcase-vision.md](platform-showcase-vision.md). Do not start RAG before backlog items **8** and **11**.
+Details: [architecture.md](architecture.md), [platform-showcase-vision.md](platform-showcase-vision.md). Do not start RAG before backlog items **8**, **11**, and **14**.
 
 ---
 
@@ -163,14 +165,16 @@ dbt-clickhouse  1.10.2
 - [ ] Facts, marts, semantic layer — backlog **8**
 - [ ] Docs basic auth (Elementary / dbt / dlt HTML + Cube playground) — backlog **9**
 - [ ] VPS + GitHub Actions — backlog **10**
-- [ ] Supabase + Streamlit — backlog **11**
-- [ ] LLM / RAG multi-agent — backlog **12**
+- [x] Supabase — auth, pgvector, loopback API — backlog **11** (this branch)
+- [ ] Superset — BI on ClickHouse — backlog **13**
+- [ ] Streamlit login — Supabase auth — backlog **14**
+- [ ] LLM / RAG multi-agent — Supabase pgvector; Qdrant optional — backlog **12**
 
 ---
 
 ## Immediate next step
 
-**See [backlog.md](backlog.md).** Warehouse `products` + catalog endpoints (`categories`, `brands`, `subcategories`) + Airflow + lake are done (items 0 and 7). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1 + 3.2), and MinIO IAM (4) are done. Next up: **8. Facts, marts, semantic layer** → **11** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
+**See [backlog.md](backlog.md).** Warehouse `products` + catalog endpoints (`categories`, `brands`, `subcategories`) + Airflow + lake are done (items 0 and 7). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1 + 3.2), MinIO IAM (4), and Supabase (11) are done. Next up: **8. Facts, marts, semantic layer** → **13** → **14** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt silver/gold ✓ → lake telemetry ✓

@@ -38,6 +38,12 @@ dlt and dbt do **not** switch roles at runtime. Each process connects as a **dif
 | Polaris / Spark / Trino (S3) | MinIO **loader** |
 | dbt | CH **transformer** |
 | OpenMetadata catalog ingest | CH **catalog** (`nexus_catalog`) |
+| Supabase API (logged out) | publishable / anon key |
+| Supabase signed-in user | JWT → `authenticated` (RLS) |
+| Supabase embedding ingest | Postgres **`nexus_loader`** (`SUPABASE_LOADER_*`) |
+| Supabase server read | Postgres **`nexus_reader`** |
+| Supabase catalog (OM) | Postgres **`nexus_catalog`** |
+| Supabase break-glass | Postgres **`nexus_admin`** (`BYPASSRLS`) / service-role key (Vault only) |
 | Compose bootstrap | Shared `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` (admin seed only) |
 
 ---
@@ -123,6 +129,11 @@ Under `secret/nexusflow/{env}/` add siblings:
 | `minio_platform_reader` | `MINIO_PLATFORM_READER_USER`, `MINIO_PLATFORM_READER_PASSWORD` |
 | `minio_admin` | `MINIO_ADMIN_USER`, `MINIO_ADMIN_PASSWORD` |
 | `openmetadata` | `OPENMETADATA_ADMIN_EMAIL`, `OPENMETADATA_ADMIN_PASSWORD` |
+| `supabase` | `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_POSTGRES_PASSWORD` |
+| `supabase_loader` | `SUPABASE_LOADER_USER`, `SUPABASE_LOADER_PASSWORD` |
+| `supabase_reader` | `SUPABASE_READER_USER`, `SUPABASE_READER_PASSWORD` |
+| `supabase_catalog` | `SUPABASE_CATALOG_USER`, `SUPABASE_CATALOG_PASSWORD` |
+| `supabase_admin` | `SUPABASE_ADMIN_USER`, `SUPABASE_ADMIN_PASSWORD` |
 
 Keep existing `clickhouse` and `minio` secrets for Compose/bootstrap as needed.  
 **Do not** use nested paths like `clickhouse/loader` (conflicts with the flat `clickhouse` leaf).

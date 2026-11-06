@@ -20,6 +20,7 @@
 | 3.2 | OpenMetadata endpoint governance — Route glossary, ontology relations, metric definitions, and matching Cube cubes for the four dims and two bridges |
 | 4 | MinIO IAM — `nexus_loader` / `nexus_reader` / `nexus_platform_reader` / `nexus_admin` (Vault KV only; `./scripts/minio-iam-bootstrap.sh`). Root for bucket create only; Polaris/Spark/Trino S3 use loader |
 | 7 | Remaining Route REST endpoints — `categories`, `brands`, `subcategories` (warehouse / ClickHouse only; full-refresh like products) |
+| 11 | Supabase — self-hosted Auth, Postgres, and pgvector (`./scripts/start.sh supabase`). Not the warehouse. Setup: [docker/supabase/README.md](../docker/supabase/README.md) |
 
 ---
 
@@ -29,7 +30,8 @@ Item **numbers** are stable IDs. The list below is **execution order** (next up 
 
 ```text
 8.  Facts, marts, semantic layer — RAG-ready metrics (Cube Core over warehouse Gold/marts)
-11. Supabase + Streamlit shell — auth/session + portfolio/control UI
+13. Superset — ClickHouse BI dashboards
+14. Streamlit login — Supabase auth page (after 11)
 12. RAG / multi-agent — consumes docs standards, the OpenMetadata glossary graph, and Cube
 9.  Basic auth — Elementary + dlt/dbt docs HTML and Cube playground (Caddy) before public/VPS
 5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
@@ -45,7 +47,7 @@ Execute **one number at a time**. Do not start the next item until the current o
 
 1. **Readers (2 → 2.1 → 3) before MinIO IAM / Terraform** — telemetry and warehouse tables already exist from `products`. Items **2–3** are done (SigNoz, OpenObserve primary under test, OpenMetadata catalog). Grafana is deferred until both branches and LLM are running.
 2. **MinIO IAM (4) before Terraform (5)** — design roles, prove with scripts, then Terraform owns them (one owner per resource class). Scripts remain the live path until item **5**.
-3. **Endpoints (7, done) → glossary and dimension metrics (3.2, done) → facts/semantic (8) → Streamlit (11) → RAG (12) next** — learn RAG on the warehouse path. Category, brand, subcategory, and the product bridges already have glossary terms and Cube measures. Item **8** adds facts that join those dims and bridges. Agents ground on the semantic layer and the OpenMetadata graph behind an app shell. Warehouse only until Iceberg (6).
+3. **Endpoints (7, done) → glossary and dimension metrics (3.2, done) → Supabase (11, done) → facts/semantic (8) → Superset (13) → Streamlit login (14) → RAG (12) next** — learn RAG on the warehouse path. Category, brand, subcategory, and the product bridges already have glossary terms and Cube measures. Item **8** adds facts that join those dims and bridges. Agents ground on the semantic layer and the OpenMetadata graph behind an app shell. Embeddings for item **12** use Supabase pgvector; Qdrant is optional. Warehouse only until Iceberg (6).
 4. **After RAG: docs auth (9) → Terraform (5) → VPS/Actions (10)** — gate `docs.` / `elementary.` / `cube.` before public DNS ([edge-proxy.md](edge-proxy.md)); prove the stack on local (and EC2 if desired), then make Hostinger deploy repeatable. Terraform still lands before Iceberg so the lakehouse path can reuse modules.
 5. **Iceberg last (6)** — re-read [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md) (current ELT may stay); then implement. Branch stays disabled until then.
 
@@ -207,13 +209,31 @@ Edge/env Terraform for VPS + Actions lint/test/build/apply/deploy. After local (
 
 **Ops (optional, not ordered here):** MinIO REST archive → R2 via `./scripts/backup-archive.sh` and manual Vault snapshots — [operations.md](operations.md#archive-backup-optional--minio--r2), [vault.md](vault.md). Independent of delivery order; does not replace Terraform (item **5**).
 
-### 11. Supabase + Streamlit
+### 11. Supabase — done
 
-Supabase auth/session; Streamlit portfolio/control UI. Not pipeline telemetry storage. Before RAG (12).
+Self-hosted Postgres, Auth, and pgvector for the website and RAG embeddings. Not the warehouse, and not pipeline telemetry. Operator setup: [docker/supabase/README.md](../docker/supabase/README.md).
+
+| # | Deliverable |
+| --- | --- |
+| 11a | Slim stack from `./scripts/start.sh` when `COMPOSE_PROFILES` contains `supabase`: Postgres 17, Auth, PostgREST, Kong, Studio, postgres-meta, Vector. Loopback `127.0.0.1:8000` and `:3001`. Realtime, Storage, Edge Functions, pooler, and Logflare stay off |
+| 11b | Migrations: `profiles`, `document_chunks` (`extensions.vector(3)`), forced RLS, reader/catalog `SELECT`, `nexus_admin` `BYPASSRLS` |
+| 11c | Process roles `nexus_loader` / `nexus_reader` / `nexus_catalog` / `nexus_admin`. API keys in `.nexusflow/supabase.env`. `./scripts/vault-bootstrap.sh` seeds the five `supabase*` Vault paths |
+| 11d | Vector ships container logs to the OTel Collector (`service.name=supabase`) |
+| 11e | `./scripts/backup-supabase.sh` — `pg_dump` to R2 bucket `nexus-supabase-{env}` |
+
+**Done when:** `./scripts/start.sh supabase` reaches Auth health, migrations apply, and `nexus_reader` can `SELECT` a chunk. Qdrant is optional and is not part of this item.
+
+### 13. Superset
+
+BI dashboards on ClickHouse. Separate chat after Supabase (**11**). Does not replace Cube.
+
+### 14. Streamlit login
+
+Primary app UI login page using Supabase auth. Separate chat after Supabase (**11**). FastAPI and planner screens come after the login page. Enough for 3 to 5 people in the app at the same time.
 
 ### 12. RAG
 
-Multi-agent + RAG over `docs/` (Qdrant), the OpenMetadata glossary graph from item **3.2**, and Cube for live measure values. Do not start before items **8** and **11** are in place. After this item: docs auth (9), Terraform (5), VPS/Actions (10), then Iceberg (6).
+Multi-agent + RAG over `docs/` stored in Supabase pgvector, the OpenMetadata glossary graph from item **3.2**, and Cube for live measure values. Qdrant is optional and is not required for this path. Do not start before items **8**, **11**, and **14** are in place. After this item: docs auth (9), Terraform (5), VPS/Actions (10), then Iceberg (6).
 
 ---
 

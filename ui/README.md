@@ -2,4 +2,4 @@
 
 Streamlit app for natural-language ELT requests, retrieved rules, generated artifacts, and run status.
 
-**When:** [docs/backlog.md](../docs/backlog.md) item **11**. Host on a VPS or EC2 (not shared PHP hosting). Not implemented yet.
+**When:** [docs/backlog.md](../docs/backlog.md) item **14** (login), after Supabase item **11**. Host on a VPS or EC2 (not shared PHP hosting). Not implemented yet.

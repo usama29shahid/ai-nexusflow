@@ -159,6 +159,11 @@ nexusflow-vault-*.snap
 # Generated OTel collector config (scripts/render-otel-collector-config.py)
 docker/otel/.generated/
 
+# Self-hosted Supabase local env + Postgres data (secrets / state)
+docker/supabase/.env
+docker/supabase/.env.old
+docker/supabase/volumes/db/data/
+
 # MinIO AIStor Free license (canonical path is .nexusflow/minio.license)
 *.license
 minio.license
@@ -236,6 +241,10 @@ __marimo__/
 *.log
 logs/
 **/logs/
+# Vector shipper config. The **/logs/ rule above is for generated pipeline logs.
+!docker/supabase/volumes/logs/
+docker/supabase/volumes/logs/*
+!docker/supabase/volumes/logs/vector-otel.yml
 
 # dbt
 target/
