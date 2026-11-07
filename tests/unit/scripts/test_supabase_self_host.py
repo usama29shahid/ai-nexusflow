@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import textwrap
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ VAULT_SH = REPO_ROOT / "scripts" / "vault-bootstrap.sh"
 SEED_SH = REPO_ROOT / "scripts" / "supabase-vault-seed.sh"
 RBAC_SH = REPO_ROOT / "scripts" / "supabase-rbac-bootstrap.sh"
 ENSURE_ENV_SH = REPO_ROOT / "scripts" / "supabase-ensure-env.sh"
+VAULT_SYNC_SH = REPO_ROOT / "scripts" / "supabase-vault-sync.sh"
 MIGRATION_002 = (
     REPO_ROOT
     / "docker"
@@ -73,11 +75,16 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertIn("STATEMENT|HINT|CONTEXT|DETAIL", text)
         self.assertIn("WARNING|ERROR|FATAL|PANIC", text)
         self.assertIn("drop_on_abort: true", text)
-        # Auth: never archive raw non-JSON GoTrue lines; do not forward error PII.
+        # Auth: never archive raw non-JSON / free-text GoTrue msg (emails).
         self.assertIn("auth log (non-json redacted)", text)
         self.assertIn("parse_json(msg)", text)
+        self.assertIn('.message = "auth log"', text)
         self.assertIn('.supabase.error = "present"', text)
         self.assertNotIn(".supabase.error = string!(parsed.error)", text)
+        self.assertNotIn("replace(raw_msg", text)
+        self.assertNotIn("string(parsed.msg)", text)
+        self.assertIn("api:\n  enabled: false", text)
+        self.assertNotIn("address: 0.0.0.0:9001", text)
 
     def test_ensure_env_symlink_and_placeholder_guard(self) -> None:
         text = ENSURE_ENV_SH.read_text(encoding="utf-8")
@@ -85,6 +92,9 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertIn("supabase_env_has_placeholders", text)
         self.assertIn("Adopting generated secrets", text)
         self.assertIn("Placeholder secrets still present", text)
+        self.assertIn("refuse_divergent_sibling_clobber", text)
+        self.assertIn("Refusing to replace", text)
+        self.assertIn("NEXUSFLOW_ALLOW_ROOT_OVERRIDE", text)
         self.assertNotIn('echo "Supabase env exists: ${ENV_FILE}"\n  exit 0', text)
 
     def test_rbac_bootstrap_does_not_swallow_secret_load_failure(self) -> None:
@@ -92,6 +102,145 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertIn("source \"${ROOT}/scripts/load-secrets.sh\"", text)
         self.assertNotIn("load-secrets.sh\" || true", text)
         self.assertNotIn("load-secrets.sh' || true", text)
+        self.assertIn("def qident(name: str)", text)
+        self.assertIn("create role {qi[user]}", text)
+        self.assertNotIn("create role {user} login", text)
+
+    def _realish_supabase_env(self, path: Path, *, suffix: str) -> None:
+        path.write_text(
+            "\n".join(
+                [
+                    f"JWT_SECRET=generated-jwt-secret-value-{suffix}-at-least-32-chars",
+                    f"POSTGRES_PASSWORD=generated-pg-password-{suffix}",
+                    f"ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{suffix}.anon",
+                    f"SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{suffix}.service",
+                    "DASHBOARD_PASSWORD=lab-dashboard",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def test_ensure_env_refuses_divergent_sibling_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            supabase = root / "docker" / "supabase"
+            nexus = root / ".nexusflow"
+            supabase.mkdir(parents=True)
+            nexus.mkdir(parents=True)
+            (supabase / ".env.example").write_text(
+                "JWT_SECRET=your-super-secret-jwt-token-with-at-least-32-characters-long\n"
+                "POSTGRES_PASSWORD=your-postgres-password\n"
+                "ANON_KEY=your-anon-key\n"
+                "SERVICE_ROLE_KEY=your-service-role-key\n",
+                encoding="utf-8",
+            )
+            self._realish_supabase_env(nexus / "supabase.env", suffix="canonical")
+            self._realish_supabase_env(supabase / ".env", suffix="sibling")
+            proc = subprocess.run(
+                ["bash", str(ENSURE_ENV_SH)],
+                cwd=REPO_ROOT,
+                env={
+                    **os.environ,
+                    "NEXUSFLOW_ROOT": str(root),
+                    "NEXUSFLOW_ALLOW_ROOT_OVERRIDE": "1",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("Refusing to replace", proc.stderr)
+            self.assertTrue((supabase / ".env").is_file())
+            self.assertFalse((supabase / ".env").is_symlink())
+
+    def test_ensure_env_rejects_root_override_without_allow_flag(self) -> None:
+        proc = subprocess.run(
+            ["bash", str(ENSURE_ENV_SH)],
+            cwd=REPO_ROOT,
+            env={
+                **os.environ,
+                "NEXUSFLOW_ROOT": "/tmp/nexusflow-should-not-apply",
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("NEXUSFLOW_ALLOW_ROOT_OVERRIDE=1", proc.stderr)
+
+    def test_ensure_env_symlinks_matching_sibling(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            supabase = root / "docker" / "supabase"
+            nexus = root / ".nexusflow"
+            supabase.mkdir(parents=True)
+            nexus.mkdir(parents=True)
+            (supabase / ".env.example").write_text(
+                "JWT_SECRET=your-super-secret-jwt-token-with-at-least-32-characters-long\n"
+                "POSTGRES_PASSWORD=your-postgres-password\n"
+                "ANON_KEY=your-anon-key\n"
+                "SERVICE_ROLE_KEY=your-service-role-key\n",
+                encoding="utf-8",
+            )
+            self._realish_supabase_env(nexus / "supabase.env", suffix="same")
+            self._realish_supabase_env(supabase / ".env", suffix="same")
+            proc = subprocess.run(
+                ["bash", str(ENSURE_ENV_SH)],
+                cwd=REPO_ROOT,
+                env={
+                    **os.environ,
+                    "NEXUSFLOW_ROOT": str(root),
+                    "NEXUSFLOW_ALLOW_ROOT_OVERRIDE": "1",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertTrue((supabase / ".env").is_symlink())
+            self.assertIn("Supabase env OK", proc.stdout)
+
+    def test_vault_sync_fills_empty_api_fields_via_seed_helpers(self) -> None:
+        """Behavioral: empty Vault anon_key is patched from supabase.env."""
+        proc = self._bash(
+            f"""
+            source {SEED_SH.as_posix()!r}
+            NEXUS_DIR="$(mktemp -d)"
+            kv_base="secret/nexusflow/dev"
+            cat >"$NEXUS_DIR/supabase.env" <<'EOF'
+ANON_KEY=file-anon-key
+SERVICE_ROLE_KEY=file-service-key
+JWT_SECRET=file-jwt-secret-at-least-32-characters-long
+POSTGRES_PASSWORD=file-pg-password
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
+EOF
+            patched=0
+            vault_exec() {{
+              case "$*" in
+                *"kv get"*supabase)
+                  printf '%s' '{{"data":{{"data":{{"anon_key":"","service_role_key":"","jwt_secret":"","postgres_password":"","publishable_key":"","secret_key":""}}}}}}'
+                  ;;
+                *"kv patch"*supabase*)
+                  patched=1
+                  printf '%s\\n' "$*" >"$NEXUS_DIR/last_patch"
+                  ;;
+                *)
+                  return 0
+                  ;;
+              esac
+            }}
+            SUPABASE_VAULT_CHANGED=0
+            seed_supabase_api
+            test "$SUPABASE_VAULT_CHANGED" = "1"
+            test "$patched" = "1"
+            grep -q 'anon_key=file-anon-key' "$NEXUS_DIR/last_patch"
+            grep -q 'jwt_secret=file-jwt-secret-at-least-32-characters-long' "$NEXUS_DIR/last_patch"
+            rm -rf "$NEXUS_DIR"
+            """
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
 
     def test_vector_otel_validate_via_docker_when_available(self) -> None:
         """Optional: `vector validate` with docker.sock (skip if Docker missing)."""
@@ -145,6 +294,7 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertIn('curl -sf -o /dev/null -K "${curl_cfg}"', fn)
         self.assertNotIn('-H "apikey: $(grep', fn)
         self.assertIn('trap \'rm -f "${curl_cfg}"\' EXIT RETURN', fn)
+        self.assertIn("supabase-vault-sync.sh", fn)
 
     def test_openobserve_supabase_dashboard_matches_vector_attrs(self) -> None:
         dash = OO_SUPABASE_DASH.read_text(encoding="utf-8")
@@ -181,14 +331,22 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertIn("to nexus_reader, nexus_catalog", sql)
         self.assertIn("alter role nexus_admin bypassrls", sql)
         rbac = RBAC_SH.read_text(encoding="utf-8")
-        self.assertIn("alter role {admin_u} bypassrls;", rbac)
+        self.assertIn("alter role {qi[admin_u]} bypassrls;", rbac)
 
     def test_vault_bootstrap_seeds_five_supabase_paths(self) -> None:
         text = VAULT_SH.read_text(encoding="utf-8")
+        seed_helpers = SEED_SH.read_text(encoding="utf-8")
+        sync = VAULT_SYNC_SH.read_text(encoding="utf-8")
         agent_at = text.index("Starting Vault Agent")
         seed = text[:agent_at]
         self.assertIn("seed_supabase_api", seed)
-        api_fn = text[text.index("seed_supabase_api()") : text.index("seed_supabase_role()")]
+        self.assertIn("supabase-vault-seed.sh", seed)
+        self.assertIn("supabase-vault-sync.sh", seed)
+        api_fn = seed_helpers[
+            seed_helpers.index("seed_supabase_api()") : seed_helpers.index(
+                "seed_supabase_role()"
+            )
+        ]
         self.assertIn("Filling empty fields at ${path}", api_fn)
         self.assertIn('secret_json="$(supabase_read_secret_json "${path}")"', api_fn)
         fill_at = api_fn.index("Filling empty fields at ${path}")
@@ -197,7 +355,7 @@ class SupabaseSelfHostTest(unittest.TestCase):
         put_at = api_fn.index("vault_exec kv put", create_at)
         self.assertLess(api_fn.index("supabase_read_secret_json"), patch_at)
         self.assertLess(patch_at, put_at)
-        role_fn = text[text.index("seed_supabase_role()") : text.index("seed_supabase_api\n")]
+        role_fn = seed_helpers[seed_helpers.index("seed_supabase_role()") :]
         role_fill = role_fn.index("Filling empty password at ${path}")
         self.assertLess(role_fill, role_fn.index("vault_exec kv patch", role_fill))
         self.assertLess(
@@ -213,6 +371,19 @@ class SupabaseSelfHostTest(unittest.TestCase):
         ):
             self.assertIn(f"${{kv_base}}/{path}", seed)
         self.assertLess(seed.index("seed_supabase_api"), agent_at)
+        self.assertIn("SUPABASE_VAULT_CHANGED", seed_helpers)
+        self.assertIn("force-recreate vault-agent", sync)
+        self.assertIn("seed_supabase_api", sync)
+        timeout_at = sync.index("waiting for SUPABASE_ANON_KEY")
+        self.assertIn("exit 1", sync[timeout_at : timeout_at + 200])
+        self.assertNotIn("exit 0", sync[timeout_at : timeout_at + 200])
+        start_fn = START_SH.read_text(encoding="utf-8")
+        ensure = start_fn[
+            start_fn.index("ensure_supabase()") : start_fn.index("stop_supabase()")
+        ]
+        self.assertIn('"${ROOT}/scripts/supabase-vault-sync.sh"', ensure)
+        self.assertNotIn("supabase-vault-sync.sh\" || true", ensure)
+        self.assertNotIn("supabase-vault-sync.sh' || true", ensure)
 
     def _bash(self, body: str) -> subprocess.CompletedProcess[str]:
         script = "#!/usr/bin/env bash\nset -euo pipefail\n" + textwrap.dedent(body)

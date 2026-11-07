@@ -4,7 +4,18 @@
 # refuse placeholders (and heal dual-file drift when a sibling .env has real secrets).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# NEXUSFLOW_ROOT redirects the tree for unit tests only. Requires the explicit
+# allow flag so a leftover env var cannot point Compose secrets at a temp dir.
+if [[ -n "${NEXUSFLOW_ROOT:-}" ]]; then
+  if [[ "${NEXUSFLOW_ALLOW_ROOT_OVERRIDE:-}" != "1" ]]; then
+    echo "NEXUSFLOW_ROOT is set (${NEXUSFLOW_ROOT}) but NEXUSFLOW_ALLOW_ROOT_OVERRIDE=1 is not." >&2
+    echo "Unset NEXUSFLOW_ROOT, or set the allow flag only from unit tests." >&2
+    exit 1
+  fi
+  ROOT="${NEXUSFLOW_ROOT}"
+else
+  ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
 SUPABASE_DIR="${ROOT}/docker/supabase"
 ENV_FILE="${ROOT}/.nexusflow/supabase.env"
 EXAMPLE="${SUPABASE_DIR}/.env.example"
@@ -123,25 +134,56 @@ adopt_sibling_secrets_if_needed() {
   fi
 }
 
+# Do not silently replace a regular sibling .env that holds different real secrets.
+refuse_divergent_sibling_clobber() {
+  if [[ ! -f "${SIBLING_ENV}" || -L "${SIBLING_ENV}" ]]; then
+    return 0
+  fi
+  if supabase_env_has_placeholders "${ENV_FILE}"; then
+    return 0
+  fi
+  if supabase_env_has_placeholders "${SIBLING_ENV}"; then
+    return 0
+  fi
+  if cmp -s "${ENV_FILE}" "${SIBLING_ENV}"; then
+    return 0
+  fi
+  echo "Refusing to replace ${SIBLING_ENV}: it differs from ${ENV_FILE} and both look generated." >&2
+  echo "Keep one file as source of truth, then re-run ./scripts/start.sh supabase." >&2
+  echo "  (Canonical path is ${ENV_FILE}; docker/supabase/.env should be a symlink to it.)" >&2
+  exit 1
+}
+
 if [[ ! -f "${EXAMPLE}" ]]; then
   echo "Missing ${EXAMPLE}" >&2
   exit 1
 fi
 
 if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "Creating ${ENV_FILE} from .env.example + generate-keys.sh..."
-  cp "${EXAMPLE}" "${ENV_FILE}"
-  apply_lab_url_defaults
-  link_supabase_env
-  run_key_generators
-  rotate_dashboard_password
+  if [[ -f "${SIBLING_ENV}" && ! -L "${SIBLING_ENV}" ]] && ! supabase_env_has_placeholders "${SIBLING_ENV}"; then
+    echo "Adopting generated secrets from ${SIBLING_ENV} into ${ENV_FILE}..."
+    cp "${SIBLING_ENV}" "${ENV_FILE}"
+    chmod 600 "${ENV_FILE}"
+    refuse_divergent_sibling_clobber
+    link_supabase_env
+  else
+    echo "Creating ${ENV_FILE} from .env.example + generate-keys.sh..."
+    cp "${EXAMPLE}" "${ENV_FILE}"
+    apply_lab_url_defaults
+    # First create: sibling may still be placeholders or missing — safe to link.
+    link_supabase_env
+    run_key_generators
+    rotate_dashboard_password
+  fi
 else
   echo "Supabase env exists: ${ENV_FILE}"
   adopt_sibling_secrets_if_needed
+  refuse_divergent_sibling_clobber
   link_supabase_env
 fi
 
 chmod 600 "${ENV_FILE}"
+refuse_divergent_sibling_clobber
 link_supabase_env
 
 if supabase_env_has_placeholders "${ENV_FILE}"; then

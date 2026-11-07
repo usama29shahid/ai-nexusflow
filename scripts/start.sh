@@ -454,7 +454,7 @@ ensure_supabase() {
   echo "Starting self-hosted Supabase (slim: db auth rest kong meta studio vector)..."
   chmod +x "${ROOT}/scripts/supabase-ensure-env.sh" "${ROOT}/scripts/supabase-compose.sh" \
     "${ROOT}/scripts/supabase-migrate.sh" "${ROOT}/scripts/supabase-rbac-bootstrap.sh" \
-    "${ROOT}/scripts/backup-supabase.sh" 2>/dev/null || true
+    "${ROOT}/scripts/supabase-vault-sync.sh" "${ROOT}/scripts/backup-supabase.sh" 2>/dev/null || true
   # shellcheck source=scripts/supabase-ensure-env.sh
   "${ROOT}/scripts/supabase-ensure-env.sh"
   # shellcheck source=scripts/supabase-compose.sh
@@ -508,6 +508,9 @@ ensure_supabase() {
   fi
   "${ROOT}/scripts/supabase-migrate.sh"
   "${ROOT}/scripts/supabase-rbac-bootstrap.sh"
+  # Fill empty Vault supabase* keys now that supabase.env / rbac env exist.
+  # Script exits 0 when Vault is absent (skip); non-zero on real sync failure.
+  "${ROOT}/scripts/supabase-vault-sync.sh"
   echo "Supabase API:    http://127.0.0.1:${KONG_HTTP_PORT:-8000}"
   echo "Supabase Studio: http://127.0.0.1:${STUDIO_PORT:-3001}"
   echo "Backup:          ./scripts/backup-supabase.sh → MinIO nexus-supabase-\${NEXUS_ENV}; R2 via ops_backup_archive"

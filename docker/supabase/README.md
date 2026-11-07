@@ -48,7 +48,11 @@ If Auth health on port 8000 never succeeds, `start.sh` exits and does not print 
 | Process DB roles | `.nexusflow/supabase-rbac.env`, and Vault `secret/nexusflow/{env}/supabase_loader`, `supabase_reader`, `supabase_catalog`, `supabase_admin` |
 | API keys for other processes | Vault `secret/nexusflow/{env}/supabase` (`publishable_key`, `secret_key`, `anon_key`, `service_role_key`, `jwt_secret`, `postgres_password`) |
 
-`./scripts/vault-bootstrap.sh` creates those five paths when they are missing. It copies API keys from `.nexusflow/supabase.env` and role passwords from `.nexusflow/supabase-rbac.env` when the files already exist. A later bootstrap fills each empty field with `vault kv patch`, so other keys on that path stay. A field that already has a value is left as it is. A failed read of an existing secret stops bootstrap and does not write. `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` stay empty until `utils/add-new-auth-keys.sh` writes them.
+`./scripts/vault-bootstrap.sh` creates those five paths when they are missing. It copies API keys from `.nexusflow/supabase.env` and role passwords from `.nexusflow/supabase-rbac.env` when the files already exist. If Vault ran first, fields can be empty until `./scripts/start.sh supabase` finishes and runs `./scripts/supabase-vault-sync.sh` (fills empty fields only, then recreates `vault-agent`). A field that already has a Vault value is left as it is. A failed read of an existing secret stops the write. `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` stay empty until `utils/add-new-auth-keys.sh` writes them.
+
+Canonical env file is `.nexusflow/supabase.env`. `docker/supabase/.env` must be a symlink to it. If both are regular files with different generated secrets, `supabase-ensure-env.sh` refuses to start until you keep one copy.
+
+Auth container logs never forward GoTrue free-text `msg`/`error` (only level, path, status, and `error=present`) before Vector ships them to the lake / OpenObserve. Vector’s own API listen is disabled.
 
 The browser may use the publishable / anon key. The service-role key and `nexus_admin` stay on the server.
 

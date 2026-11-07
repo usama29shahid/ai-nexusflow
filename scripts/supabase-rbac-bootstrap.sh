@@ -72,8 +72,18 @@ python3 - \
   | docker exec -i supabase-db psql -U postgres -v ON_ERROR_STOP=1 -d postgres
 import sys
 
+import re
+
 def esc(value: str) -> str:
     return value.replace("'", "''")
+
+def qident(name: str) -> str:
+    # Postgres identifiers: quote and reject empty / NUL.
+    if not name or "\x00" in name:
+        raise SystemExit(f"invalid role name: {name!r}")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        raise SystemExit(f"invalid role name (use [A-Za-z_][A-Za-z0-9_]*): {name!r}")
+    return '"' + name.replace('"', '""') + '"'
 
 loader_u, loader_p, reader_u, reader_p, catalog_u, catalog_p, admin_u, admin_p = sys.argv[1:]
 roles = [
@@ -82,6 +92,7 @@ roles = [
     (catalog_u, catalog_p),
     (admin_u, admin_p),
 ]
+qi = {u: qident(u) for u, _ in roles}
 
 print("begin;")
 for user, pw in roles:
@@ -89,24 +100,24 @@ for user, pw in roles:
 do $$
 begin
   if not exists (select from pg_roles where rolname = '{esc(user)}') then
-    create role {user} login password '{esc(pw)}';
+    create role {qi[user]} login password '{esc(pw)}';
   else
-    alter role {user} with login password '{esc(pw)}';
+    alter role {qi[user]} with login password '{esc(pw)}';
   end if;
 end $$;
 """)
 
 print(f"""
-grant usage on schema public to {loader_u}, {reader_u}, {catalog_u};
-grant select, insert, update on table public.document_chunks to {loader_u};
-grant usage, select on sequence public.document_chunks_id_seq to {loader_u};
-grant select on table public.document_chunks to {reader_u}, {catalog_u};
-grant select on table public.profiles to {reader_u}, {catalog_u};
-grant all privileges on schema public to {admin_u};
-grant all privileges on all tables in schema public to {admin_u};
-grant all privileges on all sequences in schema public to {admin_u};
-alter default privileges in schema public grant all on tables to {admin_u};
-alter role {admin_u} bypassrls;
+grant usage on schema public to {qi[loader_u]}, {qi[reader_u]}, {qi[catalog_u]};
+grant select, insert, update on table public.document_chunks to {qi[loader_u]};
+grant usage, select on sequence public.document_chunks_id_seq to {qi[loader_u]};
+grant select on table public.document_chunks to {qi[reader_u]}, {qi[catalog_u]};
+grant select on table public.profiles to {qi[reader_u]}, {qi[catalog_u]};
+grant all privileges on schema public to {qi[admin_u]};
+grant all privileges on all tables in schema public to {qi[admin_u]};
+grant all privileges on all sequences in schema public to {qi[admin_u]};
+alter default privileges in schema public grant all on tables to {qi[admin_u]};
+alter role {qi[admin_u]} bypassrls;
 """)
 print("commit;")
 PY

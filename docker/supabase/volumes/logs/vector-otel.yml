@@ -5,9 +5,9 @@
 # Vector's opentelemetry sink with encoding.codec=otlp requires each event to
 # already carry top-level resourceLogs (protobuf ExportLogsServiceRequest shape).
 
+# No GraphQL/API listen — this shipper only needs docker_logs → OTLP.
 api:
-  enabled: true
-  address: 0.0.0.0:9001
+  enabled: false
 
 sources:
   docker_host:
@@ -34,8 +34,8 @@ transforms:
       studio: '.container_name == "supabase-studio"'
       meta: '.container_name == "supabase-meta"'
 
-  # Parsed GoTrue JSON keeps msg/path/status only (no actor email / auth_event).
-  # Non-JSON lines are redacted so raw payloads never hit the lake / OO.
+  # Parsed GoTrue JSON: level/path/status attrs only — never free-text msg/error
+  # (emails / tokens). Non-JSON lines are fully redacted.
   auth_logs:
     type: remap
     inputs:
@@ -50,13 +50,14 @@ transforms:
           .severity_text = "WARN"
         }
       } else {
-        .message = string(parsed.msg) ?? string(parsed.message) ?? "auth log"
+        # Never forward GoTrue free-text msg/error (emails / tokens). Keep
+        # level + path + status attrs only for lake / OO.
+        .message = "auth log"
         if parsed.level != null {
           .severity_text = upcase(string!(parsed.level))
         }
         if parsed.path != null { .supabase.path = string!(parsed.path) }
         if parsed.status != null { .supabase.status = to_string!(parsed.status) }
-        # Do not forward parsed.error — GoTrue often embeds emails there.
         if parsed.error != null {
           .supabase.error = "present"
         }
