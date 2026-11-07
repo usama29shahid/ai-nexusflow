@@ -42,8 +42,19 @@ services:
         condition: service_healthy
 
   # Do not publish Postgres; backup uses docker exec into supabase-db.
+  # Realtime is off in this slim stack, so raise above upstream's fatal-only
+  # floor so WARNING/ERROR reach Docker logs. Vector then drops LOG/STATEMENT
+  # noise before OTLP (see volumes/logs/vector-otel.yml).
   db:
     ports: !override []
+    command: !override
+      [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "log_min_messages=warning",
+      ]
 
   # Unused in this slice — keep defined but never start them from start.sh.
   realtime:

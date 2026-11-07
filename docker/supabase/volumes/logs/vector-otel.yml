@@ -1,5 +1,9 @@
-# Ship Supabase container logs to the Nexus OTel Collector (OpenObserve reader).
-# Replaces Logflare sinks from the upstream vector.yml.
+# Ship Supabase slim-stack container logs to the Nexus OTel Collector.
+# OpenObserve is a reader (via collector live forward + lake). Not Logflare.
+# Studio Query Performance / Connections stay in Studio (pg_stat_*).
+#
+# Vector's opentelemetry sink with encoding.codec=otlp requires each event to
+# already carry top-level resourceLogs (protobuf ExportLogsServiceRequest shape).
 
 api:
   enabled: true
@@ -18,35 +22,188 @@ sources:
       - supabase-meta
 
 transforms:
-  supabase_logs:
-    type: remap
+  route_by_container:
+    type: route
     inputs:
       - docker_host
+    route:
+      api_gw: '.container_name == "supabase-kong" || .container_name == "supabase-envoy"'
+      auth: '.container_name == "supabase-auth"'
+      rest: '.container_name == "supabase-rest"'
+      db: '.container_name == "supabase-db"'
+      studio: '.container_name == "supabase-studio"'
+      meta: '.container_name == "supabase-meta"'
+
+  # Parsed GoTrue JSON keeps msg/path/status only (no actor email / auth_event).
+  # Non-JSON lines are redacted so raw payloads never hit the lake / OO.
+  auth_logs:
+    type: remap
+    inputs:
+      - route_by_container.auth
     source: |-
-      .service.name = "supabase"
-      .service.namespace = "nexusflow"
-      .container_name = .container_name
-      .body = del(.message)
-      .severity = "info"
-      if includes(["stderr"], .stream) {
-        .severity = "warn"
+      .supabase.component = "auth"
+      msg = string!(.message)
+      parsed, err = parse_json(msg)
+      if err != null {
+        .message = "auth log (non-json redacted)"
+        if includes(["stderr"], .stream) {
+          .severity_text = "WARN"
+        }
+      } else {
+        .message = string(parsed.msg) ?? string(parsed.message) ?? "auth log"
+        if parsed.level != null {
+          .severity_text = upcase(string!(parsed.level))
+        }
+        if parsed.path != null { .supabase.path = string!(parsed.path) }
+        if parsed.status != null { .supabase.status = to_string!(parsed.status) }
+        if parsed.error != null { .supabase.error = string!(parsed.error) }
       }
-      del(.container_created_at)
-      del(.container_id)
-      del(.source_type)
-      del(.label)
-      del(.image)
-      del(.host)
+
+  # PostgREST: "07/Nov/2026:18:40:51 +0000: message" (colons inside the stamp).
+  rest_logs:
+    type: remap
+    inputs:
+      - route_by_container.rest
+    source: |-
+      .supabase.component = "rest"
+      msg = string!(.message)
+      parsed, err = parse_regex(msg, r'^(?P<time>\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}): (?P<body>.*)$')
+      if err == null {
+        .message = parsed.body
+        ts, ts_err = parse_timestamp(parsed.time, format: "%d/%b/%Y:%H:%M:%S %z")
+        if ts_err == null {
+          .timestamp = ts
+        }
+      }
+
+  api_gw_logs:
+    type: remap
+    inputs:
+      - route_by_container.api_gw
+    source: |-
+      .supabase.component = "api-gw"
+      msg = string!(.message)
+      req, err = parse_nginx_log(msg, "combined")
+      if err == null {
+        .supabase.status = to_string(req.status)
+
+        path_parts, split_err = split(req.request, " ")
+        if split_err == null && length(path_parts) >= 2 {
+          .supabase.method = path_parts[0]
+          .supabase.path = path_parts[1]
+        }
+      }
+
+  # Keep WARNING/ERROR/FATAL/PANIC only. Drop LOG (checkpoints), and drop
+  # STATEMENT/HINT/CONTEXT/DETAIL companions (full SQL / embeddings noise).
+  db_logs:
+    type: remap
+    inputs:
+      - route_by_container.db
+    drop_on_abort: true
+    source: |-
+      .supabase.component = "db"
+      msg = string!(.message)
+      if match(msg, r'(?i)\b(STATEMENT|HINT|CONTEXT|DETAIL):\s') {
+        abort
+      }
+      parsed, err = parse_regex(msg, r'(?P<level>WARNING|ERROR|FATAL|PANIC)')
+      if err != null || parsed.level == null {
+        abort
+      }
+      .severity_text = upcase(string!(parsed.level))
+
+  studio_logs:
+    type: remap
+    inputs:
+      - route_by_container.studio
+    source: |-
+      .supabase.component = "studio"
+
+  meta_logs:
+    type: remap
+    inputs:
+      - route_by_container.meta
+    source: |-
+      .supabase.component = "meta"
+
+  otlp_ready:
+    type: remap
+    inputs:
+      - auth_logs
+      - rest_logs
+      - api_gw_logs
+      - db_logs
+      - studio_logs
+      - meta_logs
+    source: |-
+      component = string!(.supabase.component)
+      container = string!(.container_name)
+      body_text = string(.message) ?? ""
+      severity_text = "INFO"
+      if .severity_text != null {
+        severity_text = string!(.severity_text)
+      } else if includes(["stderr"], .stream) {
+        severity_text = "WARN"
+      }
+
+      ts = now()
+      if is_timestamp(.timestamp) {
+        ts = .timestamp
+      }
+      nano = to_unix_timestamp!(ts, unit: "nanoseconds")
+
+      attrs = [
+        { "key": "supabase.component", "value": { "stringValue": component } },
+        { "key": "container.name", "value": { "stringValue": container } },
+      ]
+      if .supabase.path != null {
+        attrs = push(attrs, { "key": "supabase.path", "value": { "stringValue": string!(.supabase.path) } })
+      }
+      if .supabase.method != null {
+        attrs = push(attrs, { "key": "supabase.method", "value": { "stringValue": string!(.supabase.method) } })
+      }
+      if .supabase.status != null {
+        attrs = push(attrs, { "key": "supabase.status", "value": { "stringValue": string!(.supabase.status) } })
+      }
+      if .supabase.error != null {
+        attrs = push(attrs, { "key": "supabase.error", "value": { "stringValue": string!(.supabase.error) } })
+      }
+      if .stream != null {
+        attrs = push(attrs, { "key": "log.iostream", "value": { "stringValue": string!(.stream) } })
+      }
+
+      . = {
+        "resourceLogs": [{
+          "resource": {
+            "attributes": [
+              { "key": "service.name", "value": { "stringValue": "supabase" } },
+              { "key": "service.namespace", "value": { "stringValue": "nexusflow" } },
+              { "key": "supabase.component", "value": { "stringValue": component } }
+            ]
+          },
+          "scopeLogs": [{
+            "scope": {
+              "name": "nexusflow.supabase.vector"
+            },
+            "logRecords": [{
+              "timeUnixNano": nano,
+              "severityText": severity_text,
+              "body": { "stringValue": body_text },
+              "attributes": attrs
+            }]
+          }]
+        }]
+      }
 
 sinks:
   otlp_collector:
     type: opentelemetry
     inputs:
-      - supabase_logs
+      - otlp_ready
     protocol:
       type: http
       uri: http://otel-collector:4318/v1/logs
+      method: post
       encoding:
-        codec: json
-      framing:
-        method: newline_delimited
+        codec: otlp

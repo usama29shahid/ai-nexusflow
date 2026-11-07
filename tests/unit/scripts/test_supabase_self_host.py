@@ -51,6 +51,67 @@ class SupabaseSelfHostTest(unittest.TestCase):
         )
         self.assertEqual(ignored.returncode, 0, ignored.stderr)
 
+    def test_vector_otel_yml_otlp_and_filter_contracts(self) -> None:
+        """Catch regressions that previously broke lake/OO shipping (no Docker)."""
+        text = VECTOR_OTEL.read_text(encoding="utf-8")
+        self.assertIn("codec: otlp", text)
+        self.assertIn("resourceLogs", text)
+        self.assertIn('service.name', text)
+        self.assertIn("supabase.component", text)
+        # PostgREST stamp has colons inside the timestamp.
+        self.assertIn(
+            r"\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}",
+            text,
+        )
+        self.assertNotIn(r"(?P<time>[^:]+): (?P<body>.*)", text)
+        # DB: keep WARNING+ only; drop companions / LOG noise.
+        self.assertIn("STATEMENT|HINT|CONTEXT|DETAIL", text)
+        self.assertIn("WARNING|ERROR|FATAL|PANIC", text)
+        self.assertIn("drop_on_abort: true", text)
+        # Auth: never archive raw non-JSON GoTrue lines.
+        self.assertIn("auth log (non-json redacted)", text)
+        self.assertIn("parse_json(msg)", text)
+
+    def test_vector_otel_validate_via_docker_when_available(self) -> None:
+        """Optional: `vector validate` with docker.sock (skip if Docker missing)."""
+        if os.environ.get("SKIP_VECTOR_VALIDATE") == "1":
+            self.skipTest("SKIP_VECTOR_VALIDATE=1")
+        probe = subprocess.run(
+            ["docker", "info"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if probe.returncode != 0:
+            self.skipTest("docker not available")
+        sock = Path("/var/run/docker.sock")
+        if not sock.exists():
+            self.skipTest("docker.sock missing")
+        proc = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{VECTOR_OTEL}:/etc/vector/vector.yml:ro",
+                "-v",
+                f"{sock}:/var/run/docker.sock:ro",
+                "timberio/vector:0.53.0-alpine",
+                "validate",
+                "--config-yaml",
+                "/etc/vector/vector.yml",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        combined = proc.stdout + proc.stderr
+        self.assertEqual(proc.returncode, 0, combined)
+        self.assertNotIn("Configuration error", combined)
+        self.assertNotIn("Component errors", combined)
+
     def test_auth_health_failure_exits_before_migrate(self) -> None:
         text = START_SH.read_text(encoding="utf-8")
         fn = text[text.index("ensure_supabase()") : text.index("stop_supabase()")]

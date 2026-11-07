@@ -77,7 +77,16 @@ Connect as a process role with `psql -h 127.0.0.1`. The default local socket use
 
 ## Logs and backup
 
-Vector reads Docker logs for `supabase-kong`, `supabase-auth`, `supabase-rest`, `supabase-db`, `supabase-studio`, and `supabase-meta`, and posts them to `http://otel-collector:4318/v1/logs` with `service.name=supabase`. Config: `volumes/logs/vector-otel.yml`. OpenObserve reads them from the collector. Analytics / Logflare is not started.
+Two observability surfaces (do not merge them):
+
+| Surface | What | Where |
+| --- | --- | --- |
+| Studio **Query Performance** / **Database Connections** | Postgres stats (`pg_stat_statements`, sessions) | Studio only — works without Logflare |
+| Auth / API / PostgREST / DB **service logs** | Container stdout/stderr | OpenObserve via Vector → OTel Collector → MinIO `nexus-telemetry-{env}` |
+
+Vector tails `supabase-kong` / `supabase-envoy`, `supabase-auth`, `supabase-rest`, `supabase-db`, `supabase-studio`, and `supabase-meta`, tags `service.name=supabase` and `supabase.component` (`auth`, `api-gw`, `rest`, `db`, `studio`, `meta`), and posts OTLP/HTTP protobuf to `http://otel-collector:4318/v1/logs`. Config: `volumes/logs/vector-otel.yml`. OpenObserve dashboard: **Supabase logs** (`./scripts/openobserve-bootstrap.sh`). Analytics / Logflare stays off.
+
+**Coverage notes:** Auth signup/login and API gateway HTTP lines show as `auth` / `api-gw`. GoTrue JSON keeps `msg`/`path`/`status` only; non-JSON auth lines are redacted before OTLP. Table and RPC traffic (`profiles`, `document_chunks`, `match_document_chunks`) appear as gateway paths plus Postgres `ERROR`/`WARNING`/`FATAL`/`PANIC` on `db` when something fails. Vector drops Postgres `LOG` (checkpoints) and `STATEMENT`/`HINT`/`CONTEXT`/`DETAIL` companions so full SQL/embeddings are not archived. PostgREST itself rarely logs successful requests. pgvector is not a separate logger — extension/SQL issues show under `db`. Studio SQL timing stays on Query Performance, not in OpenObserve. Config check: `uv run python tests/unit/scripts/test_supabase_self_host.py`.
 
 ```bash
 ./scripts/backup-supabase.sh
