@@ -9,6 +9,7 @@ Buckets (for `NEXUS_ENV=dev`):
 - `nexus-dlt-dbt-spark-iceberg-dev` — Iceberg warehouse (Polaris catalog `nexus_dev`)
 - `nexus-airflow-logs-dev` — Airflow remote task logs (Phase 1)
 - `nexus-telemetry-dev` — observability data lake (Phase 1)
+- `nexus-supabase-dev` — Supabase Postgres dumps (local S3; `ops_backup_archive` mirrors to R2)
 
 Script: `create-buckets.sh` (mounted into the `minio-init` Compose service).
 

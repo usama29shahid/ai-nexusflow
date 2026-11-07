@@ -50,8 +50,9 @@ Collector OTLP forward uses the same password via `OPENOBSERVE_OTLP_BASIC_AUTH` 
 | `docker-container-metrics.json` | Docker Container Metrics (community) |
 | `airflow.json` | Airflow (community) |
 | `clickhouse-overview.json` | ClickHouse overview |
+| `supabase-logs.json` | Supabase slim-stack logs (`service_name=supabase`) — first-party |
 
-Community JSON is Apache-2.0 from [openobserve/dashboards](https://github.com/openobserve/dashboards). Retune PromQL stream names after the first live scrape if panels are empty.
+Rows marked (community) are Apache-2.0 from [openobserve/dashboards](https://github.com/openobserve/dashboards). Other JSON files (Route, Collector, Ingestion, Uptime, ClickHouse, Supabase) are first-party NexusFlow dashboards. Retune PromQL stream names after the first live scrape if panels are empty.
 
 ### Collector signals for Docker / ClickHouse / Airflow
 

@@ -111,6 +111,48 @@ def elt_backup_archive_command() -> str:
     )
 
 
+def elt_backup_supabase_command() -> str:
+    """BashOperator command: Supabase Postgres → MinIO via ``backup-supabase.sh``.
+
+    Nests Docker (``pg_dump`` / ``mc``) like archive backup: mount host
+    ``docker.sock`` into ``nexus-elt``. Requires ``supabase-db`` + MinIO and
+    ``MINIO_LOADER_*`` in ``airflow_elt.env``. Off-site R2 copy is
+    ``ops_backup_archive`` / ``backup-archive.sh``.
+    """
+    return (
+        "set -euo pipefail\n"
+        'image="${NEXUS_ELT_IMAGE:-nexus-elt:latest}"\n'
+        'network="${NEXUS_COMPOSE_NETWORK:-ai-nexusflow_default}"\n'
+        'repo="${NEXUS_REPO_ROOT:?Set NEXUS_REPO_ROOT to the host clone path}"\n'
+        'envfile="${NEXUS_AIRFLOW_ELT_ENV_PATH:-/opt/airflow/nexus_elt.env}"\n'
+        'sock="${DOCKER_SOCK:-/var/run/docker.sock}"\n'
+        'if [[ ! -f "${envfile}" ]]; then\n'
+        '  echo "Missing ELT env file (${envfile}). Run ./scripts/start.sh airflow" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        'if [[ ! -S "${sock}" ]]; then\n'
+        '  echo "Missing Docker socket (${sock}) for nested supabase backup containers" >&2\n'
+        "  exit 1\n"
+        "fi\n"
+        "docker run --rm \\\n"
+        '  --network "${network}" \\\n'
+        '  -v "${repo}:/workspace:rw" \\\n'
+        '  -v "${sock}:/var/run/docker.sock" \\\n'
+        "  -w /workspace \\\n"
+        '  --env-file "${envfile}" \\\n'
+        '  -e NEXUS_REPO_ROOT="${repo}" \\\n'
+        "  -e DOCKER_HOST=unix:///var/run/docker.sock \\\n"
+        "  -e NEXUS_ELT_JOB=1 \\\n"
+        "  -e NEXUS_RUN_ID='{{ run_id }}' \\\n"
+        "  -e NEXUS_DAG_ID='{{ dag.dag_id }}' \\\n"
+        "  -e NEXUS_TASK_ID='{{ task.task_id }}' \\\n"
+        "  -e PYTHONPATH=/workspace \\\n"
+        "  -e UV_PROJECT_ENVIRONMENT=/opt/nexus/.venv \\\n"
+        '  "${image}" \\\n'
+        "  bash -lc './scripts/backup-supabase.sh'\n"
+    )
+
+
 def elt_openmetadata_ingest_command() -> str:
     """BashOperator command: OM lake→catalog reader ingest (nests docker for ``metadata``).
 

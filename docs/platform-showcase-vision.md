@@ -11,7 +11,7 @@
 This document is a future reference for the LLM/RAG capability ([backlog.md](backlog.md) item **12**). It
 describes the intended logic for turning a natural-language ELT requirement
 into reviewed, validated, and executable artifacts, plus the information a
-future Streamlit portfolio/control dashboard may present (item **11**).
+future Streamlit portfolio/control dashboard may present (item **14**, after Supabase item **11**). Embeddings for RAG use Supabase pgvector. Qdrant is optional and is not required.
 
 This is a vision document, not an implementation specification. The existing
 architecture, branch, extraction, modeling, environment, observability, backlog, and

@@ -359,6 +359,17 @@ else
     secret_key="$(read_env_default NEXUS_BACKUP_SECRET_KEY "")"
 fi
 
+# Supabase paths are required by secrets.env.tpl. Missing paths fail the whole Agent render.
+# Empty API fields are filled again after ./scripts/start.sh supabase via supabase-vault-sync.sh.
+# shellcheck source=scripts/supabase-vault-seed.sh
+source "${ROOT}/scripts/supabase-vault-seed.sh"
+SUPABASE_VAULT_CHANGED=0
+seed_supabase_api
+seed_supabase_role "${kv_base}/supabase_loader" nexus_loader SUPABASE_LOADER_USER SUPABASE_LOADER_PASSWORD
+seed_supabase_role "${kv_base}/supabase_reader" nexus_reader SUPABASE_READER_USER SUPABASE_READER_PASSWORD
+seed_supabase_role "${kv_base}/supabase_catalog" nexus_catalog SUPABASE_CATALOG_USER SUPABASE_CATALOG_PASSWORD
+seed_supabase_role "${kv_base}/supabase_admin" nexus_admin SUPABASE_ADMIN_USER SUPABASE_ADMIN_PASSWORD
+
 echo "Starting Vault Agent (force-recreate so new template keys are rendered)..."
 # Template bind-mount updates (e.g. minio_platform_reader) need Agent recreate;
 # plain `up -d` leaves a stale secrets.env.

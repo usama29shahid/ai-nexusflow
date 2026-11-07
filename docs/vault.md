@@ -132,8 +132,15 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 | `openobserve` | `root_user_email`, `root_user_password` | `ZO_ROOT_USER_EMAIL`, `ZO_ROOT_USER_PASSWORD` | openobserve profile (item **2.1**) |
 | `openmetadata` | `admin_email`, `admin_password` | `OPENMETADATA_ADMIN_EMAIL`, `OPENMETADATA_ADMIN_PASSWORD` | openmetadata login / catalog ingest (item **3**) |
 | `clickhouse_catalog` | `username`, `password` | `CLICKHOUSE_CATALOG_USER`, `CLICKHOUSE_CATALOG_PASSWORD` | OpenMetadata ClickHouse connector (`nexus_catalog`) |
-| `backup` | `endpoint`, `access_key`, `secret_key` | `NEXUS_BACKUP_ENDPOINT`, `NEXUS_BACKUP_ACCESS_KEY`, `NEXUS_BACKUP_SECRET_KEY` | Optional R2/S3 archive mirror — [`./scripts/backup-archive.sh`](../scripts/backup-archive.sh) |
+| `backup` | `endpoint`, `access_key`, `secret_key` | `NEXUS_BACKUP_ENDPOINT`, `NEXUS_BACKUP_ACCESS_KEY`, `NEXUS_BACKUP_SECRET_KEY` | Optional R2/S3 mirror of MinIO archive + Supabase dump buckets — [`./scripts/backup-archive.sh`](../scripts/backup-archive.sh) |
+| `supabase` | `publishable_key`, `secret_key`, `anon_key`, `service_role_key`, `jwt_secret`, `postgres_password` | `SUPABASE_*` | Self-hosted Supabase API keys (item **11**) |
+| `supabase_loader` | `username`, `password` | `SUPABASE_LOADER_*` | Embedding ingest DB role |
+| `supabase_reader` | `username`, `password` | `SUPABASE_READER_*` | Server-side read DB role |
+| `supabase_catalog` | `username`, `password` | `SUPABASE_CATALOG_*` | OpenMetadata Postgres catalog (optional) |
+| `supabase_admin` | `username`, `password` | `SUPABASE_ADMIN_*` | Break-glass DDL (`BYPASSRLS`) |
 | *(future)* `route` | JWT / demo-user secrets when authenticated entities are implemented | TBD | dlt Route user entities — **not required for catalog-only** |
+
+`./scripts/vault-bootstrap.sh` creates the five `supabase*` paths when they are missing. API keys are copied from `.nexusflow/supabase.env`, and role passwords from `.nexusflow/supabase-rbac.env`, when those files already exist. If Vault is bootstrapped before the first Supabase start, those API fields may be empty until `./scripts/start.sh supabase` runs `./scripts/supabase-vault-sync.sh` (same fill rules: `vault kv patch` for empty fields only; existing Vault values win). A failed read of an existing secret stops the write. `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` stay empty until `utils/add-new-auth-keys.sh` writes them into `.nexusflow/supabase.env`.
 
 `jwt_secret` is required for Airflow 3. Existing Vault paths seeded before this field get it on `./scripts/start.sh airflow` (`vault-ensure.sh` `kv patch` + Agent recreate) or on `vault-bootstrap.sh`. Do not copy a WSL JWT onto the VPS.
 

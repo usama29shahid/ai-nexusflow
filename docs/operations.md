@@ -193,6 +193,8 @@ curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 | SigNoz | http://127.0.0.1:3301 |
 | OpenMetadata | http://127.0.0.1:8585 |
 | Cube playground | http://127.0.0.1:4000 (loopback; Caddy basic auth with the docs pages, backlog **9**) |
+| Supabase Studio | http://127.0.0.1:3001 (after `./scripts/start.sh supabase`) |
+| Supabase API | http://127.0.0.1:8000 (Kong; Auth + PostgREST) |
 | Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
 
 ### EC2 laptop SSH tunnels for UIs
@@ -207,10 +209,13 @@ Open tunnels from **either WSL Ubuntu or Windows PowerShell** (same `ssh -L` one
 # Vault 8200 | ClickHouse HTTP 8123 | CloudBeaver 8978
 # MinIO console 9001 | MinIO API 9002 | Airflow 8081
 # OpenObserve 5080 | OpenMetadata 8585 | Cube playground 4000
-ssh -L 8200:127.0.0.1:8200 -L 8123:127.0.0.1:8123 -L 8978:127.0.0.1:8978 -L 9001:127.0.0.1:9001 -L 9002:127.0.0.1:9002 -L 8081:127.0.0.1:8081 -L 5080:127.0.0.1:5080 -L 8585:127.0.0.1:8585 -L 4000:127.0.0.1:4000 nexus-ec2
+# Supabase Studio 3001 | Supabase API (Kong) 8000
+ssh -L 8200:127.0.0.1:8200 -L 8123:127.0.0.1:8123 -L 8978:127.0.0.1:8978 -L 9001:127.0.0.1:9001 -L 9002:127.0.0.1:9002 -L 8081:127.0.0.1:8081 -L 5080:127.0.0.1:5080 -L 8585:127.0.0.1:8585 -L 4000:127.0.0.1:4000 -L 3001:127.0.0.1:3001 -L 8000:127.0.0.1:8000 nexus-ec2
 ```
 
-Then in the browser open e.g. `http://127.0.0.1:8200` (Vault), `:8123` (ClickHouse), `:8978` (CloudBeaver), `:9001` / `:9002` (MinIO), `:8081` (Airflow), `:5080` (OpenObserve), `:8585` (OpenMetadata), `:4000` (Cube playground).
+Then in the browser open e.g. `http://127.0.0.1:8200` (Vault), `:8123` (ClickHouse), `:8978` (CloudBeaver), `:9001` / `:9002` (MinIO), `:8081` (Airflow), `:5080` (OpenObserve), `:8585` (OpenMetadata), `:4000` (Cube playground), `:3001` (Supabase Studio), `:8000` (Supabase API).
+
+Studio login uses `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` from `.nexusflow/supabase.env`. Vault does not render those two values.
 
 Add more `-L` lines when those profiles are up: SigNoz `3301`, OpenMetadata admin `8586`, ClickHouse native `9000`.
 
@@ -226,6 +231,8 @@ Optional: under your **existing** `Host nexus-ec2` in `~/.ssh/config` (WSL) or `
   LocalForward 5080 127.0.0.1:5080
   LocalForward 8585 127.0.0.1:8585
   LocalForward 4000 127.0.0.1:4000
+  LocalForward 3001 127.0.0.1:3001
+  LocalForward 8000 127.0.0.1:8000
   # When needed:
   # LocalForward 3301 127.0.0.1:3301
   # LocalForward 8586 127.0.0.1:8586
@@ -234,12 +241,12 @@ Optional: under your **existing** `Host nexus-ec2` in `~/.ssh/config` (WSL) or `
 
 #### Busy ports / `Address already in use`
 
-SSH can still log you into EC2 while **some** `-L` forwards fail. If you see `bind [127.0.0.1]:8081: Address already in use` (or `9001` / `5080` / `8585` / …), that UI tunnel is **not** active — usually an old `ssh nexus-ec2` in the **same** shell environment still holds the port.
+SSH can still log you into EC2 while **some** `-L` forwards fail. If you see `bind [127.0.0.1]:8081: Address already in use` (or `9001` / `5080` / `8585` / `3001` / `8000` / …), that UI tunnel is **not** active — usually an old `ssh nexus-ec2` in the **same** shell environment still holds the port.
 
 **WSL Ubuntu** (when you tunnel from WSL):
 
 ```bash
-ss -ltnp | grep -E ':(8200|8123|8978|9001|9002|8081|5080|8585|4000)\s'
+ss -ltnp | grep -E ':(8200|8123|8978|9001|9002|8081|5080|8585|4000|3001|8000)\s'
 pkill -f 'ssh .*nexus-ec2' || true
 # then re-run the ssh -L one-liner above
 ```
@@ -247,7 +254,7 @@ pkill -f 'ssh .*nexus-ec2' || true
 **Windows PowerShell** (when you tunnel from PowerShell):
 
 ```powershell
-netstat -ano | findstr ":8200 :8123 :8978 :9001 :9002 :8081 :5080 :8585 :4000"
+netstat -ano | findstr ":8200 :8123 :8978 :9001 :9002 :8081 :5080 :8585 :4000 :3001 :8000"
 
 # Close only nexus-ec2 tunnels (keeps other ssh sessions)
 Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" |
@@ -317,14 +324,37 @@ Plain `./scripts/setup.sh` / `uv sync` does **not** install `edr`. After enablin
 
 ---
 
+## Supabase backup (optional — Postgres → MinIO → R2)
+
+Logical dump of the self-hosted Supabase database (Auth users, profiles, embeddings).
+
+- **Local S3 (MinIO):** `nexus-supabase-{env}/dumps/YYYY/MM/DD/supabase-{timestamp}.dump` via `./scripts/backup-supabase.sh` or Airflow DAG `ops_backup_supabase`
+- **Remote S3 (R2):** same bucket name and keys via `./scripts/backup-archive.sh` / DAG `ops_backup_archive` (mirrors MinIO; does not dump Postgres itself)
+
+```bash
+./scripts/backup-supabase.sh
+# → MinIO nexus-supabase-{env}/dumps/YYYY/MM/DD/supabase-{timestamp}.dump
+./scripts/backup-archive.sh   # or wait for ops_backup_archive
+# → R2 nexus-supabase-{env}/… (same keys)
+```
+
+**Airflow (daily):** DAG `ops_backup_supabase` needs Airflow, `supabase-db`, MinIO, and `MINIO_LOADER_*` in `.nexusflow/airflow_elt.env`. Off-site copy waits for `ops_backup_archive` (or trigger it). Create R2 bucket **`nexus-supabase-{env}`** once and grant `NEXUS_BACKUP_*` Object Read & Write on it (same as archive buckets).
+
+Restore outline: prefer MinIO if the VPS is up; otherwise `mc cp` from R2 → `pg_restore` into `supabase-db` → `./scripts/supabase-rbac-bootstrap.sh`. Embeddings can be rebuilt from `docs/`; Auth users cannot.
+
+Start/stop: `./scripts/start.sh supabase` / `./scripts/start.sh stop-supabase`. Details: [docker/supabase/README.md](../docker/supabase/README.md).
+
+---
+
 ## Archive backup (optional — MinIO → R2)
 
-Secondary copy of **REST JSONL history** only. Same bucket names and object keys on Cloudflare R2 (or any S3-compatible endpoint). Not a backlog item; does not replace item **5** (Terraform).
+Secondary copy of selected MinIO buckets to Cloudflare R2 (or any S3-compatible endpoint). Same bucket names and object keys. Not a backlog item; does not replace item **5** (Terraform).
 
 | Copied | Not copied |
 | --- | --- |
 | `nexus-dlt-dbt-clickhouse-{env}` | ClickHouse volumes (rebuild via load + dbt) |
 | `nexus-dlt-dbt-spark-iceberg-archive-{env}` | Telemetry, Airflow logs, Iceberg warehouse, reader DBs |
+| `nexus-supabase-{env}` | Host `.nexusflow/` paths (dumps live in MinIO, not on disk) |
 
 **Config** — R2/S3 API keys in Vault KV `secret/nexusflow/{env}/backup` (Agent → `NEXUS_BACKUP_*`). Each machine’s Vault holds **that** host’s R2 URL/keys. See [vault.md](vault.md).
 
@@ -349,7 +379,7 @@ Remove real `NEXUS_BACKUP_*` from `.env` after the KV path is set (bootstrap onl
 
 Uses `mc mirror` **without** `--remove`, so R2 keeps objects even if they disappear from local MinIO.
 
-If the script fails with **Access Denied** on create: create both archive buckets in the **same** Cloudflare account as the token (exact names above), or use an R2 API token with **Admin Read & Write**. Object Read & Write is enough for mirror once buckets exist.
+If the script fails with **Access Denied** on create: create the listed buckets in the **same** Cloudflare account as the token (exact names above), or use an R2 API token with **Admin Read & Write**. Object Read & Write is enough for mirror once buckets exist.
 
 **Vault raft snapshots** (secrets themselves) stay a separate optional manual checklist — [vault.md](vault.md#backup-optional--good-to-have-not-required-for-local-day-to-day).
 
@@ -411,7 +441,8 @@ Stop OM only        →  ./scripts/start.sh stop-openmetadata
 Stop reader UIs     →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
-Archive → R2        →  ./scripts/backup-archive.sh  or Airflow DAG ops_backup_archive (daily)
+MinIO → R2          →  ./scripts/backup-archive.sh  or Airflow DAG ops_backup_archive (daily; archives + supabase)
+Supabase → MinIO    →  ./scripts/backup-supabase.sh or Airflow DAG ops_backup_supabase (daily)
 dlt smoke           →  ./scripts/start.sh smoke
 Airflow first time  →  orchestration/airflow/README.md (.env host path; once per machine)
 Airflow             →  ./scripts/start.sh airflow  (UI :8081; recreate if key/.env changed)

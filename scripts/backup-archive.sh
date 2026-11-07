@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mirror MinIO REST archive buckets to S3-compatible off-site storage (e.g. Cloudflare R2).
+# Mirror MinIO archive + Supabase dump buckets to S3-compatible off-site storage (e.g. Cloudflare R2).
 # Same bucket names and object keys as MinIO. Never uses --remove (R2 keeps history).
 #
 # Usage (from repo root; MinIO running; Vault Agent rendered for loader creds):
@@ -95,10 +95,12 @@ image="${MINIO_MC_IMAGE:-quay.io/minio/aistor/mc:RELEASE.2026-09-06T02-44-40Z}"
 
 warehouse_archive="nexus-dlt-dbt-clickhouse-${NEXUS_ENV}"
 lakehouse_archive="nexus-dlt-dbt-spark-iceberg-archive-${NEXUS_ENV}"
+supabase_dumps="nexus-supabase-${NEXUS_ENV}"
 
-echo "Backing up archive buckets to ${NEXUS_BACKUP_ENDPOINT} (NEXUS_ENV=${NEXUS_ENV})..."
+echo "Backing up MinIO buckets to ${NEXUS_BACKUP_ENDPOINT} (NEXUS_ENV=${NEXUS_ENV})..."
 echo "  - ${warehouse_archive}"
 echo "  - ${lakehouse_archive}"
+echo "  - ${supabase_dumps}"
 
 docker run --rm \
   --network "${network}" \
@@ -111,11 +113,12 @@ docker run --rm \
   -e NEXUS_ENV \
   -e warehouse_archive="${warehouse_archive}" \
   -e lakehouse_archive="${lakehouse_archive}" \
+  -e supabase_dumps="${supabase_dumps}" \
   "${image}" -c '
 set -eu
 mc alias set local http://minio:9000 "$MINIO_LOADER_USER" "$MINIO_LOADER_PASSWORD" >/dev/null
 mc alias set backup "$NEXUS_BACKUP_ENDPOINT" "$NEXUS_BACKUP_ACCESS_KEY" "$NEXUS_BACKUP_SECRET_KEY" >/dev/null
-for b in "$warehouse_archive" "$lakehouse_archive"; do
+for b in "$warehouse_archive" "$lakehouse_archive" "$supabase_dumps"; do
   # Object Read & Write tokens often cannot CreateBucket — create buckets in the
   # Cloudflare UI first, or use an Admin Read & Write R2 token.
   if ! mc mb --ignore-existing "backup/${b}" 2>/tmp/mb.err; then
@@ -128,6 +131,11 @@ for b in "$warehouse_archive" "$lakehouse_archive"; do
       cat /tmp/mb.err >&2 || true
       exit 1
     fi
+  fi
+  # Skip missing local buckets (e.g. supabase dump bucket before first dump).
+  if ! mc ls "local/${b}" >/dev/null 2>&1; then
+    echo "Skip mirror: MinIO bucket ${b} not present yet."
+    continue
   fi
   # No --remove: destination keeps objects that source no longer has.
   mc mirror --overwrite "local/${b}" "backup/${b}"

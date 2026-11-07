@@ -203,11 +203,12 @@ SigNoz, OpenObserve, and OpenMetadata Compose profiles exist locally. **Product 
 
 Local Terraform is backlog **5**; GitHub Actions / VPS / `prd` are backlog **10**. Lake writes via `common/observability` remain required whether or not those UIs are running. Pipeline code must not call those APIs. Order: [backlog.md](backlog.md).
 
-## App UI and agents (backlog 11–12)
+## App UI and agents (backlog 11, 13, 14, 12)
 
-- **Supabase** — user auth and session memory (not pipeline telemetry) — backlog **11**.
-- **Qdrant** — RAG over org standards in `docs/` (not pipeline telemetry) — backlog **12**.
-- **Streamlit** — summarizes lake `summaries/` and links to Airflow, OpenObserve, SigNoz, OpenMetadata, Elementary; does not replace them — backlog **11**.
+- **Supabase** — user auth, session, and pgvector for RAG (not pipeline telemetry) — backlog **11**. Container logs ship via Vector → OTel Collector → lake / OpenObserve (`service.name=supabase`, `supabase.component`). Auth free-text bodies are not forwarded (attrs only); Vector’s API listen is off. Studio Query Performance / Database Connections stay in Studio (`pg_stat_*`); Logflare is not started. OO dashboard: `docker/openobserve/dashboards/supabase-logs.json`.
+- **Superset** — BI dashboards on ClickHouse — backlog **13**.
+- **Streamlit** — login + planner UI; summarizes lake `summaries/` and links to Airflow, OpenObserve, SigNoz, OpenMetadata, Elementary — backlog **14** (after **11**).
+- **RAG / multi-agent** — backlog **12** (after **8**, **11**, **14**).
 
 Validation agents must reject generated pipelines that omit `common/observability` hooks or lake artifact upload.
 
@@ -216,7 +217,7 @@ Validation agents must reject generated pipelines that omit `common/observabilit
 ## Do not
 
 - Build a custom logging microservice or ops dashboard as the system of record.
-- Store pipeline telemetry only in Supabase, Qdrant, or ClickHouse ops tables.
+- Store pipeline telemetry only in Supabase pgvector, optional Qdrant, or ClickHouse ops tables.
 - Call SigNoz / OpenObserve / OpenMetadata / Elementary from dlt or dbt code.
 - Replace reader native DBs with MinIO-as-primary for those products.
 - Skip lake writes when an observability UI is up.

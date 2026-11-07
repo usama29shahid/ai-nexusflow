@@ -41,7 +41,7 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 # Profiles that map to execution branches (config/branches.yaml)
 BRANCH_PROFILES="clickhouse lakehouse"
 # Profiles for platform tooling (not a data branch)
-PLATFORM_PROFILES="vault airflow cloudbeaver cube signoz openobserve openmetadata proxy"
+PLATFORM_PROFILES="vault airflow cloudbeaver cube signoz openobserve openmetadata proxy supabase"
 
 usage() {
   cat <<'EOF'
@@ -50,7 +50,9 @@ Usage: ./scripts/start.sh [command]
 Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-independent):
 
   (no args)     Load secrets → Vault if needed → MinIO + OTel + COMPOSE_PROFILES stacks
-  all           Start every stack (both branches + cloudbeaver + airflow + vault)
+                (supabase in COMPOSE_PROFILES starts the separate Supabase stack)
+  all           Start both branches + cloudbeaver + airflow (not supabase/readers;
+                add supabase to COMPOSE_PROFILES or run: ./scripts/start.sh supabase)
   down          Stop all stacks (including vault + airflow; avoids network-in-use)
   minio         Start MinIO + OTel Collector only (always-on shared infra)
   vault         Start + bootstrap HashiCorp Vault (platform; secrets)
@@ -60,6 +62,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   signoz        Start SigNoz reader profile (trace UI)
   openobserve   Start OpenObserve reader (backlog 2.1; primary UI under test)
   openmetadata  Start OpenMetadata reader profile (data catalog)
+  supabase      Start self-hosted Supabase (auth + pgvector; backlog 11)
   observability Start shared infra + SigNoz + OpenObserve + OpenMetadata
   observability-smoke  Run scripts/observability-smoke.sh
   verify        Host health check (PASS/FAIL/SKIP). Does not start or repair services.
@@ -67,6 +70,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   stop-openobserve   Stop OpenObserve; re-sync OTel exporters
   stop-openmetadata  Stop OpenMetadata reader
   stop-observability Stop SigNoz + OpenObserve + OpenMetadata readers
+  stop-supabase      Stop Supabase slim stack
 
 App (secrets loaded):
 
@@ -446,6 +450,81 @@ ensure_openobserve() {
   echo "Lake replay: ./scripts/observability-ingest.sh openobserve"
 }
 
+ensure_supabase() {
+  echo "Starting self-hosted Supabase (slim: db auth rest kong meta studio vector)..."
+  chmod +x "${ROOT}/scripts/supabase-ensure-env.sh" "${ROOT}/scripts/supabase-compose.sh" \
+    "${ROOT}/scripts/supabase-migrate.sh" "${ROOT}/scripts/supabase-rbac-bootstrap.sh" \
+    "${ROOT}/scripts/supabase-vault-sync.sh" "${ROOT}/scripts/backup-supabase.sh" 2>/dev/null || true
+  # shellcheck source=scripts/supabase-ensure-env.sh
+  "${ROOT}/scripts/supabase-ensure-env.sh"
+  # shellcheck source=scripts/supabase-compose.sh
+  source "${ROOT}/scripts/supabase-compose.sh"
+  # Ensure shared Compose network exists (MinIO/OTel create it on first up).
+  ensure_shared_infra
+  supabase_compose up -d "${supabase_slim_services[@]}"
+  echo "Waiting for supabase-db..."
+  for _ in $(seq 1 60); do
+    if docker exec supabase-db pg_isready -U postgres -h localhost >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+  if ! docker exec supabase-db pg_isready -U postgres -h localhost >/dev/null 2>&1; then
+    echo "supabase-db did not become ready." >&2
+    exit 1
+  fi
+  local api_ready=0
+  local api_port="${KONG_HTTP_PORT:-8000}"
+  local health_url="http://127.0.0.1:${api_port}/auth/v1/health"
+  echo "Waiting for API gateway on 127.0.0.1:${api_port}..."
+  for _ in $(seq 1 60); do
+    if curl -sf -o /dev/null "${health_url}" 2>/dev/null; then
+      api_ready=1
+      break
+    fi
+    # Prefer curl -K so ANON_KEY is not visible on the process cmdline.
+    local anon_key curl_cfg
+    anon_key="$(grep -E '^ANON_KEY=' "${ROOT}/.nexusflow/supabase.env" | head -1 | cut -d= -f2-)"
+    if [[ -n "${anon_key}" ]]; then
+      curl_cfg="$(mktemp)"
+      # shellcheck disable=SC2064
+      trap 'rm -f "${curl_cfg}"' EXIT RETURN
+      printf 'header = "apikey: %s"\n' "${anon_key}" >"${curl_cfg}"
+      chmod 600 "${curl_cfg}"
+      if curl -sf -o /dev/null -K "${curl_cfg}" "${health_url}" 2>/dev/null; then
+        rm -f "${curl_cfg}"
+        trap - EXIT RETURN
+        api_ready=1
+        break
+      fi
+      rm -f "${curl_cfg}"
+      trap - EXIT RETURN
+    fi
+    sleep 2
+  done
+  if [[ "${api_ready}" != "1" ]]; then
+    echo "Supabase API gateway did not become healthy on 127.0.0.1:${api_port}." >&2
+    exit 1
+  fi
+  "${ROOT}/scripts/supabase-migrate.sh"
+  "${ROOT}/scripts/supabase-rbac-bootstrap.sh"
+  # Fill empty Vault supabase* keys now that supabase.env / rbac env exist.
+  # Script exits 0 when Vault is absent (skip); non-zero on real sync failure.
+  "${ROOT}/scripts/supabase-vault-sync.sh"
+  echo "Supabase API:    http://127.0.0.1:${KONG_HTTP_PORT:-8000}"
+  echo "Supabase Studio: http://127.0.0.1:${STUDIO_PORT:-3001}"
+  echo "Backup:          ./scripts/backup-supabase.sh → MinIO nexus-supabase-\${NEXUS_ENV}; R2 via ops_backup_archive"
+}
+
+stop_supabase() {
+  echo "Stopping Supabase..."
+  if [[ -f "${ROOT}/.nexusflow/supabase.env" ]]; then
+    # shellcheck source=scripts/supabase-compose.sh
+    source "${ROOT}/scripts/supabase-compose.sh"
+    supabase_compose down || true
+  fi
+}
+
 ensure_openmetadata() {
   echo "Starting OpenMetadata reader (profile openmetadata; backlog 3)..."
   # shellcheck source=scripts/openmetadata-credentials.sh
@@ -504,13 +583,19 @@ ensure_observability_readers() {
 # Vault is never required in COMPOSE_PROFILES; it is handled by ensure_vault.
 start_profiles() {
   local profiles="${COMPOSE_PROFILES}"
-  # Drop vault from COMPOSE_PROFILES if someone listed it — start via ensure_vault instead.
+  # vault and supabase are not root Compose profiles.
+  # vault starts via ensure_vault; supabase via ensure_supabase.
   local cleaned=""
+  local start_supabase=0
   local p
   IFS=',' read -ra _parts <<< "${profiles}"
   for p in "${_parts[@]}"; do
     p="$(echo "${p}" | xargs)"
     [[ -z "${p}" || "${p}" == "vault" ]] && continue
+    if [[ "${p}" == "supabase" ]]; then
+      start_supabase=1
+      continue
+    fi
     if [[ -n "${cleaned}" ]]; then
       cleaned="${cleaned},${p}"
     else
@@ -521,7 +606,7 @@ start_profiles() {
 
   echo "Branch / optional profiles: COMPOSE_PROFILES=${COMPOSE_PROFILES:-"(none — shared infra only)"}"
   echo "  Branch stacks:   clickhouse | lakehouse"
-  echo "  Platform (opt.): airflow | cloudbeaver | cube | signoz | openobserve | openmetadata | vault via NEXUS_SECRETS_BACKEND"
+  echo "  Platform (opt.): airflow | cloudbeaver | cube | signoz | openobserve | openmetadata | supabase | vault via NEXUS_SECRETS_BACKEND"
   echo "  Always:          MinIO, otel-collector"
 
   # Always bring shared infra up first (explicit; not only via compose no-profile side effect).
@@ -548,10 +633,22 @@ start_profiles() {
   if [[ ",${COMPOSE_PROFILES}," == *",proxy,"* ]]; then
     ensure_proxy
   fi
+
+  # Separate compose project (docker/supabase). Honors COMPOSE_PROFILES=...,supabase
+  if [[ "${start_supabase}" == "1" ]]; then
+    ensure_supabase
+    # Root Compose must not see this name. Put it back so the Ready line matches what started.
+    if [[ -n "${COMPOSE_PROFILES}" ]]; then
+      export COMPOSE_PROFILES="${COMPOSE_PROFILES},supabase"
+    else
+      export COMPOSE_PROFILES="supabase"
+    fi
+  fi
 }
 
 stop_all() {
   echo "Stopping all stacks (branch + platform + vault)..."
+  stop_supabase || true
   # Every profile must be enabled on down — otherwise Compose leaves profiled services running.
   COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,cube,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy \
     docker compose \
@@ -658,6 +755,20 @@ case "${cmd}" in
     echo "  Login: ${OPENMETADATA_ADMIN_EMAIL:-admin@open-metadata.org}"
     echo "  Catalog: ./scripts/observability-ingest.sh openmetadata"
     ;;
+  supabase)
+    load_env_and_secrets
+    ensure_supabase
+    avail="$(free -b | awk '/Mem:/{print $7}')"
+    echo "Host available RAM after start: $(free -h | awk '/Mem:/{print $7}')"
+    if [[ "${avail}" -lt $((2 * 1024 * 1024 * 1024)) ]]; then
+      echo "WARNING: available memory is under 2 GiB. Consider ./scripts/start.sh stop-supabase" >&2
+    fi
+    ;;
+  stop-supabase)
+    load_env
+    stop_supabase
+    echo "Supabase stopped."
+    ;;
   observability)
     load_env_and_secrets
     ensure_observability_readers
@@ -703,9 +814,10 @@ case "${cmd}" in
     start_profiles
     maybe_lakehouse_restore
     echo
-    echo "Ready (all stacks)."
+    echo "Ready (branch stacks + cloudbeaver + airflow)."
     echo "  Profiles: ${COMPOSE_PROFILES} (+ MinIO + OTel always)"
     echo "  Secrets:  NEXUS_SECRETS_BACKEND=${NEXUS_SECRETS_BACKEND:-vault}"
+    echo "  Supabase / readers: add to COMPOSE_PROFILES, or ./scripts/start.sh supabase|openobserve|…"
     echo "  Next:     ./scripts/start.sh smoke"
     echo "            ./scripts/start.sh dbt debug --project-dir branches/dlt_dbt_clickhouse"
     ;;

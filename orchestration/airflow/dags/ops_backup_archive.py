@@ -12,14 +12,15 @@ from nexus_elt_exec import elt_backup_archive_command
 with DAG(
     dag_id="ops_backup_archive",
     description=(
-        "Mirror MinIO REST archive buckets to Cloudflare R2 "
-        "(same names/keys; no --remove). Requires Vault backup KV + MinIO up."
+        "Mirror MinIO warehouse/lakehouse archive + Supabase dump buckets "
+        "to Cloudflare R2 (same names/keys; no --remove). "
+        "Requires Vault backup KV + MinIO up."
     ),
     start_date=datetime(2024, 1, 1),
     schedule=timedelta(days=1),
     catchup=False,
     max_active_runs=1,
-    tags=["ops", "backup", "minio", "r2"],
+    tags=["ops", "backup", "minio", "r2", "supabase"],
 ) as dag:
     BashOperator(
         task_id="backup_archive",

@@ -1,0 +1,89 @@
+# NexusFlow overlay for self-hosted Supabase (profile via start.sh, not root Compose profiles).
+#
+# Start:
+#   ./scripts/start.sh supabase
+#
+# Slim stack: db + auth + rest + Kong API gateway + meta + studio.
+# Skipped (plan): realtime, storage, imgproxy, edge functions, pooler, Logflare analytics.
+# Logs: Vector → OTel Collector (OpenObserve reader), not Logflare.
+#
+# Ports bind to loopback only. Containers join ai-nexusflow_default for otel-collector.
+
+name: nexus-supabase
+
+networks:
+  default:
+    name: ai-nexusflow_default
+    external: true
+
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:${API_GW_HTTP_PORT:-${KONG_HTTP_PORT:-8000}}:8000/tcp"
+    depends_on: !override
+      auth:
+        condition: service_healthy
+      rest:
+        condition: service_started
+      meta:
+        condition: service_started
+      studio:
+        condition: service_started
+
+  studio:
+    ports:
+      - "127.0.0.1:${STUDIO_PORT:-3001}:3000"
+    environment:
+      ENABLED_FEATURES_LOGS_ALL: "false"
+    depends_on: !override
+      meta:
+        condition: service_started
+      db:
+        condition: service_healthy
+
+  # Do not publish Postgres; backup uses docker exec into supabase-db.
+  # Realtime is off in this slim stack, so raise above upstream's fatal-only
+  # floor so WARNING/ERROR reach Docker logs. Vector then drops LOG/STATEMENT
+  # noise before OTLP (see volumes/logs/vector-otel.yml).
+  db:
+    ports: !override []
+    command: !override
+      [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "log_min_messages=warning",
+      ]
+
+  # Unused in this slice — keep defined but never start them from start.sh.
+  realtime:
+    profiles: [supabase-full]
+  storage:
+    profiles: [supabase-full]
+  imgproxy:
+    profiles: [supabase-full]
+  functions:
+    profiles: [supabase-full]
+  supavisor:
+    profiles: [supabase-full]
+    ports: !override []
+
+  # Log shipper → existing OTel Collector (no Analytics/Logflare).
+  # docker.sock is required for type=docker_logs; mount is read-only. Do not
+  # publish Vector's API port; keep this container on the Compose network only.
+  vector:
+    container_name: supabase-vector
+    image: timberio/vector:0.53.0-alpine
+    restart: unless-stopped
+    volumes:
+      - ./volumes/logs/vector-otel.yml:/etc/vector/vector.yml:ro,z
+      - ${DOCKER_SOCKET_LOCATION:-/var/run/docker.sock}:/var/run/docker.sock:ro,z
+    depends_on:
+      db:
+        condition: service_healthy
+      api-gw:
+        condition: service_started
+    command: ["--config", "/etc/vector/vector.yml"]
+    security_opt:
+      - "label:disable"

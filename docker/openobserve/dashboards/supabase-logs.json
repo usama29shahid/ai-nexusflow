@@ -1,0 +1,275 @@
+{
+  "version": 5,
+  "title": "Supabase logs",
+  "description": "Slim-stack container logs (service_name=supabase). Studio Query Performance stays in Studio. Logflare is not used.",
+  "role": "",
+  "owner": "nexusflow",
+  "created": "2026-11-07T00:00:00Z",
+  "tabs": [
+    {
+      "tabId": "default",
+      "name": "Default",
+      "panels": [
+        {
+          "id": "supabase_volume",
+          "type": "line",
+          "title": "Log volume",
+          "description": "All Supabase Vector → OTel lines.",
+          "config": {
+            "show_legends": true,
+            "unit": "numbers",
+            "decimals": 0,
+            "line_thickness": 1.5,
+            "show_symbol": false,
+            "line_interpolation": "smooth",
+            "connect_nulls": true,
+            "color": {
+              "mode": "palette-classic-by-series",
+              "fixedColor": ["#53ca53"],
+              "seriesBy": "last"
+            }
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT histogram(_timestamp) AS x_axis_1, count(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'supabase' GROUP BY x_axis_1 ORDER BY x_axis_1",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "Timestamp",
+                    "alias": "x_axis_1",
+                    "column": "_timestamp"
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "Count",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "aggregationFunction": "count"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "logs",
+                "limit": 0,
+                "min": 0,
+                "max": 100,
+                "time_shift": []
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 8,
+            "i": 1,
+            "moved": false
+          },
+          "htmlContent": "",
+          "markdownContent": ""
+        },
+        {
+          "id": "supabase_by_component",
+          "type": "bar",
+          "title": "By component",
+          "description": "auth / api-gw / rest / db / studio / meta",
+          "config": {
+            "show_legends": true,
+            "unit": "numbers",
+            "decimals": 0,
+            "color": {
+              "mode": "palette-classic-by-series",
+              "fixedColor": ["#53ca53"],
+              "seriesBy": "last"
+            }
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT supabase_component AS x_axis_1, count(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'supabase' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "Component",
+                    "alias": "x_axis_1",
+                    "column": "supabase_component"
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "Count",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "aggregationFunction": "count"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "component",
+                "limit": 0,
+                "min": 0,
+                "max": 100,
+                "time_shift": []
+              }
+            }
+          ],
+          "layout": {
+            "x": 12,
+            "y": 0,
+            "w": 12,
+            "h": 8,
+            "i": 2,
+            "moved": false
+          },
+          "htmlContent": "",
+          "markdownContent": ""
+        },
+        {
+          "id": "supabase_errors",
+          "type": "line",
+          "title": "Errors and warnings",
+          "description": "severity WARN/ERROR/FATAL/PANIC",
+          "config": {
+            "show_legends": true,
+            "unit": "numbers",
+            "decimals": 0,
+            "line_thickness": 1.5,
+            "show_symbol": true,
+            "line_interpolation": "smooth",
+            "connect_nulls": true,
+            "color": {
+              "mode": "palette-classic-by-series",
+              "fixedColor": ["#e24d42"],
+              "seriesBy": "last"
+            }
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT histogram(_timestamp) AS x_axis_1, count(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'supabase' AND severity IN ('WARN', 'WARNING', 'ERROR', 'FATAL', 'PANIC') GROUP BY x_axis_1 ORDER BY x_axis_1",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "logs",
+                "x": [
+                  {
+                    "label": "Timestamp",
+                    "alias": "x_axis_1",
+                    "column": "_timestamp"
+                  }
+                ],
+                "y": [
+                  {
+                    "label": "Count",
+                    "alias": "y_axis_1",
+                    "column": "_timestamp",
+                    "aggregationFunction": "count"
+                  }
+                ],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "errors",
+                "limit": 0,
+                "min": 0,
+                "max": 100,
+                "time_shift": []
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 8,
+            "w": 24,
+            "h": 8,
+            "i": 3,
+            "moved": false
+          },
+          "htmlContent": "",
+          "markdownContent": ""
+        },
+        {
+          "id": "supabase_recent",
+          "type": "table",
+          "title": "Recent lines",
+          "description": "Latest Supabase log bodies",
+          "config": {
+            "show_legends": false,
+            "wrap_table_cells": true,
+            "table_transpose": false,
+            "table_dynamic_columns": false
+          },
+          "queryType": "sql",
+          "queries": [
+            {
+              "query": "SELECT _timestamp, supabase_component, severity, container_name, body FROM \"default\" WHERE service_name = 'supabase' ORDER BY _timestamp DESC LIMIT 50",
+              "vrlFunctionQuery": "",
+              "customQuery": true,
+              "fields": {
+                "stream": "default",
+                "stream_type": "logs",
+                "x": [],
+                "y": [],
+                "z": [],
+                "breakdown": [],
+                "filter": {
+                  "filterType": "group",
+                  "logicalOperator": "AND",
+                  "conditions": []
+                }
+              },
+              "config": {
+                "promql_legend": "",
+                "limit": 0,
+                "min": 0,
+                "max": 100,
+                "time_shift": []
+              }
+            }
+          ],
+          "layout": {
+            "x": 0,
+            "y": 16,
+            "w": 24,
+            "h": 12,
+            "i": 4,
+            "moved": false
+          },
+          "htmlContent": "",
+          "markdownContent": ""
+        }
+      ]
+    }
+  ]
+}
