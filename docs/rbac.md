@@ -29,9 +29,9 @@ dlt and dbt do **not** switch roles at runtime. Each process connects as a **dif
 | Surface | Credential |
 | --- | --- |
 | ClickHouse | `nexus_loader` / `nexus_transformer` / `nexus_reader` / `nexus_catalog` / `nexus_admin` |
-| MinIO data plane (all five buckets) | `nexus_loader` (process write) |
+| MinIO data plane (six buckets; see MinIO users) | `nexus_loader` (process write) |
 | MinIO lake replay | `nexus_reader` (telemetry + index markers) |
-| MinIO demo / share (all buckets read-only) | `nexus_platform_reader` |
+| MinIO demo / share (five buckets read-only; no Supabase dumps) | `nexus_platform_reader` |
 | MinIO break-glass | `nexus_admin` |
 | MinIO server + bucket create | Root (`MINIO_ROOT_*`) only |
 | dlt | CH **loader** + MinIO **loader** |
@@ -55,8 +55,8 @@ Industry practice for this platform: **least-privilege process identities**, **s
 | Choice | Why |
 | --- | --- |
 | Same names as ClickHouse (`nexus_loader` / `nexus_reader` / `nexus_admin`) | One mental model; different Vault secrets so a leaked MinIO password does not open ClickHouse |
-| One loader spanning all five data buckets | Warehouse + lakehouse + telemetry + Airflow logs are the platform write plane. Per-bucket users stay out until a real isolation requirement appears |
-| `nexus_platform_reader` | Safe default to share for “see all buckets, cannot change anything” |
+| One loader spanning six data buckets | Warehouse + lakehouse + telemetry + Airflow logs + Supabase dumps are the platform write plane. Per-bucket users stay out until a real isolation requirement appears |
+| `nexus_platform_reader` | Safe default to share for “see warehouse/lake/telemetry/logs, cannot change anything.” Does **not** include `nexus-supabase-{env}` (Auth dumps) |
 | `nexus_reader` | Process identity for lake-replay scripts (must write index markers) |
 | Admin / root in app code | Out — would make IAM policies documentation-only |
 
@@ -64,9 +64,9 @@ Industry practice for this platform: **least-privilege process identities**, **s
 
 | Goal | Share |
 | --- | --- |
-| See all buckets, read-only | `nexus_platform_reader` |
+| See archive / telemetry / Airflow logs / Iceberg, read-only | `nexus_platform_reader` |
 | Telemetry / lake-replay style look | `nexus_reader` (narrower; can write index markers) |
-| Ops emergency | `nexus_admin` (can write; rotate after) |
+| Ops emergency (includes Supabase dump bucket) | `nexus_admin` (can write; rotate after) |
 | Never share | `nexus_loader`, root |
 
 Durable users are named roles in bootstrap + Vault. Do not create undocumented one-off MinIO users for demos.
@@ -97,18 +97,20 @@ ops  →  nexus_admin        →  break-glass
 
 | User | Process / use | Privileges (intent) |
 | --- | --- | --- |
-| `nexus_loader` | dlt archive, observability lake writes, OTel `awss3`, Airflow logs, Polaris/Spark/Trino S3 | Put/Get/List/multipart on all five buckets; Delete on Iceberg warehouse only; Deny Delete on warehouse archive, telemetry, Iceberg archive |
+| `nexus_loader` | dlt archive, Supabase dumps, observability lake writes, OTel `awss3`, Airflow logs, Polaris/Spark/Trino S3 | Put/Get/List/multipart on all six buckets; Delete on Iceberg warehouse only; Deny Delete on warehouse archive, telemetry, Supabase dumps, Iceberg archive |
 | `nexus_reader` | Lake-replay ingest scripts | Get/List telemetry; Put (and OpenObserve Delete) under `indexes/{signoz,openobserve,openmetadata}/` |
-| `nexus_platform_reader` | Demo / share | Get/List on all five buckets; no writes |
-| `nexus_admin` | Break-glass | Full object access on all five buckets |
+| `nexus_platform_reader` | Demo / share | Get/List on five buckets (archives, Iceberg, telemetry, Airflow logs); **no** `nexus-supabase-{env}`; no writes |
+| `nexus_admin` | Break-glass | Full object access on all six buckets |
 | root | Server + `minio-init` + IAM bootstrap | Create buckets and users |
 
+Six MinIO buckets (`{env}` = `NEXUS_ENV`): `nexus-dlt-dbt-clickhouse-{env}`, `nexus-dlt-dbt-spark-iceberg-archive-{env}`, `nexus-dlt-dbt-spark-iceberg-{env}`, `nexus-airflow-logs-{env}`, `nexus-telemetry-{env}`, `nexus-supabase-{env}`.
+
 ```text
-dlt / OTel / Airflow / Polaris / Spark / Trino  →  nexus_loader
-lake replay scripts                             →  nexus_reader
-demo share (all buckets read-only)              →  nexus_platform_reader
-ops break-glass                                 →  nexus_admin
-server + bucket create                          →  MINIO_ROOT_*
+dlt / Supabase dump / OTel / Airflow / Polaris / Spark / Trino  →  nexus_loader
+lake replay scripts                                             →  nexus_reader
+demo share (no Supabase dump bucket)                            →  nexus_platform_reader
+ops break-glass                                                 →  nexus_admin
+server + bucket create                                          →  MINIO_ROOT_*
 ```
 
 ---
@@ -144,9 +146,9 @@ Keep existing `clickhouse` and `minio` secrets for Compose/bootstrap as needed.
 
 | Surface | Credential |
 | --- | --- |
-| MinIO archive + telemetry + Airflow logs + Iceberg S3 | `nexus_loader` |
+| MinIO archive + Supabase dumps + telemetry + Airflow logs + Iceberg S3 | `nexus_loader` |
 | Lake-replay scripts | `nexus_reader` (telemetry + index markers) |
-| Demo share all buckets | `nexus_platform_reader` |
+| Demo share (no Supabase dump bucket) | `nexus_platform_reader` |
 | Elementary models in ClickHouse | `nexus_transformer` (dbt) |
 | OTLP / lake JSON events | `common/observability` + Collector — no direct SigNoz/OM API calls |
 | SigNoz / OpenObserve / OpenMetadata / Elementary **UI** | Product setup: backlog items **2–3** done / **9** for docs auth; artifact/OTLP producers already live with `products` |
@@ -167,7 +169,7 @@ Compatible: one codebase; `NEXUS_ENV` selects `bronze_{env}` / `silver_{env}`. T
 
 | Status | Item |
 | --- | --- |
-| Done (dev) | ClickHouse CREATE USER/GRANT; MinIO IAM (loader / reader / platform_reader / admin); Vault siblings; dlt + lakehouse S3 + OTel + Airflow logs = `nexus_loader`; lake replay = `nexus_reader`; demo share = `nexus_platform_reader` |
+| Done (dev) | ClickHouse CREATE USER/GRANT; MinIO IAM (loader / reader / platform_reader / admin); Vault siblings; dlt + Supabase dumps + lakehouse S3 + OTel + Airflow logs = `nexus_loader`; lake replay = `nexus_reader`; demo share = `nexus_platform_reader` (excludes `nexus-supabase-{env}`) |
 | Canonical | This document; ClickHouse record [bronze-silver-cutover.md](bronze-silver-cutover.md) |
 | Scheduled | Polaris/Trino **catalog** RBAC — backlog **6**. Log expiry (MinIO ILM) — later |
 | Out of scope | SSO/masking; per-bucket user matrix unless required |

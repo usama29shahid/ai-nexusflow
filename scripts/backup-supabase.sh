@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# pg_dump Supabase Postgres → local .nexusflow/backups/supabase/ → R2 bucket nexus-supabase-{env}.
-# Uses the same Vault backup keys as ./scripts/backup-archive.sh (NEXUS_BACKUP_*).
+# pg_dump Supabase Postgres → MinIO bucket nexus-supabase-{env} (local S3).
+# Off-site R2 copy is ./scripts/backup-archive.sh / Airflow DAG ops_backup_archive.
+#
+# Airflow runs this inside nexus-elt with host docker.sock. Capture injected
+# MINIO_LOADER_* before sourcing .env. Nested docker -v uses NEXUS_REPO_ROOT
+# (host path) for the temp dump file.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
+
+_pre_loader_user="${MINIO_LOADER_USER:-}"
+_pre_loader_password="${MINIO_LOADER_PASSWORD:-}"
 
 if [[ -f "${ROOT}/.env" ]]; then
   set -a
@@ -13,79 +20,109 @@ if [[ -f "${ROOT}/.env" ]]; then
   set +a
 fi
 
-_pre_backup_endpoint="${NEXUS_BACKUP_ENDPOINT:-}"
-_pre_backup_access="${NEXUS_BACKUP_ACCESS_KEY:-}"
-_pre_backup_secret="${NEXUS_BACKUP_SECRET_KEY:-}"
+[[ -n "${_pre_loader_user}" ]] && MINIO_LOADER_USER="${_pre_loader_user}"
+[[ -n "${_pre_loader_password}" ]] && MINIO_LOADER_PASSWORD="${_pre_loader_password}"
 
-if [[ -z "${NEXUS_BACKUP_ENDPOINT:-}" || -z "${NEXUS_BACKUP_ACCESS_KEY:-}" || -z "${NEXUS_BACKUP_SECRET_KEY:-}" ]]; then
+if [[ -z "${MINIO_LOADER_USER:-}" || -z "${MINIO_LOADER_PASSWORD:-}" ]]; then
   set -a
   # shellcheck source=scripts/load-secrets.sh
   source "${ROOT}/scripts/load-secrets.sh"
   set +a
 fi
-[[ -n "${_pre_backup_endpoint}" ]] && NEXUS_BACKUP_ENDPOINT="${_pre_backup_endpoint}"
-[[ -n "${_pre_backup_access}" ]] && NEXUS_BACKUP_ACCESS_KEY="${_pre_backup_access}"
-[[ -n "${_pre_backup_secret}" ]] && NEXUS_BACKUP_SECRET_KEY="${_pre_backup_secret}"
 
 NEXUS_ENV="${NEXUS_ENV:-dev}"
-NEXUS_BACKUP_ENDPOINT="${NEXUS_BACKUP_ENDPOINT%/}"
 BUCKET="nexus-supabase-${NEXUS_ENV}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DAY="$(date -u +%Y/%m/%d)"
-LOCAL_DIR="${ROOT}/.nexusflow/backups/supabase"
-LOCAL_FILE="${LOCAL_DIR}/supabase-${STAMP}.dump"
 OBJECT="dumps/${DAY}/supabase-${STAMP}.dump"
+TMP_DIR="${ROOT}/.nexusflow/tmp/supabase"
+TMP_FILE="${TMP_DIR}/supabase-${STAMP}.dump"
+# Nested Docker: daemon resolves -v paths on the host.
+HOST_ROOT="${NEXUS_REPO_ROOT:-${ROOT}}"
+HOST_FILE="${HOST_ROOT}/.nexusflow/tmp/supabase/supabase-${STAMP}.dump"
+image="${MINIO_MC_IMAGE:-quay.io/minio/aistor/mc:RELEASE.2026-09-06T02-44-40Z}"
 
-for v in NEXUS_BACKUP_ENDPOINT NEXUS_BACKUP_ACCESS_KEY NEXUS_BACKUP_SECRET_KEY; do
+for v in MINIO_LOADER_USER MINIO_LOADER_PASSWORD; do
   if [[ -z "${!v:-}" ]]; then
-    echo "${v} is empty. Put keys in Vault secret/nexusflow/${NEXUS_ENV}/backup" >&2
+    echo "${v} is empty. Run ./scripts/start.sh vault so Agent renders secrets.env" >&2
     exit 1
   fi
 done
+export MINIO_LOADER_USER MINIO_LOADER_PASSWORD
 
 if ! docker inspect supabase-db >/dev/null 2>&1; then
   echo "supabase-db is not running." >&2
   exit 1
 fi
 
-mkdir -p "${LOCAL_DIR}"
-echo "Dumping supabase-db → ${LOCAL_FILE}"
+if ! docker inspect minio >/dev/null 2>&1; then
+  echo "MinIO container is not running. Start it with ./scripts/start.sh minio" >&2
+  exit 1
+fi
+
+# docker cp writes as root on the host. Reclaim so the EXIT trap can delete
+# the temp dump. In nexus-elt, NEXUS_REPO_ROOT is a host path and is not visible
+# here — ownership is taken from ROOT (/workspace bind mount). Nested docker -v
+# still uses the host path for the daemon.
+reclaim_host_path() {
+  local path="$1"
+  [[ -e "${path}" ]] || return 0
+  local uid gid host_path
+  uid="$(stat -c '%u' "${ROOT}")"
+  gid="$(stat -c '%g' "${ROOT}")"
+  if chown -R "${uid}:${gid}" "${path}" 2>/dev/null; then
+    return 0
+  fi
+  host_path="${path}"
+  if [[ -n "${NEXUS_REPO_ROOT:-}" && "${path}" == "${ROOT}"/* ]]; then
+    host_path="${NEXUS_REPO_ROOT}/${path#"${ROOT}"/}"
+  fi
+  docker run --rm \
+    -v "${host_path}:/target" \
+    --entrypoint /bin/sh \
+    "${image}" \
+    -c "chown -R ${uid}:${gid} /target"
+}
+
+mkdir -p "${TMP_DIR}"
+cleanup_tmp() {
+  if [[ -e "${TMP_FILE}" ]]; then
+    reclaim_host_path "${TMP_FILE}" 2>/dev/null || true
+    rm -f "${TMP_FILE}" 2>/dev/null || true
+  fi
+}
+trap cleanup_tmp EXIT
+
+echo "Dumping supabase-db → temp ${TMP_FILE}"
 docker exec supabase-db pg_dump -U postgres -d postgres -Fc -f "/tmp/supabase-${STAMP}.dump"
-docker cp "supabase-db:/tmp/supabase-${STAMP}.dump" "${LOCAL_FILE}"
+docker cp "supabase-db:/tmp/supabase-${STAMP}.dump" "${TMP_FILE}"
 docker exec supabase-db rm -f "/tmp/supabase-${STAMP}.dump"
+reclaim_host_path "${TMP_FILE}"
 
-# Keep 7 newest local dumps
-ls -1t "${LOCAL_DIR}"/supabase-*.dump 2>/dev/null | tail -n +8 | xargs -r rm -f
+network="$(docker inspect minio --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{break}}{{end}}')"
+if [[ -z "${network}" ]]; then
+  echo "Could not resolve the Compose network for container minio." >&2
+  exit 1
+fi
 
-network="$(docker inspect supabase-db --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{break}}{{end}}')"
-image="${MINIO_MC_IMAGE:-quay.io/minio/aistor/mc:RELEASE.2026-09-06T02-44-40Z}"
-
-echo "Uploading to ${NEXUS_BACKUP_ENDPOINT}/${BUCKET}/${OBJECT}"
+echo "Uploading to minio/${BUCKET}/${OBJECT}"
 docker run --rm \
   --network "${network}" \
   --entrypoint /bin/sh \
-  -v "${LOCAL_FILE}:/dump.dump:ro" \
-  -e NEXUS_BACKUP_ENDPOINT \
-  -e NEXUS_BACKUP_ACCESS_KEY \
-  -e NEXUS_BACKUP_SECRET_KEY \
+  -v "${HOST_FILE}:/dump.dump:ro" \
+  -e MINIO_LOADER_USER \
+  -e MINIO_LOADER_PASSWORD \
   -e BUCKET="${BUCKET}" \
   -e OBJECT="${OBJECT}" \
   "${image}" -c '
 set -eu
-mc alias set backup "$NEXUS_BACKUP_ENDPOINT" "$NEXUS_BACKUP_ACCESS_KEY" "$NEXUS_BACKUP_SECRET_KEY" >/dev/null
-# Same pattern as backup-archive.sh: Object Read & Write tokens often cannot CreateBucket.
-if ! mc mb --ignore-existing "backup/${BUCKET}" 2>/tmp/mb.err; then
-  if mc ls "backup/${BUCKET}" >/dev/null 2>&1; then
-    echo "Bucket backup/${BUCKET} already exists (CreateBucket not permitted; continuing)."
-  else
-    echo "Cannot create or list backup/${BUCKET}." >&2
-    echo "In Cloudflare R2: create bucket ${BUCKET} in this account, and grant the" >&2
-    echo "NEXUS_BACKUP_* API token Object Read & Write on that bucket (same as archive buckets)." >&2
-    cat /tmp/mb.err >&2 || true
-    exit 1
-  fi
+mc alias set local http://minio:9000 "$MINIO_LOADER_USER" "$MINIO_LOADER_PASSWORD" >/dev/null
+if ! mc ls "local/${BUCKET}" >/dev/null 2>&1; then
+  echo "MinIO bucket ${BUCKET} is missing. Re-run minio-init / ./scripts/start.sh" >&2
+  exit 1
 fi
-mc cp /dump.dump "backup/${BUCKET}/${OBJECT}"
+mc cp /dump.dump "local/${BUCKET}/${OBJECT}"
 '
 
-echo "Supabase backup OK → ${BUCKET}/${OBJECT}"
+echo "Supabase backup OK → minio/${BUCKET}/${OBJECT}"
+echo "Off-site: ./scripts/backup-archive.sh or Airflow DAG ops_backup_archive"

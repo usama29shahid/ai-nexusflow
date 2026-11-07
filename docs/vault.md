@@ -132,7 +132,7 @@ Base path: **`secret/nexusflow/{env}/`** where `{env}` matches `NEXUS_ENV` (e.g.
 | `openobserve` | `root_user_email`, `root_user_password` | `ZO_ROOT_USER_EMAIL`, `ZO_ROOT_USER_PASSWORD` | openobserve profile (item **2.1**) |
 | `openmetadata` | `admin_email`, `admin_password` | `OPENMETADATA_ADMIN_EMAIL`, `OPENMETADATA_ADMIN_PASSWORD` | openmetadata login / catalog ingest (item **3**) |
 | `clickhouse_catalog` | `username`, `password` | `CLICKHOUSE_CATALOG_USER`, `CLICKHOUSE_CATALOG_PASSWORD` | OpenMetadata ClickHouse connector (`nexus_catalog`) |
-| `backup` | `endpoint`, `access_key`, `secret_key` | `NEXUS_BACKUP_ENDPOINT`, `NEXUS_BACKUP_ACCESS_KEY`, `NEXUS_BACKUP_SECRET_KEY` | Optional R2/S3 archive mirror + Supabase dumps — [`./scripts/backup-archive.sh`](../scripts/backup-archive.sh), [`./scripts/backup-supabase.sh`](../scripts/backup-supabase.sh) |
+| `backup` | `endpoint`, `access_key`, `secret_key` | `NEXUS_BACKUP_ENDPOINT`, `NEXUS_BACKUP_ACCESS_KEY`, `NEXUS_BACKUP_SECRET_KEY` | Optional R2/S3 mirror of MinIO archive + Supabase dump buckets — [`./scripts/backup-archive.sh`](../scripts/backup-archive.sh) |
 | `supabase` | `publishable_key`, `secret_key`, `anon_key`, `service_role_key`, `jwt_secret`, `postgres_password` | `SUPABASE_*` | Self-hosted Supabase API keys (item **11**) |
 | `supabase_loader` | `username`, `password` | `SUPABASE_LOADER_*` | Embedding ingest DB role |
 | `supabase_reader` | `username`, `password` | `SUPABASE_READER_*` | Server-side read DB role |

@@ -219,7 +219,7 @@ Self-hosted Postgres, Auth, and pgvector for the website and RAG embeddings. Not
 | 11b | Migrations: `profiles`, `document_chunks` (`extensions.vector(3)`), forced RLS, reader/catalog `SELECT`, `nexus_admin` `BYPASSRLS` |
 | 11c | Process roles `nexus_loader` / `nexus_reader` / `nexus_catalog` / `nexus_admin`. API keys in `.nexusflow/supabase.env`. `./scripts/vault-bootstrap.sh` seeds the five `supabase*` Vault paths |
 | 11d | Vector ships container logs to the OTel Collector (`service.name=supabase`) |
-| 11e | `./scripts/backup-supabase.sh` — `pg_dump` to R2 bucket `nexus-supabase-{env}` |
+| 11e | `./scripts/backup-supabase.sh` — `pg_dump` to MinIO `nexus-supabase-{env}`; R2 via `ops_backup_archive` |
 
 **Done when:** `./scripts/start.sh supabase` reaches Auth health, migrations apply, and `nexus_reader` can `SELECT` a chunk. Qdrant is optional and is not part of this item.
 

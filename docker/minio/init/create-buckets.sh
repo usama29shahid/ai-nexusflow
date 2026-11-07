@@ -24,5 +24,8 @@ mc mb --ignore-existing "nexus/nexus-airflow-logs-${NEXUS_ENV}"
 # Observability data lake (OTel batches, events, dbt artifacts, run summaries)
 mc mb --ignore-existing "nexus/nexus-telemetry-${NEXUS_ENV}"
 
+# Supabase Postgres logical dumps (local S3; mirrored to R2 by backup-archive.sh)
+mc mb --ignore-existing "nexus/nexus-supabase-${NEXUS_ENV}"
+
 echo "MinIO buckets:"
 mc ls nexus/

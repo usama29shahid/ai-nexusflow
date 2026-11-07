@@ -44,9 +44,9 @@ must not `policy remove` / `user remove`. If you change the `mc` pin, re-run
 
 | User | Vault path | Use |
 | --- | --- | --- |
-| `nexus_loader` | `minio_loader` | Process writes (archive, telemetry, Airflow logs, Iceberg) + Polaris/Spark/Trino S3 |
+| `nexus_loader` | `minio_loader` | Process writes (archive, Supabase dumps, telemetry, Airflow logs, Iceberg) + Polaris/Spark/Trino S3 |
 | `nexus_reader` | `minio_reader` | Lake-replay scripts |
-| `nexus_platform_reader` | `minio_platform_reader` | Demo share — all buckets read-only |
+| `nexus_platform_reader` | `minio_platform_reader` | Demo share — five buckets read-only (no `nexus-supabase-{env}`) |
 | `nexus_admin` | `minio_admin` | Break-glass |
 
 Root still creates buckets in [init/create-buckets.sh](init/create-buckets.sh). Policies: [iam/](iam/). Contract: [docs/rbac.md](../../docs/rbac.md).

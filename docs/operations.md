@@ -324,19 +324,23 @@ Plain `./scripts/setup.sh` / `uv sync` does **not** install `edr`. After enablin
 
 ---
 
-## Supabase backup (optional — Postgres → R2)
+## Supabase backup (optional — Postgres → MinIO → R2)
 
-Logical dump of the self-hosted Supabase database (Auth users, profiles, embeddings). Uses the same Vault `backup` keys as the archive mirror. Bucket: **`nexus-supabase-{env}`** (create once in Cloudflare R2 — e.g. `nexus-supabase-dev`).
+Logical dump of the self-hosted Supabase database (Auth users, profiles, embeddings).
+
+- **Local S3 (MinIO):** `nexus-supabase-{env}/dumps/YYYY/MM/DD/supabase-{timestamp}.dump` via `./scripts/backup-supabase.sh` or Airflow DAG `ops_backup_supabase`
+- **Remote S3 (R2):** same bucket name and keys via `./scripts/backup-archive.sh` / DAG `ops_backup_archive` (mirrors MinIO; does not dump Postgres itself)
 
 ```bash
 ./scripts/backup-supabase.sh
-# → .nexusflow/backups/supabase/supabase-*.dump (keep 7 local)
-# → R2 object dumps/YYYY/MM/DD/supabase-{timestamp}.dump
+# → MinIO nexus-supabase-{env}/dumps/YYYY/MM/DD/supabase-{timestamp}.dump
+./scripts/backup-archive.sh   # or wait for ops_backup_archive
+# → R2 nexus-supabase-{env}/… (same keys)
 ```
 
-Create the R2 bucket **`nexus-supabase-{env}`** in the **same** Cloudflare account as the archive buckets, and grant the existing `NEXUS_BACKUP_*` API token **Object Read & Write** on that bucket (tokens scoped only to archive buckets will get Access Denied).
+**Airflow (daily):** DAG `ops_backup_supabase` needs Airflow, `supabase-db`, MinIO, and `MINIO_LOADER_*` in `.nexusflow/airflow_elt.env`. Off-site copy waits for `ops_backup_archive` (or trigger it). Create R2 bucket **`nexus-supabase-{env}`** once and grant `NEXUS_BACKUP_*` Object Read & Write on it (same as archive buckets).
 
-Restore outline: start the same pinned Supabase images → `mc cp` dump back → `pg_restore` into `supabase-db` → `./scripts/supabase-rbac-bootstrap.sh`. Embeddings can be rebuilt from `docs/`; Auth users cannot.
+Restore outline: prefer MinIO if the VPS is up; otherwise `mc cp` from R2 → `pg_restore` into `supabase-db` → `./scripts/supabase-rbac-bootstrap.sh`. Embeddings can be rebuilt from `docs/`; Auth users cannot.
 
 Start/stop: `./scripts/start.sh supabase` / `./scripts/start.sh stop-supabase`. Details: [docker/supabase/README.md](../docker/supabase/README.md).
 
@@ -344,12 +348,13 @@ Start/stop: `./scripts/start.sh supabase` / `./scripts/start.sh stop-supabase`. 
 
 ## Archive backup (optional — MinIO → R2)
 
-Secondary copy of **REST JSONL history** only. Same bucket names and object keys on Cloudflare R2 (or any S3-compatible endpoint). Not a backlog item; does not replace item **5** (Terraform).
+Secondary copy of selected MinIO buckets to Cloudflare R2 (or any S3-compatible endpoint). Same bucket names and object keys. Not a backlog item; does not replace item **5** (Terraform).
 
 | Copied | Not copied |
 | --- | --- |
 | `nexus-dlt-dbt-clickhouse-{env}` | ClickHouse volumes (rebuild via load + dbt) |
 | `nexus-dlt-dbt-spark-iceberg-archive-{env}` | Telemetry, Airflow logs, Iceberg warehouse, reader DBs |
+| `nexus-supabase-{env}` | Host `.nexusflow/` paths (dumps live in MinIO, not on disk) |
 
 **Config** — R2/S3 API keys in Vault KV `secret/nexusflow/{env}/backup` (Agent → `NEXUS_BACKUP_*`). Each machine’s Vault holds **that** host’s R2 URL/keys. See [vault.md](vault.md).
 
@@ -374,7 +379,7 @@ Remove real `NEXUS_BACKUP_*` from `.env` after the KV path is set (bootstrap onl
 
 Uses `mc mirror` **without** `--remove`, so R2 keeps objects even if they disappear from local MinIO.
 
-If the script fails with **Access Denied** on create: create both archive buckets in the **same** Cloudflare account as the token (exact names above), or use an R2 API token with **Admin Read & Write**. Object Read & Write is enough for mirror once buckets exist.
+If the script fails with **Access Denied** on create: create the listed buckets in the **same** Cloudflare account as the token (exact names above), or use an R2 API token with **Admin Read & Write**. Object Read & Write is enough for mirror once buckets exist.
 
 **Vault raft snapshots** (secrets themselves) stay a separate optional manual checklist — [vault.md](vault.md#backup-optional--good-to-have-not-required-for-local-day-to-day).
 
@@ -436,7 +441,8 @@ Stop OM only        →  ./scripts/start.sh stop-openmetadata
 Stop reader UIs     →  ./scripts/start.sh stop-observability
 Lakehouse after up  →  ./scripts/start.sh ./scripts/lakehouse-restore.sh
 Vault after reboot  →  ./scripts/start.sh vault
-Archive → R2        →  ./scripts/backup-archive.sh  or Airflow DAG ops_backup_archive (daily)
+MinIO → R2          →  ./scripts/backup-archive.sh  or Airflow DAG ops_backup_archive (daily; archives + supabase)
+Supabase → MinIO    →  ./scripts/backup-supabase.sh or Airflow DAG ops_backup_supabase (daily)
 dlt smoke           →  ./scripts/start.sh smoke
 Airflow first time  →  orchestration/airflow/README.md (.env host path; once per machine)
 Airflow             →  ./scripts/start.sh airflow  (UI :8081; recreate if key/.env changed)

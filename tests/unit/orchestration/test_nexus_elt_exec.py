@@ -118,6 +118,35 @@ class EltExecTest(unittest.TestCase):
         self.assertIn("elt_backup_archive_command", dag)
         self.assertIn('dag_id="ops_backup_archive"', dag)
         self.assertIn("timedelta(days=1)", dag)
+        archive_sh = (REPO_ROOT / "scripts" / "backup-archive.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("nexus-supabase-", archive_sh)
+        self.assertIn("supabase_dumps", archive_sh)
+
+    def test_backup_supabase_nests_docker_sock(self) -> None:
+        from nexus_elt_exec import elt_backup_supabase_command
+
+        cmd = elt_backup_supabase_command()
+        self.assertIn("backup-supabase.sh", cmd)
+        self.assertIn("docker.sock", cmd)
+        self.assertIn("NEXUS_REPO_ROOT", cmd)
+        self.assertIn("/opt/airflow/nexus_elt.env", cmd)
+        self.assertNotIn("secrets.env", cmd)
+        dag = (
+            REPO_ROOT / "orchestration" / "airflow" / "dags" / "ops_backup_supabase.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("elt_backup_supabase_command", dag)
+        self.assertIn('dag_id="ops_backup_supabase"', dag)
+        self.assertIn("timedelta(days=1)", dag)
+        self.assertIn("MinIO", dag)
+        dump_sh = (REPO_ROOT / "scripts" / "backup-supabase.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("MINIO_LOADER_USER", dump_sh)
+        self.assertIn("nexus-supabase-", dump_sh)
+        self.assertNotIn("NEXUS_BACKUP_ENDPOINT", dump_sh)
+        self.assertNotIn(".nexusflow/backups/supabase", dump_sh)
 
     def test_dbt_layer_quotes_select_with_apostrophe(self) -> None:
         """Selectors with ' must remain one argv after bash -lc."""

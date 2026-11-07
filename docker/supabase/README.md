@@ -81,6 +81,9 @@ Vector reads Docker logs for `supabase-kong`, `supabase-auth`, `supabase-rest`, 
 
 ```bash
 ./scripts/backup-supabase.sh
+# → MinIO nexus-supabase-{env}/dumps/YYYY/MM/DD/supabase-{timestamp}.dump
+# Airflow DAG ops_backup_supabase (daily; needs supabase-db + MinIO + MINIO_LOADER_*)
+# Off-site R2: ./scripts/backup-archive.sh or DAG ops_backup_archive
 ```
 
-`pg_dump -Fc` of database `postgres`. Local copies stay in `.nexusflow/backups/supabase/` (7 newest). The R2 object is `dumps/YYYY/MM/DD/supabase-{timestamp}.dump` in bucket `nexus-supabase-{env}`. The script does not delete R2 objects. The backup token needs Object Read & Write on that bucket. Restore outline: [docs/operations.md](../../docs/operations.md#supabase-backup-optional--postgres--r2).
+`pg_dump -Fc` of database `postgres` into MinIO (local S3). No durable host path under `.nexusflow/backups/`. R2 gets the same keys when the archive mirror runs. Restore outline: [docs/operations.md](../../docs/operations.md#supabase-backup-optional--postgres--minio--r2).

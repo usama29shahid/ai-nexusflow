@@ -39,9 +39,12 @@ class MinioIamPoliciesTest(unittest.TestCase):
         self.assertIn("arn:aws:s3:::nexus-telemetry-dev/*", text)
         self.assertIn("nexus-dlt-dbt-spark-iceberg-dev", text)
         self.assertIn("nexus-dlt-dbt-spark-iceberg-archive-dev", text)
+        self.assertIn("arn:aws:s3:::nexus-supabase-dev", text)
+        self.assertIn("arn:aws:s3:::nexus-supabase-dev/*", text)
         deny = text.split('"Effect": "Deny"', 1)[1]
         self.assertIn("nexus-dlt-dbt-clickhouse-dev/*", deny)
         self.assertIn("nexus-telemetry-dev/*", deny)
+        self.assertIn("nexus-supabase-dev/*", deny)
         self.assertIn("nexus-dlt-dbt-spark-iceberg-archive-dev/*", deny)
         self.assertNotIn("nexus-airflow-logs-dev/*", deny)
         # Iceberg warehouse may delete (compaction); deny block must not cover it.
@@ -63,18 +66,19 @@ class MinioIamPoliciesTest(unittest.TestCase):
         self.assertIn("indexes/openobserve/*", text[delete_at:])
         self.assertNotIn("indexes/signoz/*", text[delete_at:])
 
-    def test_admin_covers_five_buckets(self) -> None:
+    def test_admin_covers_six_buckets(self) -> None:
         text = self.mod.render_policy("nexus-admin", "prd")
         for bucket in (
             "nexus-dlt-dbt-clickhouse-prd",
             "nexus-telemetry-prd",
             "nexus-airflow-logs-prd",
+            "nexus-supabase-prd",
             "nexus-dlt-dbt-spark-iceberg-archive-prd",
             "nexus-dlt-dbt-spark-iceberg-prd",
         ):
             self.assertIn(bucket, text)
 
-    def test_platform_reader_is_read_only_all_buckets(self) -> None:
+    def test_platform_reader_is_read_only_without_supabase_dumps(self) -> None:
         text = self.mod.render_policy("nexus-platform-reader", "dev")
         for bucket in (
             "nexus-dlt-dbt-clickhouse-dev",
@@ -84,6 +88,7 @@ class MinioIamPoliciesTest(unittest.TestCase):
             "nexus-dlt-dbt-spark-iceberg-dev",
         ):
             self.assertIn(bucket, text)
+        self.assertNotIn("nexus-supabase-dev", text)
         self.assertIn("s3:GetObject", text)
         self.assertIn("s3:ListBucket", text)
         self.assertNotIn("s3:PutObject", text)

@@ -492,7 +492,7 @@ ensure_supabase() {
   "${ROOT}/scripts/supabase-rbac-bootstrap.sh"
   echo "Supabase API:    http://127.0.0.1:${KONG_HTTP_PORT:-8000}"
   echo "Supabase Studio: http://127.0.0.1:${STUDIO_PORT:-3001}"
-  echo "Backup:          ./scripts/backup-supabase.sh  (R2 bucket nexus-supabase-\${NEXUS_ENV})"
+  echo "Backup:          ./scripts/backup-supabase.sh → MinIO nexus-supabase-\${NEXUS_ENV}; R2 via ops_backup_archive"
 }
 
 stop_supabase() {

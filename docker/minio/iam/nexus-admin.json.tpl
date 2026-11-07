@@ -11,6 +11,8 @@
         "arn:aws:s3:::nexus-telemetry-{{NEXUS_ENV}}/*",
         "arn:aws:s3:::nexus-airflow-logs-{{NEXUS_ENV}}",
         "arn:aws:s3:::nexus-airflow-logs-{{NEXUS_ENV}}/*",
+        "arn:aws:s3:::nexus-supabase-{{NEXUS_ENV}}",
+        "arn:aws:s3:::nexus-supabase-{{NEXUS_ENV}}/*",
         "arn:aws:s3:::nexus-dlt-dbt-spark-iceberg-archive-{{NEXUS_ENV}}",
         "arn:aws:s3:::nexus-dlt-dbt-spark-iceberg-archive-{{NEXUS_ENV}}/*",
         "arn:aws:s3:::nexus-dlt-dbt-spark-iceberg-{{NEXUS_ENV}}",

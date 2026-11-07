@@ -79,6 +79,7 @@ def _cleanup(root: Any, env: str) -> None:
         f"nexus-dlt-dbt-clickhouse-{env}",
         f"nexus-telemetry-{env}",
         f"nexus-airflow-logs-{env}",
+        f"nexus-supabase-{env}",
         f"nexus-dlt-dbt-spark-iceberg-archive-{env}",
         f"nexus-dlt-dbt-spark-iceberg-{env}",
     )
@@ -125,9 +126,12 @@ def main() -> int:
     archive = f"nexus-dlt-dbt-clickhouse-{env}"
     telemetry = f"nexus-telemetry-{env}"
     logs = f"nexus-airflow-logs-{env}"
+    supabase = f"nexus-supabase-{env}"
     iceberg_archive = f"nexus-dlt-dbt-spark-iceberg-archive-{env}"
     iceberg = f"nexus-dlt-dbt-spark-iceberg-{env}"
-    all_buckets = (archive, telemetry, logs, iceberg_archive, iceberg)
+    # platform_reader intentionally excludes Auth dumps in nexus-supabase-{env}.
+    platform_buckets = (archive, telemetry, logs, iceberg_archive, iceberg)
+    all_buckets = (*platform_buckets, supabase)
 
     loader = _client(_required("MINIO_LOADER_USER"), _required("MINIO_LOADER_PASSWORD"))
     reader = _client(_required("MINIO_READER_USER"), _required("MINIO_READER_PASSWORD"))
@@ -142,6 +146,7 @@ def main() -> int:
     abort_key = f"{PROBE_PREFIX}multipart-abort.bin"
     telemetry_key = f"{PROBE_PREFIX}put.txt"
     logs_key = f"{PROBE_PREFIX}put.txt"
+    supabase_key = f"{PROBE_PREFIX}dump.txt"
     iceberg_key = f"{PROBE_PREFIX}iceberg.txt"
     marker_key = f"indexes/signoz/{PROBE_PREFIX}marker.txt"
     body = b"nexus-iam-probe-part\n" * (PART_SIZE // 20)
@@ -178,6 +183,10 @@ def main() -> int:
         _denied(lambda: loader.delete_object(Bucket=telemetry, Key=telemetry_key))
         loader.put_object(Bucket=logs, Key=logs_key, Body=b"logs")
         loader.get_object(Bucket=logs, Key=logs_key)["Body"].read()
+        print("Loader put/get on supabase dumps; delete must be denied...")
+        loader.put_object(Bucket=supabase, Key=supabase_key, Body=b"dump")
+        loader.get_object(Bucket=supabase, Key=supabase_key)["Body"].read()
+        _denied(lambda: loader.delete_object(Bucket=supabase, Key=supabase_key))
 
         print("Reader get telemetry, deny archive put, allow signoz marker...")
         reader.get_object(Bucket=telemetry, Key=telemetry_key)["Body"].read()
@@ -190,8 +199,8 @@ def main() -> int:
         )
         reader.put_object(Bucket=telemetry, Key=marker_key, Body=b"marker")
 
-        print("Platform reader lists/gets all buckets; put must be denied...")
-        for bucket in all_buckets:
+        print("Platform reader lists/gets demo buckets; put and supabase list denied...")
+        for bucket in platform_buckets:
             platform.list_objects_v2(Bucket=bucket, MaxKeys=1)
         platform.get_object(Bucket=telemetry, Key=telemetry_key)["Body"].read()
         _denied(
@@ -201,6 +210,7 @@ def main() -> int:
                 Body=b"nope",
             )
         )
+        _denied(lambda: platform.list_objects_v2(Bucket=supabase, MaxKeys=1))
 
         print("Admin lists every bucket...")
         for bucket in all_buckets:
