@@ -70,6 +70,8 @@ services:
     ports: !override []
 
   # Log shipper → existing OTel Collector (no Analytics/Logflare).
+  # docker.sock is required for type=docker_logs; mount is read-only. Do not
+  # publish Vector's API port; keep this container on the Compose network only.
   vector:
     container_name: supabase-vector
     image: timberio/vector:0.53.0-alpine

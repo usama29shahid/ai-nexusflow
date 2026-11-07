@@ -15,10 +15,12 @@ if [[ -f "${ROOT}/.env" ]]; then
   source "${ROOT}/.env"
   set +a
 fi
+# Do not swallow Vault/Agent failures — that would mint a new supabase-rbac.env
+# while Vault already holds different passwords.
 if [[ -f "${ROOT}/scripts/load-secrets.sh" ]]; then
   set -a
   # shellcheck source=scripts/load-secrets.sh
-  source "${ROOT}/scripts/load-secrets.sh" || true
+  source "${ROOT}/scripts/load-secrets.sh"
   set +a
 fi
 

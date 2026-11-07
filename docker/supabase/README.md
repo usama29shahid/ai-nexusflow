@@ -73,7 +73,12 @@ Migrations under `docker/supabase/migrations/` apply as `postgres` on each start
 | `nexus_admin` | Break-glass. `BYPASSRLS` plus grants on `public` |
 | `service_role` | Server bootstrap only. Not a browser key |
 
-Connect as a process role with `psql -h 127.0.0.1`. The default local socket uses peer auth and rejects these passwords.
+Postgres is not published on the host (nexus overlay). Connect as a process role inside the DB container, for example:
+
+```bash
+docker exec -it supabase-db psql -U postgres -d postgres
+# or: docker exec -it supabase-db psql -U nexus_reader -d postgres
+```
 
 ## Logs and backup
 
@@ -84,9 +89,13 @@ Two observability surfaces (do not merge them):
 | Studio **Query Performance** / **Database Connections** | Postgres stats (`pg_stat_statements`, sessions) | Studio only — works without Logflare |
 | Auth / API / PostgREST / DB **service logs** | Container stdout/stderr | OpenObserve via Vector → OTel Collector → MinIO `nexus-telemetry-{env}` |
 
+**Env:** Compose always uses `.nexusflow/supabase.env` via a symlink at `docker/supabase/.env`. `./scripts/supabase-ensure-env.sh` repairs dual-file drift, refuses upstream placeholder secrets, and must succeed before start.
+
+**Vector / docker.sock:** `supabase-vector` mounts the host Docker socket **read-only** so it can tail slim-stack container logs. That is required for `docker_logs`; do not publish Vector’s API port. On a hardened VPS, treat socket access as trusted-host only (backlog **10**).
+
 Vector tails `supabase-kong` / `supabase-envoy`, `supabase-auth`, `supabase-rest`, `supabase-db`, `supabase-studio`, and `supabase-meta`, tags `service.name=supabase` and `supabase.component` (`auth`, `api-gw`, `rest`, `db`, `studio`, `meta`), and posts OTLP/HTTP protobuf to `http://otel-collector:4318/v1/logs`. Config: `volumes/logs/vector-otel.yml`. OpenObserve dashboard: **Supabase logs** (`./scripts/openobserve-bootstrap.sh`). Analytics / Logflare stays off.
 
-**Coverage notes:** Auth signup/login and API gateway HTTP lines show as `auth` / `api-gw`. GoTrue JSON keeps `msg`/`path`/`status` only; non-JSON auth lines are redacted before OTLP. Table and RPC traffic (`profiles`, `document_chunks`, `match_document_chunks`) appear as gateway paths plus Postgres `ERROR`/`WARNING`/`FATAL`/`PANIC` on `db` when something fails. Vector drops Postgres `LOG` (checkpoints) and `STATEMENT`/`HINT`/`CONTEXT`/`DETAIL` companions so full SQL/embeddings are not archived. PostgREST itself rarely logs successful requests. pgvector is not a separate logger — extension/SQL issues show under `db`. Studio SQL timing stays on Query Performance, not in OpenObserve. Config check: `uv run python tests/unit/scripts/test_supabase_self_host.py`.
+**Coverage notes:** Auth signup/login and API gateway HTTP lines show as `auth` / `api-gw`. GoTrue JSON keeps `msg`/`path`/`status` only (`error` becomes attribute `present`); non-JSON auth lines are redacted before OTLP. Table and RPC traffic (`profiles`, `document_chunks`, `match_document_chunks`) appear as gateway paths plus Postgres `ERROR`/`WARNING`/`FATAL`/`PANIC` on `db` when something fails. Vector drops Postgres `LOG` (checkpoints) and `STATEMENT`/`HINT`/`CONTEXT`/`DETAIL` companions so full SQL/embeddings are not archived. PostgREST itself rarely logs successful requests. pgvector is not a separate logger — extension/SQL issues show under `db`. Studio SQL timing stays on Query Performance, not in OpenObserve. Config check: `uv run python tests/unit/scripts/test_supabase_self_host.py`.
 
 ```bash
 ./scripts/backup-supabase.sh

@@ -56,7 +56,10 @@ transforms:
         }
         if parsed.path != null { .supabase.path = string!(parsed.path) }
         if parsed.status != null { .supabase.status = to_string!(parsed.status) }
-        if parsed.error != null { .supabase.error = string!(parsed.error) }
+        # Do not forward parsed.error — GoTrue often embeds emails there.
+        if parsed.error != null {
+          .supabase.error = "present"
+        }
       }
 
   # PostgREST: "07/Nov/2026:18:40:51 +0000: message" (colons inside the stamp).

@@ -51,7 +51,8 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
 
   (no args)     Load secrets → Vault if needed → MinIO + OTel + COMPOSE_PROFILES stacks
                 (supabase in COMPOSE_PROFILES starts the separate Supabase stack)
-  all           Start every stack (both branches + cloudbeaver + airflow + vault)
+  all           Start both branches + cloudbeaver + airflow (not supabase/readers;
+                add supabase to COMPOSE_PROFILES or run: ./scripts/start.sh supabase)
   down          Stop all stacks (including vault + airflow; avoids network-in-use)
   minio         Start MinIO + OTel Collector only (always-on shared infra)
   vault         Start + bootstrap HashiCorp Vault (platform; secrets)
@@ -474,13 +475,30 @@ ensure_supabase() {
   fi
   local api_ready=0
   local api_port="${KONG_HTTP_PORT:-8000}"
+  local health_url="http://127.0.0.1:${api_port}/auth/v1/health"
   echo "Waiting for API gateway on 127.0.0.1:${api_port}..."
   for _ in $(seq 1 60); do
-    if curl -sf -o /dev/null "http://127.0.0.1:${api_port}/auth/v1/health" 2>/dev/null \
-      || curl -sf -o /dev/null -H "apikey: $(grep -E '^ANON_KEY=' "${ROOT}/.nexusflow/supabase.env" | head -1 | cut -d= -f2-)" \
-           "http://127.0.0.1:${api_port}/auth/v1/health" 2>/dev/null; then
+    if curl -sf -o /dev/null "${health_url}" 2>/dev/null; then
       api_ready=1
       break
+    fi
+    # Prefer curl -K so ANON_KEY is not visible on the process cmdline.
+    local anon_key curl_cfg
+    anon_key="$(grep -E '^ANON_KEY=' "${ROOT}/.nexusflow/supabase.env" | head -1 | cut -d= -f2-)"
+    if [[ -n "${anon_key}" ]]; then
+      curl_cfg="$(mktemp)"
+      # shellcheck disable=SC2064
+      trap 'rm -f "${curl_cfg}"' EXIT RETURN
+      printf 'header = "apikey: %s"\n' "${anon_key}" >"${curl_cfg}"
+      chmod 600 "${curl_cfg}"
+      if curl -sf -o /dev/null -K "${curl_cfg}" "${health_url}" 2>/dev/null; then
+        rm -f "${curl_cfg}"
+        trap - EXIT RETURN
+        api_ready=1
+        break
+      fi
+      rm -f "${curl_cfg}"
+      trap - EXIT RETURN
     fi
     sleep 2
   done
@@ -793,9 +811,10 @@ case "${cmd}" in
     start_profiles
     maybe_lakehouse_restore
     echo
-    echo "Ready (all stacks)."
+    echo "Ready (branch stacks + cloudbeaver + airflow)."
     echo "  Profiles: ${COMPOSE_PROFILES} (+ MinIO + OTel always)"
     echo "  Secrets:  NEXUS_SECRETS_BACKEND=${NEXUS_SECRETS_BACKEND:-vault}"
+    echo "  Supabase / readers: add to COMPOSE_PROFILES, or ./scripts/start.sh supabase|openobserve|…"
     echo "  Next:     ./scripts/start.sh smoke"
     echo "            ./scripts/start.sh dbt debug --project-dir branches/dlt_dbt_clickhouse"
     ;;

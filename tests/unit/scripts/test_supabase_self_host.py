@@ -16,6 +16,7 @@ START_SH = REPO_ROOT / "scripts" / "start.sh"
 VAULT_SH = REPO_ROOT / "scripts" / "vault-bootstrap.sh"
 SEED_SH = REPO_ROOT / "scripts" / "supabase-vault-seed.sh"
 RBAC_SH = REPO_ROOT / "scripts" / "supabase-rbac-bootstrap.sh"
+ENSURE_ENV_SH = REPO_ROOT / "scripts" / "supabase-ensure-env.sh"
 MIGRATION_002 = (
     REPO_ROOT
     / "docker"
@@ -25,6 +26,10 @@ MIGRATION_002 = (
 )
 VECTOR_OTEL = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector-otel.yml"
 VECTOR_UPSTREAM = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector.yml"
+OO_SUPABASE_DASH = (
+    REPO_ROOT / "docker" / "openobserve" / "dashboards" / "supabase-logs.json"
+)
+NEXUS_COMPOSE = REPO_ROOT / "docker" / "supabase" / "docker-compose.nexus.yml"
 
 
 class SupabaseSelfHostTest(unittest.TestCase):
@@ -68,9 +73,25 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertIn("STATEMENT|HINT|CONTEXT|DETAIL", text)
         self.assertIn("WARNING|ERROR|FATAL|PANIC", text)
         self.assertIn("drop_on_abort: true", text)
-        # Auth: never archive raw non-JSON GoTrue lines.
+        # Auth: never archive raw non-JSON GoTrue lines; do not forward error PII.
         self.assertIn("auth log (non-json redacted)", text)
         self.assertIn("parse_json(msg)", text)
+        self.assertIn('.supabase.error = "present"', text)
+        self.assertNotIn(".supabase.error = string!(parsed.error)", text)
+
+    def test_ensure_env_symlink_and_placeholder_guard(self) -> None:
+        text = ENSURE_ENV_SH.read_text(encoding="utf-8")
+        self.assertIn("ln -sfn", text)
+        self.assertIn("supabase_env_has_placeholders", text)
+        self.assertIn("Adopting generated secrets", text)
+        self.assertIn("Placeholder secrets still present", text)
+        self.assertNotIn('echo "Supabase env exists: ${ENV_FILE}"\n  exit 0', text)
+
+    def test_rbac_bootstrap_does_not_swallow_secret_load_failure(self) -> None:
+        text = RBAC_SH.read_text(encoding="utf-8")
+        self.assertIn("source \"${ROOT}/scripts/load-secrets.sh\"", text)
+        self.assertNotIn("load-secrets.sh\" || true", text)
+        self.assertNotIn("load-secrets.sh' || true", text)
 
     def test_vector_otel_validate_via_docker_when_available(self) -> None:
         """Optional: `vector validate` with docker.sock (skip if Docker missing)."""
@@ -120,6 +141,30 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertLess(fail_at, migrate_at)
         self.assertIn("exit 1", fn[fail_at:migrate_at])
         self.assertIn("api_ready=1", fn[:fail_at])
+        # ANON_KEY must not be interpolated into curl -H argv.
+        self.assertIn('curl -sf -o /dev/null -K "${curl_cfg}"', fn)
+        self.assertNotIn('-H "apikey: $(grep', fn)
+        self.assertIn('trap \'rm -f "${curl_cfg}"\' EXIT RETURN', fn)
+
+    def test_openobserve_supabase_dashboard_matches_vector_attrs(self) -> None:
+        dash = OO_SUPABASE_DASH.read_text(encoding="utf-8")
+        vector = VECTOR_OTEL.read_text(encoding="utf-8")
+        for needle in (
+            "service_name = 'supabase'",
+            "supabase_component",
+            "severity",
+            "container_name",
+            '"stream_type": "logs"',
+        ):
+            self.assertIn(needle, dash)
+        # Vector OTLP attrs that OO flattens to the dashboard columns above.
+        self.assertIn('"service.name"', vector)
+        self.assertIn("supabase.component", vector)
+        self.assertIn("container.name", vector)
+
+    def test_vector_docker_sock_is_read_only(self) -> None:
+        text = NEXUS_COMPOSE.read_text(encoding="utf-8")
+        self.assertIn("/var/run/docker.sock:ro", text)
 
     def test_ready_line_puts_supabase_back_after_start(self) -> None:
         text = START_SH.read_text(encoding="utf-8")
