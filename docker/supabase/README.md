@@ -66,6 +66,7 @@ Migrations under `docker/supabase/migrations/` apply as `postgres` on each start
 | --- | --- |
 | `001_app_roles_profiles_pgvector` | `extensions.vector`, `profiles` (one row per Auth user, trigger on `auth.users`), `document_chunks.embedding vector(3)`, forced RLS, loader write policy |
 | `002_reader_catalog_select_admin_bypassrls` | `SELECT` for `nexus_reader` and `nexus_catalog` on `profiles` and `document_chunks`; `nexus_admin` `BYPASSRLS` |
+| `003_schema_migrations_rls` | Revoke API roles from `public.schema_migrations` and force RLS. `postgres` still records applied files |
 
 `vector(3)` is the smoke size until an embedding model is chosen. A later migration changes the dimension. Distance is cosine (`<=>`). `match_document_chunks` is `security invoker` and is granted to `authenticated`.
 

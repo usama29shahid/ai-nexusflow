@@ -15,6 +15,11 @@ create table if not exists public.schema_migrations (
   applied_at timestamptz not null default now()
 );
 
+-- Not an API table. 003 repeats this for databases where 001 already ran.
+revoke all on table public.schema_migrations from anon, authenticated;
+alter table public.schema_migrations enable row level security;
+alter table public.schema_migrations force row level security;
+
 -- ---------------------------------------------------------------------------
 -- Profiles (one row per auth user)
 -- ---------------------------------------------------------------------------

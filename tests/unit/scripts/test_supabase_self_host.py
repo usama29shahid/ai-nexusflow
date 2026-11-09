@@ -27,6 +27,13 @@ MIGRATION_002 = (
     / "migrations"
     / "002_reader_catalog_select_admin_bypassrls.sql"
 )
+MIGRATION_003 = (
+    REPO_ROOT
+    / "docker"
+    / "supabase"
+    / "migrations"
+    / "003_schema_migrations_rls.sql"
+)
 VECTOR_OTEL = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector-otel.yml"
 VECTOR_UPSTREAM = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector.yml"
 OO_SUPABASE_DASH = (
@@ -369,6 +376,14 @@ EOF
         self.assertIn("alter role nexus_admin bypassrls", sql)
         rbac = RBAC_SH.read_text(encoding="utf-8")
         self.assertIn("alter role {qi[admin_u]} bypassrls;", rbac)
+
+    def test_schema_migrations_is_not_an_api_table(self) -> None:
+        sql = MIGRATION_003.read_text(encoding="utf-8")
+        self.assertIn("revoke all on table public.schema_migrations from anon, authenticated", sql)
+        self.assertIn("enable row level security", sql)
+        self.assertIn("force row level security", sql)
+        bootstrap = (REPO_ROOT / "scripts" / "supabase-migrate.sh").read_text(encoding="utf-8")
+        self.assertIn("revoke all on table public.schema_migrations from anon, authenticated", bootstrap)
 
     def test_vault_bootstrap_seeds_five_supabase_paths(self) -> None:
         text = VAULT_SH.read_text(encoding="utf-8")
