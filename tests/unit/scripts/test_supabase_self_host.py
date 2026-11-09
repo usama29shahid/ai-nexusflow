@@ -19,12 +19,20 @@ SEED_SH = REPO_ROOT / "scripts" / "supabase-vault-seed.sh"
 RBAC_SH = REPO_ROOT / "scripts" / "supabase-rbac-bootstrap.sh"
 ENSURE_ENV_SH = REPO_ROOT / "scripts" / "supabase-ensure-env.sh"
 VAULT_SYNC_SH = REPO_ROOT / "scripts" / "supabase-vault-sync.sh"
+COMPOSE_SH = REPO_ROOT / "scripts" / "supabase-compose.sh"
 MIGRATION_002 = (
     REPO_ROOT
     / "docker"
     / "supabase"
     / "migrations"
     / "002_reader_catalog_select_admin_bypassrls.sql"
+)
+MIGRATION_003 = (
+    REPO_ROOT
+    / "docker"
+    / "supabase"
+    / "migrations"
+    / "003_schema_migrations_rls.sql"
 )
 VECTOR_OTEL = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector-otel.yml"
 VECTOR_UPSTREAM = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector.yml"
@@ -85,6 +93,42 @@ class SupabaseSelfHostTest(unittest.TestCase):
         self.assertNotIn("string(parsed.msg)", text)
         self.assertIn("api:\n  enabled: false", text)
         self.assertNotIn("address: 0.0.0.0:9001", text)
+
+    def test_compose_clears_every_leaked_env_file_key(self) -> None:
+        """Any shell var named in supabase.env must be unset before Compose."""
+        text = COMPOSE_SH.read_text(encoding="utf-8")
+        self.assertIn("supabase_clear_env_file_overrides", text)
+        self.assertIn("--env-file \"${ENV_FILE}\"", text)
+        self.assertNotIn("source \"${ENV_FILE}\"", text)
+        self.assertNotIn("unset POSTGRES_PASSWORD JWT_SECRET", text)
+        proc = self._bash(
+            f"""
+            source {COMPOSE_SH.as_posix()!r}
+            envfile="$(mktemp)"
+            cat >"$envfile" <<'EOF'
+# comment
+POSTGRES_PASSWORD=real-pg-password
+JWT_SECRET=real-jwt
+export SECRET_KEY_BASE=real-secret
+ANON_KEY=real-anon
+EOF
+            export POSTGRES_PASSWORD=leaked-pg
+            export JWT_SECRET=leaked-jwt
+            export SECRET_KEY_BASE=leaked-secret
+            export ANON_KEY=leaked-anon
+            export NEXUS_UNRELATED_KEEP=keep-me
+            supabase_clear_env_file_overrides "$envfile"
+            rm -f "$envfile"
+            [[ -z "${{POSTGRES_PASSWORD+x}}" ]]
+            [[ -z "${{JWT_SECRET+x}}" ]]
+            [[ -z "${{SECRET_KEY_BASE+x}}" ]]
+            [[ -z "${{ANON_KEY+x}}" ]]
+            [[ "${{NEXUS_UNRELATED_KEEP}}" == keep-me ]]
+            echo cleared
+            """
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertIn("cleared", proc.stdout)
 
     def test_ensure_env_symlink_and_placeholder_guard(self) -> None:
         text = ENSURE_ENV_SH.read_text(encoding="utf-8")
@@ -332,6 +376,14 @@ EOF
         self.assertIn("alter role nexus_admin bypassrls", sql)
         rbac = RBAC_SH.read_text(encoding="utf-8")
         self.assertIn("alter role {qi[admin_u]} bypassrls;", rbac)
+
+    def test_schema_migrations_is_not_an_api_table(self) -> None:
+        sql = MIGRATION_003.read_text(encoding="utf-8")
+        self.assertIn("revoke all on table public.schema_migrations from anon, authenticated", sql)
+        self.assertIn("enable row level security", sql)
+        self.assertIn("force row level security", sql)
+        bootstrap = (REPO_ROOT / "scripts" / "supabase-migrate.sh").read_text(encoding="utf-8")
+        self.assertIn("revoke all on table public.schema_migrations from anon, authenticated", bootstrap)
 
     def test_vault_bootstrap_seeds_five_supabase_paths(self) -> None:
         text = VAULT_SH.read_text(encoding="utf-8")

@@ -16,6 +16,9 @@ create table if not exists public.schema_migrations (
   id text primary key,
   applied_at timestamptz not null default now()
 );
+revoke all on table public.schema_migrations from anon, authenticated;
+alter table public.schema_migrations enable row level security;
+alter table public.schema_migrations force row level security;
 SQL
 
 shopt -s nullglob
