@@ -1,0 +1,147 @@
+"use client";
+
+import Link from "next/link";
+import React, { useActionState, useEffect, useState } from "react";
+
+import { signOut, type AuthFormState } from "@/lib/auth/actions";
+
+const signedIn: AuthFormState = { error: "" };
+
+export const TopbarProfileMenu = ({ email, displayName }: { email: string; displayName: string }) => {
+    const [open, setOpen] = useState(false);
+    const [state, formAction, pending] = useActionState(signOut, signedIn);
+
+    useEffect(() => {
+        if (state.error) {
+            setOpen(true);
+        }
+    }, [state.error]);
+
+    return (
+        <div>
+            <div className="drawer drawer-end">
+                <input
+                    id="topbar-profile-drawer"
+                    type="checkbox"
+                    className="drawer-toggle"
+                    checked={open}
+                    onChange={(event) => setOpen(event.target.checked)}
+                />
+                <div className="drawer-content">
+                    <label htmlFor="topbar-profile-drawer" className="btn btn-ghost max-sm:btn-square gap-2 px-1.5">
+                        <div className="avatar">
+                            <div className="bg-base-200 mask mask-squircle w-8">
+                                <img src="/images/avatars/1.png" alt="Avatar" />
+                            </div>
+                        </div>
+                        <div className="text-start max-sm:hidden">
+                            <p className="text-sm/none">{displayName}</p>
+                            <p className="text-base-content/50 mt-0.5 text-xs/none">{email}</p>
+                        </div>
+                    </label>
+                </div>
+                <div className="drawer-side">
+                    <label
+                        htmlFor="topbar-profile-drawer"
+                        aria-label="close sidebar"
+                        className="drawer-overlay"></label>
+                    <div className="h-full w-72 p-2 sm:w-84">
+                        <div className="bg-base-100 rounded-box relative flex h-full flex-col pt-4 sm:pt-8">
+                            <label
+                                htmlFor="topbar-profile-drawer"
+                                className="btn btn-xs btn-circle btn-ghost absolute inset-s-2 top-2"
+                                aria-label="Close">
+                                <span className="iconify lucide--x size-4" />
+                            </label>
+
+                            <div className="flex flex-col items-center">
+                                <div className="relative">
+                                    <div className="avatar bg-base-200 isolate size-20 cursor-pointer overflow-hidden rounded-full px-1 pt-1 md:size-24">
+                                        <img src="/images/avatars/1.png" alt="User Avatar" />
+                                    </div>
+                                    <div className="bg-base-100 absolute inset-e-0 bottom-0 flex items-center justify-center rounded-full p-1.5 shadow-sm">
+                                        <span className="iconify lucide--pencil size-4" />
+                                    </div>
+                                </div>
+
+                                <p className="mt-4 text-lg/none font-medium sm:mt-8">{displayName}</p>
+                                <p className="text-base-content/60 mt-1 text-sm">{email}</p>
+
+                                <div className="mt-4 flex items-center gap-2 *:cursor-pointer sm:mt-6">
+                                    <div className="avatar bg-base-200 size-10 overflow-hidden rounded-full px-1 pt-1">
+                                        <img src="/images/avatars/2.png" alt="Team member" />
+                                    </div>
+                                    <div className="avatar bg-base-200 size-10 overflow-hidden rounded-full px-1 pt-1">
+                                        <img src="/images/avatars/3.png" alt="Team member" />
+                                    </div>
+                                    <div className="avatar bg-base-200 size-10 overflow-hidden rounded-full px-1 pt-1">
+                                        <img src="/images/avatars/4.png" alt="Team member" />
+                                    </div>
+                                    <div className="bg-base-200 border-base-300 flex size-10 items-center justify-center rounded-full border border-dashed">
+                                        <span className="iconify lucide--plus size-4.5" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="border-base-300 mt-4 grow overflow-auto border-t border-dashed px-2 sm:mt-6">
+                                <ul className="menu w-full p-2">
+                                    <li className="menu-title">Account</li>
+                                    <li>
+                                        <Link href="/pages/settings">
+                                            <span className="iconify lucide--user size-4.5" />
+                                            <span>View Profile</span>
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <Link href="#">
+                                            <span className="iconify lucide--users size-4.5" />
+                                            <span>Team</span>
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <Link href="#">
+                                            <span className="iconify lucide--mail-plus size-4.5" />
+                                            <span>Invites</span>
+                                            <div className="badge badge-sm">4</div>
+                                        </Link>
+                                    </li>
+
+                                    <li className="menu-title">Platform</li>
+                                    <li>
+                                        <Link href="/pages/settings">
+                                            <span className="iconify lucide--settings size-4.5" />
+                                            <span>Settings</span>
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <Link href="/pages/get-help">
+                                            <span className="iconify lucide--help-circle size-4.5" />
+                                            <span>Support</span>
+                                        </Link>
+                                    </li>
+
+                                    <li>
+                                        <form action={formAction}>
+                                            <button
+                                                className="text-error hover:bg-error/10 w-full"
+                                                type="submit"
+                                                disabled={pending}>
+                                                <span className="iconify lucide--log-out size-4.5" />
+                                                <span>Sign Out</span>
+                                            </button>
+                                            {state.error ? (
+                                                <p className="text-error px-2 py-1 text-xs" role="alert">
+                                                    {state.error}
+                                                </p>
+                                            ) : null}
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};

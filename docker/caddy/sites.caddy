@@ -79,6 +79,13 @@
 	file_server
 }
 
+# Website. Email sign-in. No Caddy password. Port 3000 is not published.
+{$NEXUS_CADDY_SITE_SCHEME}app.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	header X-Frame-Options SAMEORIGIN
+	reverse_proxy web:3000
+}
+
 {$NEXUS_CADDY_SITE_SCHEME}elementary.{$NEXUS_PUBLIC_HOST} {
 	import encode_headers
 	root * /srv/elementary

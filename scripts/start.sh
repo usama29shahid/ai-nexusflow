@@ -41,7 +41,7 @@ export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 # Profiles that map to execution branches (config/branches.yaml)
 BRANCH_PROFILES="clickhouse lakehouse"
 # Profiles for platform tooling (not a data branch)
-PLATFORM_PROFILES="vault airflow cloudbeaver cube signoz openobserve openmetadata proxy supabase"
+PLATFORM_PROFILES="vault airflow cloudbeaver cube signoz openobserve openmetadata proxy supabase web"
 
 usage() {
   cat <<'EOF'
@@ -63,6 +63,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   openobserve   Start OpenObserve reader (backlog 2.1; primary UI under test)
   openmetadata  Start OpenMetadata reader profile (data catalog)
   supabase      Start self-hosted Supabase (auth + pgvector; backlog 11)
+  web           Start the Nexus website and Caddy (http://app.NEXUS_PUBLIC_HOST)
   observability Start shared infra + SigNoz + OpenObserve + OpenMetadata
   observability-smoke  Run scripts/observability-smoke.sh
   verify        Host health check (PASS/FAIL/SKIP). Does not start or repair services.
@@ -389,6 +390,38 @@ ensure_cube() {
   docker compose --profile cube up -d cube
 }
 
+render_web_env() {
+  local src="${ROOT}/.nexusflow/supabase.env"
+  local dest="${ROOT}/.nexusflow/web.env"
+  local key
+  if [[ ! -f "${src}" ]]; then
+    echo "web: missing ${src}. Run ./scripts/start.sh supabase first." >&2
+    exit 1
+  fi
+  key="$(grep -E '^ANON_KEY=' "${src}" | head -1 | cut -d= -f2-)"
+  key="${key%\"}"
+  key="${key#\"}"
+  key="${key%\'}"
+  key="${key#\'}"
+  if [[ -z "${key}" ]]; then
+    echo "web: ANON_KEY is empty in ${src}" >&2
+    exit 1
+  fi
+  umask 077
+  cat >"${dest}" <<EOF
+SUPABASE_URL=http://kong:8000
+SUPABASE_ANON_KEY=${key}
+EOF
+}
+
+ensure_web() {
+  render_web_env
+  echo "Starting website (profile web) and Caddy..."
+  docker compose --profile web up -d --build web
+  ensure_proxy
+  docker compose --profile proxy up -d --force-recreate --no-deps caddy
+}
+
 ensure_proxy() {
   echo "Starting Caddy edge proxy (profile proxy)..."
   echo "  Host: ${NEXUS_CADDY_SITE_SCHEME:-http://}*.${NEXUS_PUBLIC_HOST:-localhost.com}"
@@ -650,7 +683,7 @@ stop_all() {
   echo "Stopping all stacks (branch + platform + vault)..."
   stop_supabase || true
   # Every profile must be enabled on down — otherwise Compose leaves profiled services running.
-  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,cube,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy \
+  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,cube,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy,web \
     docker compose \
       --profile vault \
       --profile clickhouse \
@@ -663,6 +696,7 @@ stop_all() {
       --profile openmetadata \
       --profile openmetadata-ingestion \
       --profile proxy \
+      --profile web \
       down
   echo "Stopped. Data volumes kept (no -v)."
 }
@@ -754,6 +788,14 @@ case "${cmd}" in
     echo "OpenMetadata up: http://127.0.0.1:${OPENMETADATA_SERVER_PORT:-8585}"
     echo "  Login: ${OPENMETADATA_ADMIN_EMAIL:-admin@open-metadata.org}"
     echo "  Catalog: ./scripts/observability-ingest.sh openmetadata"
+    ;;
+  web)
+    load_env_and_secrets
+    ensure_minio
+    ensure_web
+    echo "Website: ${NEXUS_CADDY_SITE_SCHEME:-http://}app.${NEXUS_PUBLIC_HOST:-localhost.com}"
+    echo "  Laptop tunnel local 8080 to Caddy port 80: http://app.localhost.com:8080"
+    echo "  Hosts: ./scripts/proxy-hosts.sh install"
     ;;
   supabase)
     load_env_and_secrets

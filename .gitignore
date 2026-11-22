@@ -14,8 +14,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Repo-root packaging output only. apps/web/src/lib is application source.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -264,6 +265,10 @@ edr_target/
 # DLT local pipeline state / secrets
 .dlt/
 **/.dlt/
+
+# Node (Nexus website)
+node_modules/
+.next/
 
 # Python / uv
 .venv/

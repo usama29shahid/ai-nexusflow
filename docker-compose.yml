@@ -6,6 +6,7 @@
 #   airflow     — Airflow (on-demand orchestration)
 #   vault       — HashiCorp Vault + Agent (NEXUS_SECRETS_BACKEND=vault)
 #   proxy       — Caddy edge (*.NEXUS_PUBLIC_HOST); see docs/edge-proxy.md
+#   web         — Nexus website (app. host only; no published port)
 #
 # Always (no profile): MinIO AIStor Free, minio-init, otel-collector
 # License (gitignored): .nexusflow/minio.license — see docker/minio/README.md
@@ -655,6 +656,22 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+
+  # ============================================================
+  # Website — Nexus Next.js (profile: web). No host port; Caddy app. host only.
+  # Anon key only, from .nexusflow/web.env (rendered by start.sh).
+  # ============================================================
+  web:
+    build:
+      context: ./apps/web
+    image: nexus-web:local
+    container_name: nexus-web
+    restart: unless-stopped
+    profiles: [web]
+    env_file:
+      - .nexusflow/web.env
+    networks:
+      - default
 
   # ============================================================
   # Caddy — edge reverse proxy (profile: proxy)
