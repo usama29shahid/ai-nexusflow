@@ -28,7 +28,9 @@ Public hostname for the capstone is intentional. That does **not** mean raw Comp
 
 ```text
 Local:  http://airflow.localhost.com
+        http://app.localhost.com          # website; laptop tunnel uses :8080
 VPS:    https://airflow.yourdomain.com
+        https://app.yourdomain.com
 ```
 
 Do not “promote” a laptop by opening port 80 on a VPS IP with the local hosts file and HTTP settings. That is a different mode.

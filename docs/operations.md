@@ -195,6 +195,7 @@ curl -sf http://127.0.0.1:8586/healthcheck         # OpenMetadata admin
 | Cube playground | http://127.0.0.1:4000 (loopback; Caddy basic auth with the docs pages, backlog **9**) |
 | Supabase Studio | http://127.0.0.1:3001 (after `./scripts/start.sh supabase`) |
 | Supabase API | http://127.0.0.1:8000 (Kong; Auth + PostgREST) |
+| Website | http://app.localhost.com after `./scripts/start.sh web` (Caddy port 80). Laptop tunnel: http://app.localhost.com:8080 |
 | Elementary (dbt DQ) | Local HTML via `edr report` (no Docker service) — see below |
 
 ### EC2 laptop SSH tunnels for UIs

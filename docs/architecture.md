@@ -337,7 +337,8 @@ ai-nexusflow/
 | `branches/dlt_dbt_spark_iceberg/` | Lakehouse ELT (dlt + dbt-spark + Iceberg) |
 | `orchestration/airflow/` | DAGs for enabled branches |
 | `agents/` | Planner, router, generator, validator, executor (backlog **12**) |
-| `ui/` | Streamlit (backlog **11**) |
+| `ui/` | Streamlit planner slot |
+| `apps/web/` | Website: Nexus Next.js, Supabase login, ecommerce home ([nexus-frontend.md](nexus-frontend.md)) |
 | `docker/` | Init scripts; Compose file stays at root (profiles in that file) |
 | `infrastructure/` | Terraform (local **5**, VPS **10**) |
 | `config/` | Env and branch activation |
