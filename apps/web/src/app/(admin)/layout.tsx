@@ -35,7 +35,7 @@ const Layout = async ({ children }: { children: ReactNode }) => {
     return (
         <div className="size-full">
             <div className="flex">
-                <Sidebar menuItems={adminMenuItems} />
+                <Sidebar menuItems={adminMenuItems} email={email} displayName={displayName} />
                 <div className="flex h-screen min-w-0 grow flex-col overflow-auto">
                     <Topbar email={email} displayName={displayName} />
                     <div id="layout-content">{children}</div>

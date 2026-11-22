@@ -83,7 +83,7 @@ export const TopbarProfileMenu = ({ email, displayName }: { email: string; displ
                                 </div>
                             </div>
 
-                            <div className="border-base-300 mt-4 grow overflow-auto border-t border-dashed px-2 sm:mt-6">
+                            <div className="border-base-300 mt-4 flex min-w-0 grow flex-col overflow-auto border-t border-dashed px-2 sm:mt-6">
                                 <ul className="menu w-full p-2">
                                     <li className="menu-title">Account</li>
                                     <li>
@@ -129,14 +129,14 @@ export const TopbarProfileMenu = ({ email, displayName }: { email: string; displ
                                                 <span className="iconify lucide--log-out size-4.5" />
                                                 <span>Sign Out</span>
                                             </button>
-                                            {state.error ? (
-                                                <p className="text-error px-2 py-1 text-xs" role="alert">
-                                                    {state.error}
-                                                </p>
-                                            ) : null}
                                         </form>
                                     </li>
                                 </ul>
+                                {state.error ? (
+                                    <p className="text-error text-wrap px-4 pb-3 text-xs break-words" role="alert">
+                                        {state.error}
+                                    </p>
+                                ) : null}
                             </div>
                         </div>
                     </div>

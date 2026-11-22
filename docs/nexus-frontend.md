@@ -8,7 +8,7 @@ Nexus Next.js in `apps/web` is the website. Supabase Auth is the app backend for
 - Email and password login and register call Supabase with the anon key. The container uses `http://kong:8000`. Passwords follow the Auth rule: 8 or more characters, with lowercase, uppercase, a digit, and a symbol.
 - A signed-in person has the Supabase role `authenticated`. That role can open the dashboard. `nexus_loader`, `nexus_reader`, `nexus_catalog`, `nexus_admin`, and `service_role` are not website roles.
 - After login the home is `/dashboards/ecommerce`. The stat cards, chart, and table still use the template sample numbers.
-- The admin top bar stays: search, language, theme, notifications, and the profile drawer. The drawer shows `profiles.display_name` or the mailbox name, and always shows `profiles.email`. Sign Out is a server action that ends the Supabase session, deletes the httpOnly cookies, and returns to `/auth/login`.
+- The admin top bar stays: search, language, theme, notifications, and the profile drawer. The drawer and the sidebar account chip show `profiles.display_name` or the mailbox name, and always show `profiles.email`. Sign Out is a server action that ends the Supabase session, deletes the httpOnly cookies, and returns to `/auth/login`. If Auth refuses sign-out, the session stays and the drawer shows "Sign out did not finish. Try again."
 - View Profile and Settings open `/pages/settings`. Help in the sidebar and Support in the profile drawer open `/pages/get-help`. Team and Invites stay visible and are not connected. Billing and the upgrade card are not in the drawer.
 - The sidebar lists Ecommerce and Settings. The Nexus component gallery and the other demo dashboards are not in this app. Chat stays in the tree for a later slice.
 

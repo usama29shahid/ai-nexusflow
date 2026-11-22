@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { passwordProblems } from "@/lib/auth/password";
+import { finishSignOut } from "@/lib/auth/sign-out";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthFormState = { error: string };
@@ -56,13 +57,7 @@ export async function signUp(_prev: AuthFormState, formData: FormData): Promise<
     redirect("/dashboards/ecommerce");
 }
 
-const SIGN_OUT_FAILED = "Sign out did not finish. Try again.";
-
 export async function signOut(_prev: AuthFormState, _formData: FormData): Promise<AuthFormState> {
     const supabase = await createClient();
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-        return { error: SIGN_OUT_FAILED };
-    }
-    redirect("/auth/login");
+    return finishSignOut(supabase, () => redirect("/auth/login"));
 }

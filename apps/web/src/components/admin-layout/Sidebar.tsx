@@ -14,7 +14,15 @@ import { useConfig } from "@/contexts/config";
 import { ISidebarMenuItem, SidebarMenuItem } from "./SidebarMenuItem";
 import { getActivatedItemParentKeys } from "./helpers";
 
-export const Sidebar = ({ menuItems }: { menuItems: ISidebarMenuItem[] }) => {
+export const Sidebar = ({
+    menuItems,
+    email,
+    displayName,
+}: {
+    menuItems: ISidebarMenuItem[];
+    email: string;
+    displayName: string;
+}) => {
     const pathname = usePathname();
     const { calculatedSidebarTheme } = useConfig();
     const scrollRef = useRef<SimpleBarCore | null>(null);
@@ -119,9 +127,9 @@ export const Sidebar = ({ menuItems }: { menuItems: ISidebarMenuItem[] }) => {
                                     <img src="/images/avatars/1.png" alt="Avatar" />
                                 </div>
                             </div>
-                            <div className="grow -space-y-0.5">
-                                <p className="text-sm font-medium">Denish N</p>
-                                <p className="text-base-content/60 text-xs">@withden</p>
+                            <div className="min-w-0 grow -space-y-0.5">
+                                <p className="truncate text-sm font-medium">{displayName}</p>
+                                <p className="text-base-content/60 truncate text-xs">{email}</p>
                             </div>
                             <span className="iconify lucide--chevrons-up-down text-base-content/60 size-4" />
                         </div>
