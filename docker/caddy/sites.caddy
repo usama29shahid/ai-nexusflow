@@ -66,6 +66,13 @@
 	reverse_proxy openmetadata-server:8585
 }
 
+# Website. Public home is open. Sign-in unlocks chat and charts. No Caddy password.
+{$NEXUS_CADDY_SITE_SCHEME}app.{$NEXUS_PUBLIC_HOST} {
+	import encode_headers
+	header X-Frame-Options SAMEORIGIN
+	reverse_proxy portal:8501
+}
+
 # Playground only. SQL API :15432 stays off the edge. Basic auth is backlog item 9.
 {$NEXUS_CADDY_SITE_SCHEME}cube.{$NEXUS_PUBLIC_HOST} {
 	import encode_headers

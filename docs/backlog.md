@@ -229,7 +229,7 @@ BI dashboards on ClickHouse. Separate chat after Supabase (**11**). Does not rep
 
 ### 14. Streamlit login
 
-Primary app UI login page using Supabase auth. Separate chat after Supabase (**11**). FastAPI and planner screens come after the login page. Enough for 3 to 5 people in the app at the same time.
+Primary app UI. First slice: public home at `app.` through Caddy, Supabase email login on that page, then a user home where chat is unlocked. Chart counts and RAG answers come with items **8** and **12**. FastAPI and planner screens come after the login page. Enough for 3 to 5 people in the app at the same time. Operator notes: [apps/portal/README.md](../apps/portal/README.md).
 
 ### 12. RAG
 

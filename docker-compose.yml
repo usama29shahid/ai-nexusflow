@@ -3,6 +3,7 @@
 #   lakehouse   — Spark Thrift, Polaris, Trino (dlt_dbt_spark_iceberg)
 #   cloudbeaver — CloudBeaver web IDE
 #   cube        — Cube Core semantic layer (ClickHouse reader)
+#   portal      — Website (Streamlit). No host port; Caddy app. host only
 #   airflow     — Airflow (on-demand orchestration)
 #   vault       — HashiCorp Vault + Agent (NEXUS_SECRETS_BACKEND=vault)
 #   proxy       — Caddy edge (*.NEXUS_PUBLIC_HOST); see docs/edge-proxy.md
@@ -686,6 +687,33 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+
+  # ============================================================
+  # Website — public home + signed-in home (profile: portal)
+  # No host port. Caddy on the Compose network is the only door.
+  # Anon key only, from .nexusflow/portal.env (rendered by start.sh).
+  # ============================================================
+  portal:
+    build:
+      context: ./apps/portal
+    image: nexus-portal:local
+    container_name: nexus-portal
+    restart: unless-stopped
+    profiles: [portal]
+    env_file:
+      - .nexusflow/portal.env
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
 
 # ==============================================================
 # Persistent Volumes

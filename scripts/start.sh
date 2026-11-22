@@ -17,6 +17,7 @@
 #   ./scripts/start.sh vault           # Vault only (platform)
 #   ./scripts/start.sh airflow         # Airflow only (platform, on-demand)
 #   ./scripts/start.sh proxy           # Caddy edge proxy (*.NEXUS_PUBLIC_HOST)
+#   ./scripts/start.sh portal          # Website behind Caddy (app.NEXUS_PUBLIC_HOST)
 #   ./scripts/start.sh signoz          # SigNoz reader (platform, on-demand)
 #   ./scripts/start.sh openobserve     # OpenObserve reader (backlog 2.1; primary UI under test)
 #   ./scripts/start.sh openmetadata    # OpenMetadata reader (platform, on-demand)
@@ -58,6 +59,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   vault         Start + bootstrap HashiCorp Vault (platform; secrets)
   airflow       Start Airflow profile only (platform; on-demand)
   cube          Start Cube Core semantic layer (http://127.0.0.1:4000)
+  portal        Start the website behind Caddy (http://app.NEXUS_PUBLIC_HOST)
   proxy         Start Caddy edge proxy (http://*.NEXUS_PUBLIC_HOST)
   signoz        Start SigNoz reader profile (trace UI)
   openobserve   Start OpenObserve reader (backlog 2.1; primary UI under test)
@@ -396,6 +398,38 @@ ensure_proxy() {
   docker compose --profile proxy up -d
 }
 
+render_portal_env() {
+  # Anon key only. Do not pass the whole Supabase env into the website container.
+  python3 - <<'PY'
+from pathlib import Path
+src = Path(".nexusflow/supabase.env")
+if not src.is_file():
+    raise SystemExit("Missing .nexusflow/supabase.env. Run ./scripts/start.sh supabase first.")
+vals = {}
+for line in src.read_text(encoding="utf-8").splitlines():
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    vals[key] = value.strip().strip('"').strip("'")
+anon = vals.get("ANON_KEY", "")
+if not anon:
+    raise SystemExit("ANON_KEY is missing from .nexusflow/supabase.env")
+dest = Path(".nexusflow/portal.env")
+dest.write_text(
+    "SUPABASE_URL=http://kong:8000\nSUPABASE_ANON_KEY=" + anon + "\n",
+    encoding="utf-8",
+)
+dest.chmod(0o600)
+PY
+}
+
+ensure_portal() {
+  echo "Starting the website (profile portal) behind Caddy..."
+  ensure_supabase
+  render_portal_env
+  docker compose --profile portal --profile proxy up -d --build portal caddy
+}
+
 ensure_signoz() {
   echo "Starting SigNoz reader (profile signoz)..."
   # Persist a local JWT secret when missing (same pattern as Airflow JWT).
@@ -606,11 +640,21 @@ start_profiles() {
 
   echo "Branch / optional profiles: COMPOSE_PROFILES=${COMPOSE_PROFILES:-"(none — shared infra only)"}"
   echo "  Branch stacks:   clickhouse | lakehouse"
-  echo "  Platform (opt.): airflow | cloudbeaver | cube | signoz | openobserve | openmetadata | supabase | vault via NEXUS_SECRETS_BACKEND"
+  echo "  Platform (opt.): airflow | cloudbeaver | cube | portal | signoz | openobserve | openmetadata | supabase | vault via NEXUS_SECRETS_BACKEND"
   echo "  Always:          MinIO, otel-collector"
 
   # Always bring shared infra up first (explicit; not only via compose no-profile side effect).
   ensure_shared_infra
+
+  if [[ ",${COMPOSE_PROFILES}," == *",portal,"* ]]; then
+    ensure_supabase
+    render_portal_env
+    # The website container publishes no host port. Caddy is the only door.
+    if [[ ",${COMPOSE_PROFILES}," != *",proxy,"* ]]; then
+      echo "Website profile portal has no host port; starting Caddy (proxy) with it."
+      export COMPOSE_PROFILES="${COMPOSE_PROFILES},proxy"
+    fi
+  fi
 
   if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* ]]; then
     require_airflow_elt_ready
@@ -620,7 +664,7 @@ start_profiles() {
   if [[ -n "${COMPOSE_PROFILES}" ]]; then
     # Rebuild when Airflow is in the profile set so docker/airflow/Dockerfile
     # changes (docker CLI) are not skipped by a stale nexus-airflow image.
-    if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* ]]; then
+    if [[ ",${COMPOSE_PROFILES}," == *",airflow,"* || ",${COMPOSE_PROFILES}," == *",portal,"* ]]; then
       docker compose up -d --build
     else
       docker compose up -d
@@ -650,13 +694,14 @@ stop_all() {
   echo "Stopping all stacks (branch + platform + vault)..."
   stop_supabase || true
   # Every profile must be enabled on down — otherwise Compose leaves profiled services running.
-  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,cube,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy \
+  COMPOSE_PROFILES=clickhouse,lakehouse,cloudbeaver,cube,portal,airflow,signoz,openobserve,openmetadata,openmetadata-ingestion,proxy \
     docker compose \
       --profile vault \
       --profile clickhouse \
       --profile lakehouse \
       --profile cloudbeaver \
       --profile cube \
+      --profile portal \
       --profile airflow \
       --profile signoz \
       --profile openobserve \
@@ -729,7 +774,15 @@ case "${cmd}" in
     echo "Caddy up on :${NEXUS_PROXY_HTTP_PORT:-80}"
     echo "  Examples: http://airflow.${NEXUS_PUBLIC_HOST:-localhost.com}"
     echo "            http://minio.${NEXUS_PUBLIC_HOST:-localhost.com}"
+    echo "            http://app.${NEXUS_PUBLIC_HOST:-localhost.com}  (after ./scripts/start.sh portal)"
     echo "  Hosts:    ./scripts/proxy-hosts.sh install"
+    ;;
+  portal)
+    load_env_and_secrets
+    ensure_minio
+    ensure_portal
+    echo "Website: http://app.${NEXUS_PUBLIC_HOST:-localhost.com}"
+    echo "  Hosts: ./scripts/proxy-hosts.sh install"
     ;;
   signoz)
     load_env_and_secrets

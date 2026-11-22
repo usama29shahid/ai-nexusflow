@@ -320,6 +320,7 @@ ai-nexusflow/
 │   └── dlt_dbt_spark_iceberg/
 ├── orchestration/airflow/dags/
 ├── agents/
+├── apps/portal/
 ├── ui/
 ├── docker/clickhouse/init/
 ├── infrastructure/
@@ -337,7 +338,8 @@ ai-nexusflow/
 | `branches/dlt_dbt_spark_iceberg/` | Lakehouse ELT (dlt + dbt-spark + Iceberg) |
 | `orchestration/airflow/` | DAGs for enabled branches |
 | `agents/` | Planner, router, generator, validator, executor (backlog **12**) |
-| `ui/` | Streamlit (backlog **11**) |
+| `apps/portal/` | Website: public home, Supabase login, signed-in home (backlog **14**) |
+| `ui/` | Not the website. Planner screens come after the login page |
 | `docker/` | Init scripts; Compose file stays at root (profiles in that file) |
 | `infrastructure/` | Terraform (local **5**, VPS **10**) |
 | `config/` | Env and branch activation |

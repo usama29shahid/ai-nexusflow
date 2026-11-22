@@ -67,6 +67,7 @@ SUBDOMAINS=(
   docs
   elementary
   cube
+  app
 )
 
 hosts_block() {

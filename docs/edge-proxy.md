@@ -55,7 +55,7 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 
 **Local:** App login is enough for Airflow / Vault / MinIO / CloudBeaver / etc. Strong passwords; never demo defaults on a shared host.
 
-**Before any public / VPS edge:** gate unauthenticated surfaces (`docs.`, `elementary.`, Cube playground on `:4000`, future home with Supabase + Google auth). Cube dev mode has no app login, so it uses the same Caddy basic auth as the static docs pages (backlog **9**). Caddy is TLS + routing, not a substitute for app passwords.
+**Before any public / VPS edge:** gate unauthenticated surfaces (`docs.`, `elementary.`, Cube playground on `:4000`). The website (`app.`) keeps its public home open and unlocks chat and charts with a Supabase session. Cube dev mode has no app login, so it uses the same Caddy basic auth as the static docs pages (backlog **9**). Caddy is TLS + routing, not a substitute for app passwords.
 
 ## Publish table
 
@@ -71,6 +71,7 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 | `signoz.` / `openobserve.` / `openmetadata.` | Readers | App login | App login |
 | `docs.` / `elementary.` | Static | Loopback OK | **Auth gate required** |
 | `cube.` | Cube playground `:4000` | Loopback OK (dev mode, no app login) | **Same auth gate as docs** |
+| `app.` | Website `:8501` on the Compose network only | Public home open; Supabase session unlocks chat and charts | Same. HTTPS via edge mode. No Caddy password |
 
 ## Deployment contract (Terraform / GitHub Actions — backlog item 10)
 
@@ -86,7 +87,7 @@ When implementing `infrastructure/terraform/` and VPS deploy Actions, satisfy al
 6. **Include profile `proxy`** in the VPS Compose profile set used by deploy/`start.sh`.
 7. **Render Airflow/MinIO public URLs** for HTTPS, e.g. `AIRFLOW__API__BASE_URL=https://airflow.${NEXUS_PUBLIC_HOST}` (Compose also accepts `AIRFLOW__WEBSERVER__BASE_URL`), `ENABLE_PROXY_FIX=True`, `MINIO_BROWSER_REDIRECT_URL=https://minio.${NEXUS_PUBLIC_HOST}`.
 8. **Secrets:** `NEXUS_SECRETS_BACKEND=vault`; generate Fernet, JWT, and admin passwords on that machine — do not copy WSL `.env` ([vault.md](vault.md)).
-9. **Auth gate** for `docs.` / `elementary.` / Cube playground / home must exist before pointing public DNS at the box.
+9. **Auth gate** for `docs.` / `elementary.` / Cube playground must exist before pointing public DNS at the box. `app.` stays a public home; signed-in features use the Supabase session, not Caddy basic auth.
 10. **Same execution path:** Actions deploy = `git pull` + `./scripts/start.sh` (or documented equivalent). Actions is not a second ELT runner.
 
 Canonical pointers: [ci-cd.md](ci-cd.md), [infrastructure/terraform/README.md](../infrastructure/terraform/README.md).

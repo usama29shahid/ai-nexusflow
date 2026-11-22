@@ -24,8 +24,8 @@ Open e.g. `http://airflow.localhost.com`. Windows browser → also update Window
 
 ## Auth
 
-Local: each tool’s own login.  
-Before VPS: gate `docs` / `elementary` / `cube` / future home — [edge-proxy auth](../../docs/edge-proxy.md#auth-locked-intent). Backlog item **9** for that basic auth. `cube.` proxies playground port 4000; the SQL API stays off the edge. Port 4000 itself stays on loopback.
+Local: each tool’s own login. The website is `http://app.localhost.com` after `./scripts/start.sh portal`.  
+Before VPS: gate `docs` / `elementary` / `cube` / future home — [edge-proxy auth](../../docs/edge-proxy.md#auth-locked-intent). Backlog item **9** for that basic auth. `app.` does not use that basic auth. `cube.` proxies playground port 4000; the SQL API stays off the edge. Port 4000 itself stays on loopback.
 
 ## VPS (backlog item 10 — automated)
 

@@ -58,6 +58,8 @@ The browser may use the publishable / anon key. The service-role key and `nexus_
 
 Lab defaults written into `.nexusflow/supabase.env` on first create: `SUPABASE_PUBLIC_URL=http://127.0.0.1:8000`, `API_EXTERNAL_URL=http://127.0.0.1:8000/auth/v1`, `SITE_URL=http://127.0.0.1:3001`, `ENABLE_EMAIL_AUTOCONFIRM=true`. Autoconfirm is for this lab (no SMTP). Do not copy that flag onto a public host.
 
+Auth passwords are at least 8 characters and must include lowercase, uppercase, a digit, and a symbol (`GOTRUE_PASSWORD_MIN_LENGTH`, `GOTRUE_PASSWORD_REQUIRED_CHARACTERS`). Keep that character class quoted in an env file so `#` stays part of the value. Refresh-token rotation stays on, and a second tab can still refresh the previous token for 10 seconds (`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL`). Those defaults live on the Auth service in `docker-compose.yml`, so an existing lab env picks them up when Auth is recreated.
+
 ## Database
 
 Migrations under `docker/supabase/migrations/` apply as `postgres` on each start. `schema_migrations` records the file name. Applied files are not run again.

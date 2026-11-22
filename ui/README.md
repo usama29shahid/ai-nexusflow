@@ -1,5 +1,5 @@
 # ui
 
-Streamlit app for natural-language ELT requests, retrieved rules, generated artifacts, and run status.
+This folder is not the website. The public home and signed-in home are in [apps/portal](../apps/portal/README.md) (backlog item **14**).
 
-**When:** [docs/backlog.md](../docs/backlog.md) item **14** (login), after Supabase item **11**. Host on a VPS or EC2 (not shared PHP hosting). Not implemented yet.
+Planner screens come after that login page. Do not add a second Streamlit app here.
