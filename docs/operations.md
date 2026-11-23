@@ -1,6 +1,6 @@
 # Daily operations runbook
 
-Quick reference when you forget start/stop steps. For first-time install see [setup.md](setup.md). For Vault details see [vault.md](vault.md).
+Quick reference when you forget start/stop steps. For first-time install see [setup.md](setup.md). For Vault details see [vault.md](vault.md). To free disk without deleting ingested data, follow [Free disk space](#free-disk-space-build-cache-only). That cleanup is on demand only.
 
 ---
 
@@ -164,7 +164,16 @@ Start the stacks first. `./scripts/start.sh all` brings up MinIO, OTel, ClickHou
 
 `openmetadata-ingestion` is skipped on purpose (optional heavy OM Airflow; catalog ingest uses a one-shot image — see backlog item 3). Vault checks run only when `NEXUS_SECRETS_BACKEND=vault`, and they fail while Vault is sealed (`"sealed":false` is required). CloudBeaver and Caddy are checked when that profile is in `COMPOSE_PROFILES` or the container is already running.
 
-One-shots that should be `Exited (0)`: `minio-init`, `airflow-init`, `openmetadata-migrate`. `polaris-setup` stays up.
+SigNoz and the lakehouse are not in the current `COMPOSE_PROFILES` (`signoz` and `lakehouse` are off). `verify` still checks them and does not `SKIP` those rows, so the command exits non-zero. These `FAIL` lines are expected until those profiles are turned on:
+
+- `signoz healthy`, `SigNoz /api/v1/health`
+- `polaris healthy`, `Polaris /q/health`, `polaris-setup healthy`
+- `spark-thrift healthy`, `Spark Thrift TCP`
+- `trino healthy`, `Trino /v1/info`
+
+Any other `FAIL` is a real problem. Do not start SigNoz or the lakehouse just to make `verify` exit 0.
+
+One-shots that should be `Exited (0)`: `minio-init`, `airflow-init`, `openmetadata-migrate`. `polaris-setup` stays up only while the `lakehouse` profile is running.
 
 Manual curls (same targets the script uses):
 
@@ -428,6 +437,99 @@ REST **history** is gone. You can only call the Route API again for the **curren
 
 ---
 
+## Free disk space (build cache only)
+
+On demand only. Run this when someone asks to free disk space. Do not run it from `./scripts/start.sh`, a cron job, Airflow, or a routine health check.
+
+Use it when the root disk is nearly full and the goal is space, not a reset. The usual large reclaimable piece is the Docker BuildKit cache (on the order of 12G after repeated image builds). `./scripts/start.sh` with `airflow` in `COMPOSE_PROFILES` rebuilds `nexus-elt`, `nexus-airflow`, and `nexus-web`, so several GB of cache comes back. The old unused cache does not. Host Python caches are not part of this cleanup.
+
+### 1. Record what must still be there
+
+From the repository root:
+
+```bash
+df -h /
+docker system df
+docker volume ls --format '{{.Name}}' | sort > /tmp/nexus-volumes-before.txt
+```
+
+Keep every named volume. These hold ingested and platform data:
+
+| Volume | Contents |
+| --- | --- |
+| `*_minio_data` | Lake, raw archive, telemetry bucket |
+| `*_clickhouse_data` | Warehouse Bronze / silver / Gold |
+| `*_clickhouse_logs` | ClickHouse server logs |
+| `*_openobserve_data` | OpenObserve streams and index |
+| `*_airflow_postgres_data`, `*_airflow_logs` | Airflow metadata and task logs |
+| `*_openmetadata_postgres_data`, `*_es-data` | Catalog database and Elasticsearch |
+| `*_vault_data` | Vault secrets |
+| `*_caddy_data`, `*_caddy_config` | Edge proxy state |
+| `*_db-config` and `docker/supabase/volumes/db/data` | Supabase Postgres (Auth, profiles, embeddings). The data directory is a bind mount, not a Docker volume. |
+
+Also leave the repo, `.venv`, `~/.cache`, and `~/.local` alone. That is the project install and host package cache.
+
+### 2. Delete build cache only
+
+```bash
+docker builder prune -a -f
+df -h /
+docker system df
+```
+
+`Build Cache` should drop to `0B`. Image count and `docker volume ls` stay the same. Confirm `/tmp/nexus-volumes-before.txt` still matches:
+
+```bash
+docker volume ls --format '{{.Name}}' | sort | diff -u /tmp/nexus-volumes-before.txt -
+```
+
+An empty diff means no volume was removed.
+
+Do not run any of these. With the stack stopped, Docker reports volumes and images as reclaimable, and these commands delete them:
+
+```text
+docker system prune
+docker system prune -a
+docker system prune --volumes
+docker volume prune
+docker image prune -a
+docker compose down -v
+```
+
+Do not `rm` paths under `/var/lib/docker/volumes`.
+
+### 3. Start the stacks already configured
+
+```bash
+./scripts/start.sh
+```
+
+This follows `COMPOSE_PROFILES` in `.env`. Do not add or drop profiles as part of cleanup. `airflow` in that list triggers `docker build` for `nexus-elt` and `docker compose up -d --build` (Airflow and the website). Expect build cache to grow again by a few GB. Data volumes are reused, not reloaded.
+
+### 4. Prove services are healthy
+
+```bash
+./scripts/start.sh verify
+```
+
+`signoz` and `lakehouse` are not in the current `COMPOSE_PROFILES`. `verify` still checks them, so those rows `FAIL` and the script exits non-zero. That is expected. See [Verify services](#verify-services) for the exact lines. Any other `FAIL` means the cleanup did not leave the started stacks healthy. Do not add `signoz` or `lakehouse` during cleanup to chase exit 0.
+
+`verify` does not cover Cube, the website, or Supabase. When those profiles are enabled, check them too:
+
+```bash
+curl -sf http://127.0.0.1:4000/readyz          # Cube → {"health":"HEALTH"}
+curl -sf -o /dev/null -w '%{http_code}\n' \
+  -H 'Host: app.localhost.com' http://127.0.0.1/   # website via Caddy → 200
+docker inspect --format '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+  supabase-db supabase-auth supabase-rest supabase-kong supabase-studio supabase-meta supabase-vector
+```
+
+Supabase containers except `supabase-vector` should be `running healthy`. Vector should be `running`. One-shot init containers `minio-init`, `airflow-init`, and `openmetadata-migrate` should be `Exited (0)`. A one-shot OpenMetadata ingest or profiler container may still be running; it is a job, not a service that must stay up.
+
+Single-node Elasticsearch `yellow` is healthy. CloudBeaver may log a missing Yandex ClickHouse JDBC driver and still be fine when `verify` gets HTTP 200 from port 8978.
+
+After a good run, `df -h /` should show more free space than step 1, even though build cache is no longer zero.
+
 ## Cheat sheet
 
 ```text
@@ -436,6 +538,7 @@ Start all stacks    →  ./scripts/start.sh all
 Start .env stacks   →  ./scripts/start.sh
 Stop all            →  ./scripts/start.sh down
 Health check        →  ./scripts/start.sh verify   # does not start services
+Free disk (on demand) →  docs/operations.md “Free disk space” — only when asked; docker builder prune -a -f only, then ./scripts/start.sh && ./scripts/start.sh verify (signoz + lakehouse FAILs are expected while those profiles are off)
 Stop SigNoz only    →  ./scripts/start.sh stop-signoz
 Stop OpenObserve    →  ./scripts/start.sh stop-openobserve
 Stop OM only        →  ./scripts/start.sh stop-openmetadata

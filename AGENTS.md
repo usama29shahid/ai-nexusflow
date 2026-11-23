@@ -10,7 +10,7 @@ Architecture and engineering standards live in `docs/`. Read the relevant docume
 - `docs/backlog.md` — **delivery order source of truth** (execute one item at a time).
 - `docs/roadmap.md` — historical phase checklist and status; defers to backlog for what to build next.
 - `docs/setup.md` — local development and service topology.
-- `docs/operations.md` — daily start/stop, all services, lakehouse restore.
+- `docs/operations.md` — daily start/stop, all services, lakehouse restore. Disk cleanup is **on demand only** (**Free disk space (build cache only)**): run it when asked to free space, never from startup, cron, or Airflow. Then `docker builder prune -a -f`, `./scripts/start.sh`, and `./scripts/start.sh verify`. While `signoz` and `lakehouse` are absent from `COMPOSE_PROFILES`, those `verify` rows `FAIL` and the script exits non-zero; that is expected. Any other `FAIL` is real. Never prune volumes or images, and never delete MinIO, ClickHouse, Postgres, Vault, OpenObserve, the repo, or the project venv.
 - `docs/vault.md` — HashiCorp Vault secrets (KV paths, Agent injection, VPS ops). Read before changing secrets or bootstrap scripts.
 - `docs/edge-proxy.md` — Caddy edge; local vs VPS modes; deploy checklist for Actions/Terraform. When Caddy exits or VPS ports look wrong, use the **Debug: Caddy exit / NEXUS_PUBLISH_BIND** section before inventing a new failure mode.
 - `docs/ci-cd.md` — GitHub Actions + Terraform intent; production-shaped local; day-one deploy.
