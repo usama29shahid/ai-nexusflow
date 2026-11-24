@@ -4,6 +4,7 @@ import { Footer } from "@/components/admin-layout/Footer";
 import { Rightbar } from "@/components/admin-layout/Rightbar";
 import { Sidebar } from "@/components/admin-layout/Sidebar";
 import { Topbar } from "@/components/admin-layout/Topbar";
+import { profileView, shellDisplayName } from "@/lib/profile/profile-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { adminMenuItems } from "./menu";
@@ -14,22 +15,18 @@ const Layout = async ({ children }: { children: ReactNode }) => {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
     const user = data.user;
-    let email = user?.email ?? "";
-    let displayName = email.split("@")[0] || "Account";
+    const authEmail = user?.email ?? "";
+    let email = authEmail;
+    let displayName = "Account";
     if (user) {
-        const { data: profile } = await supabase
+        const result = await supabase
             .from("profiles")
-            .select("email, display_name")
+            .select("email, display_name, created_at, updated_at")
             .eq("id", user.id)
             .maybeSingle();
-        if (profile?.email) {
-            email = profile.email;
-        }
-        if (profile?.display_name) {
-            displayName = profile.display_name;
-        } else if (email.includes("@")) {
-            displayName = email.split("@")[0];
-        }
+        const view = profileView(authEmail, result);
+        email = view.email;
+        displayName = shellDisplayName(view);
     }
 
     return (
