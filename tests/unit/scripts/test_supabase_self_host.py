@@ -34,6 +34,34 @@ MIGRATION_003 = (
     / "migrations"
     / "003_schema_migrations_rls.sql"
 )
+MIGRATION_005 = (
+    REPO_ROOT
+    / "docker"
+    / "supabase"
+    / "migrations"
+    / "005_profiles_display_name_update.sql"
+)
+MIGRATION_006 = (
+    REPO_ROOT
+    / "docker"
+    / "supabase"
+    / "migrations"
+    / "006_profiles_display_name_guard.sql"
+)
+MIGRATION_007 = (
+    REPO_ROOT
+    / "docker"
+    / "supabase"
+    / "migrations"
+    / "007_profiles_name_required_on_update.sql"
+)
+MIGRATION_008 = (
+    REPO_ROOT
+    / "docker"
+    / "supabase"
+    / "migrations"
+    / "008_profiles_display_name_unicode_trim.sql"
+)
 VECTOR_OTEL = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector-otel.yml"
 VECTOR_UPSTREAM = REPO_ROOT / "docker" / "supabase" / "volumes" / "logs" / "vector.yml"
 OO_SUPABASE_DASH = (
@@ -376,6 +404,59 @@ EOF
         self.assertIn("alter role nexus_admin bypassrls", sql)
         rbac = RBAC_SH.read_text(encoding="utf-8")
         self.assertIn("alter role {qi[admin_u]} bypassrls;", rbac)
+
+    def test_profile_display_name_update_is_column_scoped(self) -> None:
+        sql = MIGRATION_005.read_text(encoding="utf-8")
+        self.assertIn("revoke update on table public.profiles from authenticated", sql)
+        self.assertIn(
+            "grant update (display_name, updated_at) on table public.profiles to authenticated",
+            sql,
+        )
+
+    def test_profile_display_name_length_and_updated_at_trigger(self) -> None:
+        sql = MIGRATION_006.read_text(encoding="utf-8")
+        self.assertIn("profiles_display_name_length", sql)
+        self.assertIn("char_length(btrim(display_name)) between 1 and 80", sql)
+        self.assertIn("profiles_set_updated_at", sql)
+        self.assertIn("new.updated_at := now()", sql)
+        self.assertIn("revoke update (display_name, updated_at) on table public.profiles from authenticated", sql)
+        self.assertIn("grant update (display_name) on table public.profiles to authenticated", sql)
+
+    def test_profile_update_cannot_clear_display_name(self) -> None:
+        sql = MIGRATION_007.read_text(encoding="utf-8")
+        self.assertIn("raise exception 'display_name is required'", sql)
+        self.assertIn("old.display_name is not null", sql)
+        self.assertIn(
+            "revoke all on function public.set_profiles_updated_at() from public, anon, service_role",
+            sql,
+        )
+        self.assertIn("grant execute on function public.set_profiles_updated_at() to authenticated", sql)
+
+    def test_profile_display_name_trims_unicode_whitespace(self) -> None:
+        sql = MIGRATION_008.read_text(encoding="utf-8")
+        self.assertIn("public.trim_display_name", sql)
+        self.assertIn(
+            r"U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF'",
+            sql,
+        )
+        self.assertIn("new.display_name := public.trim_display_name(new.display_name)", sql)
+        self.assertIn(
+            "char_length(public.trim_display_name(display_name)) between 1 and 80",
+            sql,
+        )
+        self.assertIn(
+            "revoke all on function public.trim_display_name(text) from public, anon, service_role",
+            sql,
+        )
+        self.assertIn("grant execute on function public.trim_display_name(text) to authenticated", sql)
+        self.assertIn("public.trim_display_name(coalesce(new.raw_user_meta_data->>'display_name', ''))", sql)
+        begin_at = sql.index("\nbegin;\n")
+        disable_at = sql.index("disable trigger profiles_set_updated_at")
+        enable_at = sql.index("enable trigger profiles_set_updated_at")
+        commit_at = sql.rindex("\ncommit;")
+        self.assertLess(begin_at, disable_at)
+        self.assertLess(enable_at, commit_at)
+        self.assertLess(sql.index("008_profiles_display_name_unicode_trim"), commit_at)
 
     def test_schema_migrations_is_not_an_api_table(self) -> None:
         sql = MIGRATION_003.read_text(encoding="utf-8")

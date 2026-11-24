@@ -67,12 +67,17 @@ Migrations under `docker/supabase/migrations/` apply as `postgres` on each start
 | `001_app_roles_profiles_pgvector` | `extensions.vector`, `profiles` (one row per Auth user, trigger on `auth.users`), `document_chunks.embedding vector(3)`, forced RLS, loader write policy |
 | `002_reader_catalog_select_admin_bypassrls` | `SELECT` for `nexus_reader` and `nexus_catalog` on `profiles` and `document_chunks`; `nexus_admin` `BYPASSRLS` |
 | `003_schema_migrations_rls` | Revoke API roles from `public.schema_migrations` and force RLS. `postgres` still records applied files |
+| `004_profile_display_name_from_signup` | Signup copies `display_name` from Auth user metadata onto the new profile row |
+| `005_profiles_display_name_update` | `authenticated` may update only `profiles.display_name` and `profiles.updated_at` |
+| `006_profiles_display_name_guard` | Display name is 1–80 characters. A trigger sets `updated_at`. `authenticated` can no longer write that column |
+| `007_profiles_name_required_on_update` | An update cannot clear `display_name`. `EXECUTE` on the trigger function is limited to `authenticated` |
+| `008_profiles_display_name_unicode_trim` | Display names trim the same whitespace as the website. A blank name is rejected. Signup uses that trim. The rewrite and the stricter check commit together |
 
 `vector(3)` is the smoke size until an embedding model is chosen. A later migration changes the dimension. Distance is cosine (`<=>`). `match_document_chunks` is `security invoker` and is granted to `authenticated`.
 
 | Role | Use |
 | --- | --- |
-| `anon` / `authenticated` | Supabase API roles. Logged-in users read their own profile and all chunks. They cannot insert chunks |
+| `anon` / `authenticated` | Supabase API roles. Logged-in users read their own profile and all chunks, and may set `display_name` on their profile. A trigger trims the same whitespace as the website, sets `updated_at`, and rejects a blank name or clearing the name. They cannot insert chunks, change email, or set `updated_at`. `anon` cannot execute the trim or trigger functions |
 | `nexus_loader` | Embedding ingest. `INSERT` / `UPDATE` on `document_chunks` |
 | `nexus_reader`, `nexus_catalog` | `SELECT` on `profiles` and `document_chunks` |
 | `nexus_admin` | Break-glass. `BYPASSRLS` plus grants on `public` |
