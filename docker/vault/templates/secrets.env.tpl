@@ -89,3 +89,11 @@ SUPABASE_CATALOG_PASSWORD={{ .Data.data.password }}
 SUPABASE_ADMIN_USER={{ .Data.data.username }}
 SUPABASE_ADMIN_PASSWORD={{ .Data.data.password }}
 {{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/docs_basic_auth" $env) }}
+NEXUS_DOCS_BASIC_AUTH_USER={{ .Data.data.username }}
+NEXUS_DOCS_BASIC_AUTH_PASSWORD={{ .Data.data.password }}
+{{- end }}
+{{- with secret (printf "secret/data/nexusflow/%s/cube_sql" $env) }}
+CUBEJS_SQL_USER={{ .Data.data.username }}
+CUBEJS_SQL_PASSWORD={{ .Data.data.password }}
+{{- end }}

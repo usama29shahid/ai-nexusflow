@@ -88,8 +88,8 @@ Compose already exists for local services. Remaining ops run after RAG per [back
 | **3** | OpenMetadata product setup / catalog (done) |
 | **3.1** | OpenMetadata ELT projection — dbt lineage/DQ, Airflow pipelines, deep-dive links (done) |
 | **4** | MinIO IAM — loader / reader / platform_reader / admin (done; `./scripts/minio-iam-bootstrap.sh`) |
-| **9** | Basic auth for Elementary + dlt/dbt docs HTML and the Cube playground (Caddy) — after RAG |
-| **5** | Local HashiCorp Terraform (API resources; BSL; no OpenTofu/Ansible) — after **9** |
+| **9** | Caddy popup for dbt docs, Elementary, and Cube (done). dlt workspace stays on localhost |
+| **5** | Local HashiCorp Terraform (API resources; BSL; no OpenTofu/Ansible) |
 | **10** | VPS + GitHub Actions — warehouse + readers E2E, edge/DNS/`prd`; lakehouse E2E with item **6** |
 
 **CI/CD intent (when item 10 lands):** GitHub Actions is the primary path (lint, test, build, `terraform plan/apply`, VPS deploy). Local Terraform (item **5**) configures resources against Compose; it does **not** replace Actions deploy or `./scripts/start.sh`. Details: [ci-cd.md](ci-cd.md), [edge-proxy.md](edge-proxy.md).
@@ -163,7 +163,7 @@ dbt-clickhouse  1.10.2
 - [ ] Iceberg / Polaris / dbt-spark / Trino products path — backlog **6**
 - [x] Catalog follow-on dlt endpoints (`categories`, `brands`, `subcategories`) — backlog **7**
 - [ ] Facts, marts, semantic layer — backlog **8**
-- [ ] Docs basic auth (Elementary / dbt / dlt HTML + Cube playground) — backlog **9**
+- [x] Caddy basic auth for dbt docs, Elementary, and Cube — backlog **9** (dlt workspace stays on localhost)
 - [ ] VPS + GitHub Actions — backlog **10**
 - [x] Supabase — auth, pgvector, loopback API — backlog **11** (this branch)
 - [ ] Superset — BI on ClickHouse — backlog **13**
@@ -174,7 +174,7 @@ dbt-clickhouse  1.10.2
 
 ## Immediate next step
 
-**See [backlog.md](backlog.md).** Warehouse `products` + catalog endpoints (`categories`, `brands`, `subcategories`) + Airflow + lake are done (items 0 and 7). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1 + 3.2), MinIO IAM (4), and Supabase (11) are done. Next up: **8. Facts, marts, semantic layer** → **13** → **14** → **12** → **9** → **5** → **10** → **6** (Iceberg last).
+**See [backlog.md](backlog.md).** Warehouse `products` + catalog endpoints (`categories`, `brands`, `subcategories`) + Airflow + lake are done (items 0 and 7). Stack verify (1), SigNoz (2), OpenObserve (2.1), OpenMetadata (3 + 3.1 + 3.2), MinIO IAM (4), and Supabase (11) are done. Next up: **8. Facts, marts, semantic layer** → **13** → **14** → **12** → **5** → **10** → **6** (Iceberg last). Docs basic auth (**9**) is done for dbt docs, Elementary, and Cube.
 
 ```text
 REST → dlt ✓ → MinIO archive + ClickHouse Bronze ✓ → dbt silver/gold ✓ → lake telemetry ✓

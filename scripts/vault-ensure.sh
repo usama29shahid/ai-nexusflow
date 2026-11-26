@@ -104,6 +104,18 @@ backup_creds_in_file() {
     && grep -q '^NEXUS_BACKUP_SECRET_KEY=' "${secrets_file}"
 }
 
+docs_basic_auth_in_file() {
+  [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
+    && grep -q '^NEXUS_DOCS_BASIC_AUTH_USER=.\+' "${secrets_file}" \
+    && grep -q '^NEXUS_DOCS_BASIC_AUTH_PASSWORD=.\+' "${secrets_file}"
+}
+
+cube_sql_in_file() {
+  [[ -f "${secrets_file}" && -r "${secrets_file}" ]] \
+    && grep -q '^CUBEJS_SQL_USER=.\+' "${secrets_file}" \
+    && grep -q '^CUBEJS_SQL_PASSWORD=.\+' "${secrets_file}"
+}
+
 vault_root_token() {
   python3 -c "import json; print(json.load(open('${INIT_FILE}'))['root_token'])"
 }
@@ -155,6 +167,82 @@ ensure_airflow_jwt_secret() {
     sleep 1
   done
   echo "Timed out waiting for AIRFLOW__API_AUTH__JWT_SECRET in ${secrets_file}." >&2
+  echo "  docker compose logs vault-agent" >&2
+  exit 1
+}
+
+# Docs sites (backlog 9): one shared Caddy user for docs., elementary., and cube.
+ensure_docs_basic_auth_secret() {
+  if docs_basic_auth_in_file; then
+    return 0
+  fi
+  if [[ ! -f "${INIT_FILE}" ]]; then
+    echo "Cannot seed docs basic auth: missing ${INIT_FILE}" >&2
+    return 1
+  fi
+  local kv_base="secret/nexusflow/${NEXUS_ENV:-dev}"
+  echo "Ensuring ${kv_base}/docs_basic_auth (Caddy docs/elementary/cube)..."
+  if ! vault_exec_auth kv get "${kv_base}/docs_basic_auth" >/dev/null 2>&1; then
+    local user password
+    user="$(grep -E '^NEXUS_DOCS_BASIC_AUTH_USER=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    user="${user:-nexus}"
+    password="$(grep -E '^NEXUS_DOCS_BASIC_AUTH_PASSWORD=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    if [[ -z "${password}" ]]; then
+      password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    fi
+    echo "  Seeding: ${kv_base}/docs_basic_auth"
+    vault_exec_auth kv put "${kv_base}/docs_basic_auth" \
+      username="${user}" \
+      password="${password}"
+  fi
+  echo "Recreating Vault Agent so secrets.env picks up docs basic auth..."
+  docker compose --profile vault up -d --no-deps --force-recreate vault-agent
+  local i
+  for i in $(seq 1 30); do
+    if docs_basic_auth_in_file; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for NEXUS_DOCS_BASIC_AUTH_* in ${secrets_file}." >&2
+  echo "  docker compose logs vault-agent" >&2
+  exit 1
+}
+
+# Cube SQL API password. The host does not publish 15432; this replaces the default "cube".
+ensure_cube_sql_secret() {
+  if cube_sql_in_file; then
+    return 0
+  fi
+  if [[ ! -f "${INIT_FILE}" ]]; then
+    echo "Cannot seed Cube SQL password: missing ${INIT_FILE}" >&2
+    return 1
+  fi
+  local kv_base="secret/nexusflow/${NEXUS_ENV:-dev}"
+  echo "Ensuring ${kv_base}/cube_sql..."
+  if ! vault_exec_auth kv get "${kv_base}/cube_sql" >/dev/null 2>&1; then
+    local user password
+    user="$(grep -E '^CUBEJS_SQL_USER=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    user="${user:-cube}"
+    password="$(grep -E '^CUBEJS_SQL_PASSWORD=' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    if [[ -z "${password}" || "${password}" == "cube" ]]; then
+      password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    fi
+    echo "  Seeding: ${kv_base}/cube_sql"
+    vault_exec_auth kv put "${kv_base}/cube_sql" \
+      username="${user}" \
+      password="${password}"
+  fi
+  echo "Recreating Vault Agent so secrets.env picks up the Cube SQL password..."
+  docker compose --profile vault up -d --no-deps --force-recreate vault-agent
+  local i
+  for i in $(seq 1 30); do
+    if cube_sql_in_file; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for CUBEJS_SQL_* in ${secrets_file}." >&2
   echo "  docker compose logs vault-agent" >&2
   exit 1
 }
@@ -407,6 +495,8 @@ if secrets_file_ready; then
   ensure_openmetadata_secret
   ensure_minio_iam_secrets
   ensure_backup_secret
+  ensure_docs_basic_auth_secret
+  ensure_cube_sql_secret
   exit 0
 fi
 
@@ -419,6 +509,8 @@ if wait_for_secrets_file 30; then
   ensure_openmetadata_secret
   ensure_minio_iam_secrets
   ensure_backup_secret
+  ensure_docs_basic_auth_secret
+  ensure_cube_sql_secret
   exit 0
 fi
 

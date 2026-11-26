@@ -6,7 +6,7 @@ Cubes: `products`, `categories`, `brands`, `subcategories`, `product_images`, `p
 
 The Iceberg branch gets its own folder, `semantic/dlt_dbt_spark_iceberg/`, only after that branch has a gold product table.
 
-Dev mode is on. The playground has no app login. Publish it on `127.0.0.1` only. Public access uses the same Caddy basic auth as Elementary, dbt docs, and dlt docs (backlog item **9**). Do not put port 4000 on a public address before that gate exists.
+Dev mode is on. The playground has no app login of its own. It listens on the Compose network at `cube:4000`. The host does not publish that port. `cube.${NEXUS_PUBLIC_HOST}` asks for the same Caddy popup as dbt docs and Elementary (Vault `docs_basic_auth`).
 
 Add `cube` to `COMPOSE_PROFILES` in `.env`, then:
 
@@ -20,16 +20,8 @@ Or start Cube alone:
 ./scripts/start.sh cube
 ```
 
-Playground on the instance: `http://127.0.0.1:4000`. With the `proxy` profile, the same UI is `http://cube.${NEXUS_PUBLIC_HOST:-localhost.com}` (hosts entry from `./scripts/proxy-hosts.sh`).
+Playground: `http://cube.${NEXUS_PUBLIC_HOST:-localhost.com}` after `./scripts/start.sh proxy` (hosts entry from `./scripts/proxy-hosts.sh`). From a laptop, the existing Caddy tunnel (`-L 8080:127.0.0.1:80`) is enough. Drop `-L 4000:127.0.0.1:4000` from the SSH command; that forward no longer reaches Cube.
 
-From a laptop, forward that port with the other UIs (`docs/operations.md`):
-
-```bash
-ssh -L 4000:127.0.0.1:4000 nexus-ec2
-```
-
-Then open `http://127.0.0.1:4000` in the laptop browser.
-
-SQL API (Postgres protocol, not a Postgres database): host `127.0.0.1`, port `15432`, user `cube`, password `cube`, database `cube`.
+SQL API (Postgres protocol, not a Postgres database): Compose host `cube`, port `15432`, database `cube`, user `cube`. The password is Vault `secret/nexusflow/{env}/cube_sql`. The host does not publish port 15432.
 
 Measures on cube `products` include `product_count`, `units_sold`, `avg_price`, and `catalog_sales` (current rows). Dimensions: `product_id`, `title`, `brand_name`, `category_name`. The other cubes expose the current, version, and deleted counts for that dim or bridge.

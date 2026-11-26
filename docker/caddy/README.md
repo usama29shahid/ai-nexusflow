@@ -24,8 +24,9 @@ Open e.g. `http://airflow.localhost.com`. Windows browser → also update Window
 
 ## Auth
 
-Local: each tool’s own login.  
-Before VPS: gate `docs` / `elementary` / `cube` / future home — [edge-proxy auth](../../docs/edge-proxy.md#auth-locked-intent). Backlog item **9** for that basic auth. `cube.` proxies playground port 4000; the SQL API stays off the edge. Port 4000 itself stays on loopback.
+The image is `caddy:2.9-alpine` plus `htpasswd`, so the popup password is hashed from stdin at start.
+
+`docs.`, `elementary.`, and `cube.` share one browser popup. Cube's playground replaces the `Authorization` header on its own API calls, so a successful popup sets a host-only `docs_gate` cookie that those calls send. A failed sign-in does not set that cookie. The cookie name/value is matched exactly (`header_regexp`, not a substring). It matches only the current 24-hour window (`Max-Age` is the time left in that window). Caddy rewrites and reloads that Max-Age about hourly (and at the window boundary), skips reload when nothing changed, and retries a failed refresh after 30s. Local reloads keep `NEXUS_CADDY_SITE_SCHEME=http://` so the listener stays on `:80`. A copied cookie is rejected after the window ends. The user and password are Vault `secret/nexusflow/{env}/docs_basic_auth`. Other hostnames keep their own logins. `cube.` proxies `cube:4000` on the Compose network. The host publishes neither playground port 4000 nor SQL port 15432. HTTP regression checks: `uv run python tests/integration/caddy_docs_auth_smoke.py`. See [edge-proxy auth](../../docs/edge-proxy.md#auth-locked-intent).
 
 ## VPS (backlog item 10 — automated)
 

@@ -488,10 +488,7 @@ services:
     restart: unless-stopped
     profiles: [cube]
 
-    ports:
-      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${CUBE_HTTP_PORT:-4000}:4000"
-      - "${NEXUS_PUBLISH_BIND:-127.0.0.1}:${CUBE_SQL_PORT:-15432}:15432"
-
+    # Playground :4000 and SQL :15432 stay on the Compose network. The host publishes neither.
     environment:
       CUBEJS_DEV_MODE: "true"
       CUBEJS_DB_TYPE: clickhouse
@@ -503,7 +500,8 @@ services:
       CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-local-cube-dev-secret}
       CUBEJS_PG_SQL_PORT: "15432"
       CUBEJS_SQL_USER: ${CUBEJS_SQL_USER:-cube}
-      CUBEJS_SQL_PASSWORD: ${CUBEJS_SQL_PASSWORD:-cube}
+      # Required: empty default left SQL open on the Compose network. Seed via Vault cube_sql.
+      CUBEJS_SQL_PASSWORD: ${CUBEJS_SQL_PASSWORD:?CUBEJS_SQL_PASSWORD required (Vault secret/nexusflow/{env}/cube_sql)}
 
     volumes:
       - ./semantic/dlt_dbt_clickhouse/model:/cube/conf/model:ro
@@ -677,7 +675,9 @@ services:
   # Caddy — edge reverse proxy (profile: proxy)
   # ============================================================
   caddy:
-    image: caddy:2.9-alpine
+    build:
+      context: ./docker/caddy
+    image: nexus-caddy:local
     container_name: nexus-caddy
     restart: unless-stopped
     profiles: [proxy]
@@ -693,6 +693,9 @@ services:
       NEXUS_CADDY_ACME_EMAIL: ${NEXUS_CADDY_ACME_EMAIL:-}
       # Checked on vps (must not be 0.0.0.0). Compose defaults backends to 127.0.0.1.
       NEXUS_PUBLISH_BIND: ${NEXUS_PUBLISH_BIND:-127.0.0.1}
+      # Vault secret/nexusflow/{env}/docs_basic_auth. Popup on docs., elementary., cube.
+      NEXUS_DOCS_BASIC_AUTH_USER: ${NEXUS_DOCS_BASIC_AUTH_USER:-}
+      NEXUS_DOCS_BASIC_AUTH_PASSWORD: ${NEXUS_DOCS_BASIC_AUTH_PASSWORD:-}
     entrypoint: ["/bin/sh", "/templates/docker-entrypoint.sh"]
     volumes:
       - ./docker/caddy:/templates:ro

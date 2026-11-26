@@ -21,6 +21,7 @@
 | 4 | MinIO IAM — `nexus_loader` / `nexus_reader` / `nexus_platform_reader` / `nexus_admin` (Vault KV only; `./scripts/minio-iam-bootstrap.sh`). Root for bucket create only; Polaris/Spark/Trino S3 use loader |
 | 7 | Remaining Route REST endpoints — `categories`, `brands`, `subcategories` (warehouse / ClickHouse only; full-refresh like products) |
 | 11 | Supabase — self-hosted Auth, Postgres, and pgvector (`./scripts/start.sh supabase`). Not the warehouse. Setup: [docker/supabase/README.md](../docker/supabase/README.md) |
+| 9 | Caddy basic auth — one Vault user on `docs.` (dbt docs), `elementary.`, and `cube.`. The dlt workspace stays on localhost |
 
 ---
 
@@ -33,7 +34,6 @@ Item **numbers** are stable IDs. The list below is **execution order** (next up 
 13. Superset — ClickHouse BI dashboards
 14. Streamlit login — Supabase auth page (after 11)
 12. RAG / multi-agent — consumes docs standards, the OpenMetadata glossary graph, and Cube
-9.  Basic auth — Elementary + dlt/dbt docs HTML and Cube playground (Caddy) before public/VPS
 5.  Local Terraform — API-managed resources; HashiCorp Terraform (BSL) only
 10. VPS + GitHub Actions — warehouse + readers E2E; Hostinger CI/CD after local/EC2 prove-out
 6.  Iceberg branch parity — review Spark ELT design (keep or change), then products-style path + Airflow + readers + RBAC + TF
@@ -48,7 +48,7 @@ Execute **one number at a time**. Do not start the next item until the current o
 1. **Readers (2 → 2.1 → 3) before MinIO IAM / Terraform** — telemetry and warehouse tables already exist from `products`. Items **2–3** are done (SigNoz, OpenObserve primary under test, OpenMetadata catalog). Grafana is deferred until both branches and LLM are running.
 2. **MinIO IAM (4) before Terraform (5)** — design roles, prove with scripts, then Terraform owns them (one owner per resource class). Scripts remain the live path until item **5**.
 3. **Endpoints (7, done) → glossary and dimension metrics (3.2, done) → Supabase (11, done) → facts/semantic (8) → Superset (13) → Streamlit login (14) → RAG (12) next** — learn RAG on the warehouse path. Category, brand, subcategory, and the product bridges already have glossary terms and Cube measures. Item **8** adds facts that join those dims and bridges. Agents ground on the semantic layer and the OpenMetadata graph behind an app shell. Embeddings for item **12** use Supabase pgvector; Qdrant is optional. Warehouse only until Iceberg (6).
-4. **After RAG: docs auth (9) → Terraform (5) → VPS/Actions (10)** — gate `docs.` / `elementary.` / `cube.` before public DNS ([edge-proxy.md](edge-proxy.md)); prove the stack on local (and EC2 if desired), then make Hostinger deploy repeatable. Terraform still lands before Iceberg so the lakehouse path can reuse modules.
+4. **After RAG: Terraform (5) → VPS/Actions (10)** — docs basic auth (9) is done for `docs.`, `elementary.`, and `cube.` ([edge-proxy.md](edge-proxy.md)). Prove the stack on local (and EC2 if desired), then make Hostinger deploy repeatable. Terraform still lands before Iceberg so the lakehouse path can reuse modules.
 5. **Iceberg last (6)** — re-read [dlt-dbt-spark-iceberg.md](dlt-dbt-spark-iceberg.md) (current ELT may stay); then implement. Branch stays disabled until then.
 
 ---
@@ -199,9 +199,9 @@ Six terms: Product, Category, Subcategory (child of Category), Brand, Product im
 
 Add `fct_*` / marts per [dbt-modeling.md](dbt-modeling.md). Facts join the existing dims and bridges. Append fact metrics to `route_governance.yml` and to Cube beside the dimension cubes from item **3.2**. Warehouse first.
 
-### 9. Basic auth for docs
+### 9. Basic auth for docs — done
 
-Caddy basic auth for Elementary HTML, dbt docs, dlt docs, and the Cube playground (`127.0.0.1:4000`, dev mode, no app login). Local `proxy` first; required before VPS public hostnames ([edge-proxy.md](edge-proxy.md)). Loopback is enough until this item. Runs after RAG (**12**), before Terraform (**5**) and public Hostinger DNS.
+One Caddy popup for `docs.` (dbt docs), `elementary.`, and `cube.`. Username and password are Vault KV `secret/nexusflow/{env}/docs_basic_auth`, hashed at Caddy start. Cube's playground (`cube:4000`) and SQL API (`cube:15432`, password in Vault `cube_sql`) stay on the Compose network. The host publishes neither port. The dlt workspace (`localhost:2718`) is not a Caddy site and is left off this gate. Spark, Trino, and Polaris are unchanged. See [edge-proxy.md](edge-proxy.md).
 
 ### 10. VPS + GitHub Actions
 

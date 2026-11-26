@@ -2,6 +2,17 @@
 
 Service-level tests against Compose. Python/dlt/dbt stay on the **host**.
 
+## Caddy docs auth smoke
+
+Requires profiles `proxy` + `cube` and Vault `docs_basic_auth` in `.nexusflow/secrets.env`:
+
+```bash
+set -a && source .env && source scripts/load-secrets.sh && set +a
+uv run python tests/integration/caddy_docs_auth_smoke.py
+```
+
+Checks anonymous 401 (no `Set-Cookie`), Cube basic-auth and exact `docs_gate` cookie 2xx, and rejects substring cookie bypasses (`xdocs_gate=…`, value suffix).
+
 ## dlt ClickHouse smoke (no REST)
 
 Requires profile `clickhouse` (MinIO always on):

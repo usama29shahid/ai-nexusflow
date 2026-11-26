@@ -57,7 +57,7 @@ Infra (follows Compose profiles; MinIO + OTel / Vault / Airflow are branch-indep
   minio         Start MinIO + OTel Collector only (always-on shared infra)
   vault         Start + bootstrap HashiCorp Vault (platform; secrets)
   airflow       Start Airflow profile only (platform; on-demand)
-  cube          Start Cube Core semantic layer (http://127.0.0.1:4000)
+  cube          Start Cube Core semantic layer (http://cube.NEXUS_PUBLIC_HOST via Caddy)
   proxy         Start Caddy edge proxy (http://*.NEXUS_PUBLIC_HOST)
   signoz        Start SigNoz reader profile (trace UI)
   openobserve   Start OpenObserve reader (backlog 2.1; primary UI under test)
@@ -385,7 +385,28 @@ ensure_airflow() {
   docker compose --profile airflow up -d --build
 }
 
+require_cube_sql_password() {
+  if [[ -z "${CUBEJS_SQL_PASSWORD:-}" ]]; then
+    echo "ERROR: CUBEJS_SQL_PASSWORD missing." >&2
+    echo "  vault mode: ./scripts/start.sh vault  (secret/nexusflow/\$NEXUS_ENV/cube_sql)" >&2
+    exit 1
+  fi
+}
+
+build_caddy() {
+  # docker/caddy/Dockerfile installs htpasswd. A stale nexus-caddy:local image
+  # has no htpasswd, and the entrypoint then crash-loops docs, elementary, and cube.
+  # Once per process: start_profiles and ensure_proxy may both call this.
+  if [[ "${NEXUS_CADDY_BUILT:-0}" == "1" ]]; then
+    return 0
+  fi
+  echo "Building Caddy image (docker/caddy/Dockerfile)..."
+  docker compose --profile proxy build caddy
+  NEXUS_CADDY_BUILT=1
+}
+
 ensure_cube() {
+  require_cube_sql_password
   echo "Starting Cube Core (profile cube; ClickHouse reader)..."
   docker compose --profile cube up -d cube
 }
@@ -424,9 +445,17 @@ ensure_web() {
 
 ensure_proxy() {
   echo "Starting Caddy edge proxy (profile proxy)..."
+  if [[ -z "${NEXUS_DOCS_BASIC_AUTH_USER:-}" || -z "${NEXUS_DOCS_BASIC_AUTH_PASSWORD:-}" ]]; then
+    echo "ERROR: NEXUS_DOCS_BASIC_AUTH_USER / NEXUS_DOCS_BASIC_AUTH_PASSWORD missing." >&2
+    echo "  vault mode: ./scripts/start.sh vault  (secret/nexusflow/\$NEXUS_ENV/docs_basic_auth)" >&2
+    exit 1
+  fi
   echo "  Host: ${NEXUS_CADDY_SITE_SCHEME:-http://}*.${NEXUS_PUBLIC_HOST:-localhost.com}"
   echo "  Hosts: ./scripts/proxy-hosts.sh install   # required for *.localhost.com"
+  echo "  Docs popup user: ${NEXUS_DOCS_BASIC_AUTH_USER} (password in Vault docs_basic_auth)"
+  build_caddy
   docker compose --profile proxy up -d
+  docker compose --profile proxy up -d --force-recreate --no-deps caddy
 }
 
 ensure_signoz() {
@@ -649,6 +678,14 @@ start_profiles() {
     require_airflow_elt_ready
     build_nexus_elt_image
   fi
+  # cube in COMPOSE_PROFILES starts via `docker compose up`, not ensure_cube.
+  if [[ ",${COMPOSE_PROFILES}," == *",cube,"* ]]; then
+    require_cube_sql_password
+  fi
+  # proxy in COMPOSE_PROFILES starts Caddy on the up below, before ensure_proxy.
+  if [[ ",${COMPOSE_PROFILES}," == *",proxy,"* ]]; then
+    build_caddy
+  fi
 
   if [[ -n "${COMPOSE_PROFILES}" ]]; then
     # Rebuild when Airflow is in the profile set so docker/airflow/Dockerfile
@@ -745,7 +782,7 @@ case "${cmd}" in
     load_env_and_secrets
     ensure_minio
     ensure_cube
-    echo "Cube playground: http://127.0.0.1:${CUBE_HTTP_PORT:-4000}"
+    echo "Cube playground: http://cube.${NEXUS_PUBLIC_HOST:-localhost.com} (Caddy popup; ./scripts/start.sh proxy)"
     ;;
   airflow)
     load_env_and_secrets

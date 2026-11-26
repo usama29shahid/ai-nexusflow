@@ -359,6 +359,24 @@ else
     secret_key="$(read_env_default NEXUS_BACKUP_SECRET_KEY "")"
 fi
 
+if kv_secret_exists "${kv_base}/docs_basic_auth"; then
+  echo "  KV exists: ${kv_base}/docs_basic_auth (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/docs_basic_auth"
+  vault_exec kv put "${kv_base}/docs_basic_auth" \
+    username="$(read_env_default NEXUS_DOCS_BASIC_AUTH_USER nexus)" \
+    password="$(generate_if_blank NEXUS_DOCS_BASIC_AUTH_PASSWORD "python3 -c 'import secrets; print(secrets.token_urlsafe(24))'")"
+fi
+
+if kv_secret_exists "${kv_base}/cube_sql"; then
+  echo "  KV exists: ${kv_base}/cube_sql (skip seed)"
+else
+  echo "  Seeding: ${kv_base}/cube_sql"
+  vault_exec kv put "${kv_base}/cube_sql" \
+    username="$(read_env_default CUBEJS_SQL_USER cube)" \
+    password="$(generate_if_blank CUBEJS_SQL_PASSWORD "python3 -c 'import secrets; print(secrets.token_urlsafe(24))'")"
+fi
+
 # Supabase paths are required by secrets.env.tpl. Missing paths fail the whole Agent render.
 # Empty API fields are filled again after ./scripts/start.sh supabase via supabase-vault-sync.sh.
 # shellcheck source=scripts/supabase-vault-seed.sh
