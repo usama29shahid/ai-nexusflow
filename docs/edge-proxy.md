@@ -22,7 +22,7 @@ Public hostname for the capstone is intentional. That does **not** mean raw Comp
 | TLS | HTTP only (`Caddyfile.local`, `auto_https off`; scheme defaults to `http://`) | HTTPS + Let’s Encrypt (`Caddyfile.vps` selected by `NEXUS_EDGE_MODE=vps`; empty site scheme + `NEXUS_CADDY_ACME_EMAIL`) |
 | Ports exposed | `./scripts/start.sh` defaults backends to `0.0.0.0`; raw Compose defaults to `127.0.0.1` | Firewall **22, 80, 443**; backends **`NEXUS_PUBLISH_BIND=127.0.0.1`** (Compose default + start.sh); Caddy public; **start.sh + entrypoint reject** `0.0.0.0` on vps |
 | Secrets | **`vault`** (same as VPS; MinIO IAM passwords are Vault-only) | **`vault`**; generate Fernet/passwords **on the VPS** ([vault.md](vault.md)) |
-| Auth | App logins; static `docs.` / `elementary.` and Cube playground OK on loopback | **Auth gate required** before public DNS (home + Supabase/Google and/or Caddy in front of unauthenticated routes, including Cube) |
+| Auth | App logins. `docs.` / `elementary.` / `cube.` use the Vault Caddy popup (item **9**) | Same popup. App logins on the other hostnames |
 | ClickHouse / Polaris on edge | Local showcase OK | Gate or **omit** from public Caddy |
 | `proxy-hosts.sh` | Required for `*.localhost.com` | **Do not** use as the name service |
 
@@ -55,9 +55,7 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 
 ## Auth (locked intent)
 
-**Local:** App login is enough for Airflow / Vault / MinIO / CloudBeaver / etc. Strong passwords; never demo defaults on a shared host.
-
-**Before any public / VPS edge:** gate unauthenticated surfaces (`docs.`, `elementary.`, Cube playground on `:4000`, future home with Supabase + Google auth). Cube dev mode has no app login, so it uses the same Caddy basic auth as the static docs pages (backlog **9**). Caddy is TLS + routing, not a substitute for app passwords.
+**Local and VPS:** Airflow, Vault, MinIO, CloudBeaver, SigNoz, OpenObserve, and OpenMetadata keep their own logins. `docs.`, `elementary.`, and `cube.` share one Caddy popup. The username and password are Vault KV `secret/nexusflow/{env}/docs_basic_auth` (`NEXUS_DOCS_BASIC_AUTH_USER` / `NEXUS_DOCS_BASIC_AUTH_PASSWORD`). Caddy hashes the password at start. Cube's playground port stays on the Compose network (`cube:4000`); the host does not publish it, so an SSH tunnel cannot open the playground beside the popup. The SQL API stays on `cube:15432` with the password from Vault `cube_sql`; the host does not publish `15432`. The popup cookie is set only after a successful sign-in (and refreshed on later Cube 2xx responses). It matches only the current 24-hour window; `Max-Age` is the time left in that window and is rewritten about hourly (and at the window boundary). A failed refresh retries after 30s. The dlt workspace stays on `localhost:2718` and is not on Caddy. Caddy is TLS + routing, not a substitute for app passwords.
 
 ## Publish table
 
@@ -71,8 +69,8 @@ Do not “promote” a laptop by opening port 80 on a VPS IP with the local host
 | `polaris.` | REST `:8181` | Showcase | Omit or gate |
 | `trino.` / `spark.` | UIs | As needed. Trino sets `http-server.process-forwarded=true` so Caddy’s `X-Forwarded-For` is accepted | As needed; Thrift never on edge |
 | `signoz.` / `openobserve.` / `openmetadata.` | Readers | App login | App login |
-| `docs.` / `elementary.` | Static | Loopback OK | **Auth gate required** |
-| `cube.` | Cube playground `:4000` | Loopback OK (dev mode, no app login) | **Same auth gate as docs** |
+| `docs.` / `elementary.` | Static | **Caddy popup** (Vault `docs_basic_auth`) | **Same popup** |
+| `cube.` | Cube playground `cube:4000` | **Same popup.** Host publishes neither `4000` nor SQL `15432` | **Same popup** |
 
 ## Deployment contract (Terraform / GitHub Actions — backlog item 10)
 

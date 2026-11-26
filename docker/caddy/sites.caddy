@@ -1,3 +1,5 @@
+import docs-basicauth.caddy
+
 # Shared site blocks for local + VPS Caddyfiles (imported from Caddyfile.local / Caddyfile.vps).
 # Scheme: {$NEXUS_CADDY_SITE_SCHEME} — local entrypoint defaults to http:// ; vps leaves empty for HTTPS.
 # Do not publish OTel, ClickHouse native :9000, MinIO S3 API, Spark Thrift, or Vault unseal.
@@ -8,6 +10,12 @@
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer-when-downgrade
 	}
+}
+
+# Shared by the Cube cookie path and the first successful popup. Placeholders
+# are filled at container start and on each docs-gate refresh.
+(docs_gate_set_cookie) {
+	header +Set-Cookie "docs_gate=__NEXUS_DOCS_GATE__; Path=/; Max-Age=__NEXUS_DOCS_COOKIE_MAX_AGE__; HttpOnly; SameSite=Lax__NEXUS_DOCS_COOKIE_SECURE__"
 }
 
 {$NEXUS_CADDY_SITE_SCHEME}minio.{$NEXUS_PUBLIC_HOST} {
@@ -66,14 +74,40 @@
 	reverse_proxy openmetadata-server:8585
 }
 
-# Playground only. SQL API :15432 stays off the edge. Basic auth is backlog item 9.
+# Playground only. SQL :15432 stays on the Compose network (cube:15432), not on Caddy and not on the host.
+# The playground fetch sets Authorization, so a successful popup sets a host-only cookie for later API calls.
+# The cookie is added only on a 2xx from Cube (first sign-in and later cookie traffic). 401 never sets it.
+# The gate hash includes the current 24h window. Max-Age is the time left in that window and is
+# rewritten about hourly (and at the window boundary). Placeholders are filled at start and on refresh.
 {$NEXUS_CADDY_SITE_SCHEME}cube.{$NEXUS_PUBLIC_HOST} {
-	import encode_headers
-	reverse_proxy cube:4000
+	# Exact cookie name/value (not a substring). Rejects xdocs_gate=… and …extra suffixes.
+	@docs_gate header_regexp Cookie `(^|;\s*)docs_gate=__NEXUS_DOCS_GATE__(;|$)`
+	handle @docs_gate {
+		import encode_headers
+		reverse_proxy cube:4000 {
+			@ok status 2xx
+			handle_response @ok {
+				import docs_gate_set_cookie
+				copy_response
+			}
+		}
+	}
+	handle {
+		import docs_basic_auth
+		import encode_headers
+		reverse_proxy cube:4000 {
+			@signed_in status 2xx
+			handle_response @signed_in {
+				import docs_gate_set_cookie
+				copy_response
+			}
+		}
+	}
 }
 
 # Static artifacts (regenerate on the host; do not run `dbt docs serve`)
 {$NEXUS_CADDY_SITE_SCHEME}docs.{$NEXUS_PUBLIC_HOST} {
+	import docs_basic_auth
 	import encode_headers
 	root * /srv/dbt-docs
 	file_server
@@ -87,6 +121,7 @@
 }
 
 {$NEXUS_CADDY_SITE_SCHEME}elementary.{$NEXUS_PUBLIC_HOST} {
+	import docs_basic_auth
 	import encode_headers
 	root * /srv/elementary
 	rewrite / /elementary_report.html
