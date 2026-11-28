@@ -500,8 +500,9 @@ services:
       CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-local-cube-dev-secret}
       CUBEJS_PG_SQL_PORT: "15432"
       CUBEJS_SQL_USER: ${CUBEJS_SQL_USER:-cube}
-      # Required: empty default left SQL open on the Compose network. Seed via Vault cube_sql.
-      CUBEJS_SQL_PASSWORD: ${CUBEJS_SQL_PASSWORD:?CUBEJS_SQL_PASSWORD required (Vault secret/nexusflow/{env}/cube_sql)}
+      # No Compose :? — vault-ensure / any `docker compose` parses the whole file before
+      # secrets.env is sourced. start.sh require_cube_sql_password enforces a real value.
+      CUBEJS_SQL_PASSWORD: ${CUBEJS_SQL_PASSWORD:-}
 
     volumes:
       - ./semantic/dlt_dbt_clickhouse/model:/cube/conf/model:ro

@@ -329,10 +329,11 @@ class CaddyEntrypointTest(unittest.TestCase):
         self.assertIn("NEXUS_CADDY_BUILT=1", build_fn)
         ensure_proxy = text[text.index("ensure_proxy()") : text.index("ensure_signoz()")]
         self.assertIn("build_caddy", ensure_proxy)
-        # Raw `docker compose` must not start Cube with an empty SQL password.
+        # Compose must not use :? for CUBEJS_SQL_PASSWORD — vault-ensure parses the
+        # full file before secrets.env is loaded. start.sh enforces the value.
         compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-        self.assertIn("CUBEJS_SQL_PASSWORD:?", compose)
-        self.assertNotIn("CUBEJS_SQL_PASSWORD:-}", compose)
+        self.assertNotIn("CUBEJS_SQL_PASSWORD:?", compose)
+        self.assertIn("CUBEJS_SQL_PASSWORD:-}", compose)
 
 
 if __name__ == "__main__":
